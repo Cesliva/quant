@@ -1,0 +1,47 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user belongs to company
+    function belongsToCompany(companyId) {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/companies/$(companyId)).data.members[request.auth.uid] != null;
+    }
+    
+    // Companies collection
+    match /companies/{companyId} {
+      // Company document
+      match /{document=**} {
+        allow read, write: if belongsToCompany(companyId);
+      }
+      
+      // Settings
+      match /settings/{settingsId} {
+        allow read, write: if belongsToCompany(companyId);
+      }
+      
+      // Projects
+      match /projects/{projectId} {
+        allow read, write: if belongsToCompany(companyId);
+        
+        // Project subcollections
+        match /lines/{lineId} {
+          allow read, write: if belongsToCompany(companyId);
+        }
+        
+        match /aiLogs/{logId} {
+          allow read, write: if belongsToCompany(companyId);
+        }
+        
+        match /auditLogs/{auditId} {
+          allow read, write: if belongsToCompany(companyId);
+        }
+      }
+    }
+  }
+}
+
