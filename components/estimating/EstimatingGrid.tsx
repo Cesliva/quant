@@ -20,6 +20,7 @@ import {
   calculatePlateProperties, 
   type PlateDimensions 
 } from "@/lib/utils/plateHelper";
+import EstimatingGridTable from "./EstimatingGridTable";
 
 // Expanded Estimating Line Interface
 export interface EstimatingLine {
@@ -161,7 +162,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
 
   // Calculate read-only fields when editing
   useEffect(() => {
-    if (!editingId || !editingLine) return;
+    if (!editingId || !editingLine || Object.keys(editingLine).length === 0) return;
     
     const calculated = { ...editingLine };
     
@@ -225,7 +226,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
       (calculated.coatingCost || 0);
     
     setEditingLine(calculated);
-  }, [editingLine?.materialType, editingLine?.sizeDesignation, editingLine?.qty, editingLine?.lengthFt, editingLine?.lengthIn, editingLine?.thickness, editingLine?.width, editingLine?.plateLength, editingLine?.plateQty, editingLine?.oneSideCoat, editingLine?.materialRate, editingLine?.laborRate, editingLine?.coatingRate, editingId]);
+  }, [editingId, editingLine]);
 
   const handleAddLine = () => {
     const newLine: Omit<EstimatingLine, "id"> = {
@@ -365,14 +366,22 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
       </div>
 
       <Card>
-        <div className="overflow-x-auto">
-          {/* Due to complexity, showing first part of table structure */}
-          <div className="text-sm text-gray-600 p-4">
-            <p className="font-semibold mb-2">Comprehensive Estimating Grid</p>
-            <p>Full grid with all columns, grouped headers, and calculations is being implemented...</p>
-            <p className="mt-2 text-xs">This will include: Identification, Material (Rolled/Plate), Labor, Cost, and Admin sections with proper visibility rules.</p>
-          </div>
-        </div>
+        <EstimatingGridTable
+          lines={lines}
+          editingId={editingId}
+          editingLine={editingLine}
+          isManualMode={isManualMode}
+          defaultMaterialRate={defaultMaterialRate}
+          defaultLaborRate={defaultLaborRate}
+          defaultCoatingRate={defaultCoatingRate}
+          onEdit={handleEdit}
+          onSave={handleSave}
+          onCancel={handleCancel}
+          onDelete={handleDelete}
+          onDuplicate={handleDuplicate}
+          onChange={handleChange}
+          totals={totals}
+        />
       </Card>
     </div>
   );
