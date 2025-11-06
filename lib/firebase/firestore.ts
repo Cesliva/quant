@@ -65,6 +65,19 @@ export const getDocument = async <T extends DocumentData>(
   return null;
 };
 
+export const setDocument = async <T extends DocumentData>(
+  path: string,
+  data: T,
+  merge: boolean = true
+): Promise<void> => {
+  checkFirebase();
+  const docRef = doc(db!, path);
+  await setDoc(docRef, {
+    ...data,
+    updatedAt: Timestamp.now(),
+  }, { merge });
+};
+
 export const updateDocument = async <T extends Partial<DocumentData>>(
   path: string,
   data: T

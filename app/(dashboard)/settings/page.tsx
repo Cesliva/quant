@@ -5,7 +5,14 @@ import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
-import { Save, Building2, DollarSign, Package, Paintbrush, Settings2, Plus, Trash2, Info } from "lucide-react";
+import { Save, Building2, DollarSign, Package, Paintbrush, Settings2, Plus, Trash2, Info, AlertCircle } from "lucide-react";
+import { 
+  loadCompanySettings, 
+  saveCompanySettings, 
+  type CompanySettings,
+  type CompanyInfo 
+} from "@/lib/utils/settingsLoader";
+import { validateCompanySettings, getFieldError, type ValidationError } from "@/lib/utils/validation";
 
 type TabType = "company" | "labor" | "material" | "coating" | "markup" | "advanced";
 
@@ -28,9 +35,12 @@ interface CoatingType {
 }
 
 export default function SettingsPage() {
+  const companyId = "default"; // TODO: Get from auth context
   const [activeTab, setActiveTab] = useState<TabType>("company");
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved">("unsaved");
+  const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
 
   const [companySettings, setCompanySettings] = useState({
     companyName: "",
@@ -82,24 +92,135 @@ export default function SettingsPage() {
   });
 
   useEffect(() => {
-    // TODO: Load settings from Firestore
+    loadSettings();
   }, []);
 
+  const loadSettings = async () => {
+    setIsLoading(true);
+    try {
+      const settings = await loadCompanySettings(companyId);
+      
+      // Load company info
+      if (settings.companyInfo) {
+        setCompanySettings({
+          companyName: settings.companyInfo.companyName || "",
+          address: settings.companyInfo.address || "",
+          city: settings.companyInfo.city || "",
+          state: settings.companyInfo.state || "",
+          zip: settings.companyInfo.zip || "",
+          phone: settings.companyInfo.phone || "",
+          email: settings.companyInfo.email || "",
+          licenseNumber: settings.companyInfo.licenseNumber || "",
+          taxId: settings.companyInfo.taxId || "",
+        });
+      }
+      
+      // Load labor rates
+      if (settings.laborRates && settings.laborRates.length > 0) {
+        setLaborRates(
+          settings.laborRates.map((rate, index) => ({
+            id: index.toString(),
+            trade: rate.trade,
+            rate: rate.rate,
+          }))
+        );
+      }
+      
+      // Load material grades
+      if (settings.materialGrades && settings.materialGrades.length > 0) {
+        setMaterialGrades(
+          settings.materialGrades.map((grade, index) => ({
+            id: index.toString(),
+            grade: grade.grade,
+            costPerPound: grade.costPerPound,
+          }))
+        );
+      }
+      
+      // Load coating types
+      if (settings.coatingTypes && settings.coatingTypes.length > 0) {
+        setCoatingTypes(
+          settings.coatingTypes.map((coating, index) => ({
+            id: index.toString(),
+            type: coating.type,
+            costPerSF: coating.costPerSF,
+          }))
+        );
+      }
+      
+      // Load markup settings
+      if (settings.markupSettings) {
+        setMarkupSettings(settings.markupSettings);
+      }
+      
+      // Load advanced settings
+      if (settings.advancedSettings) {
+        setAdvancedSettings(settings.advancedSettings);
+      }
+    } catch (error) {
+      console.error("Failed to load settings:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleSave = async () => {
+    // Validate settings
+    const validation = validateCompanySettings({
+      companyName: companySettings.companyName,
+      email: companySettings.email,
+      phone: companySettings.phone,
+      zip: companySettings.zip,
+      state: companySettings.state,
+      laborRates,
+      materialGrades,
+      coatingTypes,
+      markupSettings,
+    });
+
+    if (!validation.isValid) {
+      setValidationErrors(validation.errors);
+      // Switch to the first tab with errors
+      const firstError = validation.errors[0];
+      if (firstError.field.startsWith("laborRates")) {
+        setActiveTab("labor");
+      } else if (firstError.field.startsWith("materialGrades")) {
+        setActiveTab("material");
+      } else if (firstError.field.startsWith("coatingTypes")) {
+        setActiveTab("coating");
+      } else if (firstError.field.includes("Percentage") || firstError.field.includes("Factor")) {
+        setActiveTab("markup");
+      } else {
+        setActiveTab("company");
+      }
+      return;
+    }
+
+    setValidationErrors([]);
     setIsSaving(true);
     setSaveStatus("saving");
     
     try {
-      // TODO: Save to Firestore
-      await new Promise(resolve => setTimeout(resolve, 500));
-      console.log("Saving settings:", {
-        company: companySettings,
-        labor: laborRates,
-        material: materialGrades,
-        coating: coatingTypes,
-        markup: markupSettings,
-        advanced: advancedSettings,
-      });
+      const settingsToSave: CompanySettings = {
+        companyInfo: {
+          companyName: companySettings.companyName,
+          address: companySettings.address || undefined,
+          city: companySettings.city || undefined,
+          state: companySettings.state || undefined,
+          zip: companySettings.zip || undefined,
+          phone: companySettings.phone || undefined,
+          email: companySettings.email || undefined,
+          licenseNumber: companySettings.licenseNumber || undefined,
+          taxId: companySettings.taxId || undefined,
+        },
+        materialGrades: materialGrades.map(({ id, ...rest }) => rest),
+        laborRates: laborRates.map(({ id, ...rest }) => rest),
+        coatingTypes: coatingTypes.map(({ id, ...rest }) => rest),
+        markupSettings,
+        advancedSettings,
+      };
+
+      await saveCompanySettings(companyId, settingsToSave);
       setSaveStatus("saved");
       setTimeout(() => setSaveStatus("unsaved"), 3000);
     } catch (error) {
@@ -182,6 +303,19 @@ export default function SettingsPage() {
     { id: "advanced" as TabType, label: "Advanced", icon: Settings2 },
   ];
 
+  if (isLoading) {
+    return (
+      <div className="max-w-7xl mx-auto space-y-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading settings...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       {/* Header */}
@@ -205,6 +339,25 @@ export default function SettingsPage() {
           </Button>
         </div>
       </div>
+
+      {/* Validation Errors */}
+      {validationErrors.length > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold text-red-900 mb-2">
+                Please fix the following errors:
+              </h3>
+              <ul className="list-disc list-inside space-y-1 text-sm text-red-800">
+                {validationErrors.map((error, index) => (
+                  <li key={index}>{error.message}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="border-b border-gray-200">
@@ -248,12 +401,20 @@ export default function SettingsPage() {
                   </label>
                   <Input
                     value={companySettings.companyName}
-                    onChange={(e) =>
-                      setCompanySettings({ ...companySettings, companyName: e.target.value })
-                    }
+                    onChange={(e) => {
+                      setCompanySettings({ ...companySettings, companyName: e.target.value });
+                      // Clear validation error for this field
+                      setValidationErrors(validationErrors.filter(e => e.field !== "companyName"));
+                    }}
                     placeholder="Enter company name"
                     required
+                    className={getFieldError("companyName", validationErrors) ? "border-red-500" : ""}
                   />
+                  {getFieldError("companyName", validationErrors) && (
+                    <p className="text-xs text-red-600 mt-1">
+                      {getFieldError("companyName", validationErrors)}
+                    </p>
+                  )}
                 </div>
 
                 <div className="md:col-span-2">
@@ -288,12 +449,19 @@ export default function SettingsPage() {
                   </label>
                   <Input
                     value={companySettings.state}
-                    onChange={(e) =>
-                      setCompanySettings({ ...companySettings, state: e.target.value })
-                    }
+                    onChange={(e) => {
+                      setCompanySettings({ ...companySettings, state: e.target.value.toUpperCase() });
+                      setValidationErrors(validationErrors.filter(e => e.field !== "state"));
+                    }}
                     placeholder="State"
                     maxLength={2}
+                    className={getFieldError("state", validationErrors) ? "border-red-500" : ""}
                   />
+                  {getFieldError("state", validationErrors) && (
+                    <p className="text-xs text-red-600 mt-1">
+                      {getFieldError("state", validationErrors)}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -302,11 +470,18 @@ export default function SettingsPage() {
                   </label>
                   <Input
                     value={companySettings.zip}
-                    onChange={(e) =>
-                      setCompanySettings({ ...companySettings, zip: e.target.value })
-                    }
+                    onChange={(e) => {
+                      setCompanySettings({ ...companySettings, zip: e.target.value });
+                      setValidationErrors(validationErrors.filter(e => e.field !== "zip"));
+                    }}
                     placeholder="12345"
+                    className={getFieldError("zip", validationErrors) ? "border-red-500" : ""}
                   />
+                  {getFieldError("zip", validationErrors) && (
+                    <p className="text-xs text-red-600 mt-1">
+                      {getFieldError("zip", validationErrors)}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -316,11 +491,18 @@ export default function SettingsPage() {
                   <Input
                     type="tel"
                     value={companySettings.phone}
-                    onChange={(e) =>
-                      setCompanySettings({ ...companySettings, phone: e.target.value })
-                    }
+                    onChange={(e) => {
+                      setCompanySettings({ ...companySettings, phone: e.target.value });
+                      setValidationErrors(validationErrors.filter(e => e.field !== "phone"));
+                    }}
                     placeholder="(555) 123-4567"
+                    className={getFieldError("phone", validationErrors) ? "border-red-500" : ""}
                   />
+                  {getFieldError("phone", validationErrors) && (
+                    <p className="text-xs text-red-600 mt-1">
+                      {getFieldError("phone", validationErrors)}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -330,11 +512,18 @@ export default function SettingsPage() {
                   <Input
                     type="email"
                     value={companySettings.email}
-                    onChange={(e) =>
-                      setCompanySettings({ ...companySettings, email: e.target.value })
-                    }
+                    onChange={(e) => {
+                      setCompanySettings({ ...companySettings, email: e.target.value });
+                      setValidationErrors(validationErrors.filter(e => e.field !== "email"));
+                    }}
                     placeholder="contact@company.com"
+                    className={getFieldError("email", validationErrors) ? "border-red-500" : ""}
                   />
+                  {getFieldError("email", validationErrors) && (
+                    <p className="text-xs text-red-600 mt-1">
+                      {getFieldError("email", validationErrors)}
+                    </p>
+                  )}
                 </div>
 
                 <div>

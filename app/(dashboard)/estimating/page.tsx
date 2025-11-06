@@ -11,10 +11,13 @@ import VoiceHUD from "@/components/estimating/VoiceHUD";
 import { EstimatingLine } from "@/components/estimating/EstimatingGrid";
 import { getSampleProjectData } from "@/lib/mock-data/sampleProjectData";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
+import { subscribeToCollection, createDocument } from "@/lib/firebase/firestore";
+import { getProjectPath } from "@/lib/firebase/firestore";
+import { parseVoiceTranscription, createEstimatingLineFromParsed } from "@/lib/utils/voiceParser";
 import { FileText, ArrowRight } from "lucide-react";
 
 // TODO: REMOVE - This flag enables sample data for testing
-const USE_SAMPLE_DATA = true;
+const USE_SAMPLE_DATA = false;
 
 function EstimatingContent() {
   const router = useRouter();
@@ -45,17 +48,68 @@ function EstimatingContent() {
       return;
     }
 
-    // TODO: Load from Firebase if configured
-  }, [selectedProject]);
+    // Use Firebase if configured
+    const linesPath = getProjectPath(companyId, selectedProject, "lines");
+    const unsubscribe = subscribeToCollection<EstimatingLine>(
+      linesPath,
+      (data) => {
+        setLines(data);
+      }
+    );
 
-  const handleTranscription = (text: string) => {
-    // TODO: Parse transcribed text and create estimating lines
+    return () => unsubscribe();
+  }, [companyId, selectedProject]);
+
+  const handleTranscription = async (text: string) => {
     console.log("Transcribed text:", text);
     
-    if (USE_SAMPLE_DATA || !isFirebaseConfigured()) {
-      alert(`Transcription: ${text}\n\nLine parsing coming soon!`);
-    } else {
-      alert(`Transcription: ${text}\n\nLine parsing coming soon!`);
+    try {
+      // Parse the transcription into line items
+      const parsedLines = parseVoiceTranscription(text);
+      
+      if (parsedLines.length === 0) {
+        alert(`Could not parse transcription: "${text}"\n\nTry phrases like:\n- "W12x65 column, 8 pieces, 20 feet"\n- "1/2 inch plate, 48 by 96, 2 pieces"`);
+        return;
+      }
+
+      if (!isFirebaseConfigured()) {
+        alert(`Parsed ${parsedLines.length} line(s) from transcription, but Firebase is not configured.\n\nParsed items:\n${parsedLines.map((p, i) => `${i + 1}. ${p.itemDescription}`).join("\n")}`);
+        return;
+      }
+
+      // Default rates (TODO: Load from company settings)
+      const defaultMaterialRate = 0.85;
+      const defaultLaborRate = 50;
+      const defaultCoatingRate = 2.50;
+
+      // Create line items in Firestore
+      const linesPath = getProjectPath(companyId, selectedProject, "lines");
+      let createdCount = 0;
+
+      for (let i = 0; i < parsedLines.length; i++) {
+        const parsed = parsedLines[i];
+        const lineId = `L${lines.length + i + 1}`;
+        
+        const newLine = createEstimatingLineFromParsed(
+          parsed,
+          lineId,
+          defaultMaterialRate,
+          defaultLaborRate,
+          defaultCoatingRate
+        );
+
+        await createDocument(linesPath, newLine);
+        createdCount++;
+      }
+
+      // Success feedback
+      if (createdCount > 0) {
+        console.log(`Successfully created ${createdCount} line item(s) from voice transcription`);
+        // The lines will automatically appear via Firestore subscription
+      }
+    } catch (error: any) {
+      console.error("Failed to create line from transcription:", error);
+      alert(`Failed to create line items: ${error.message}`);
     }
   };
 

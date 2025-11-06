@@ -75,7 +75,7 @@ export default function EstimatingGridTable({
               onChange={(e) => onChange(field, e.target.value)}
               className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
             >
-              <option value="Rolled">Rolled</option>
+              <option value="Rolled">Material</option>
               <option value="Plate">Plate</option>
             </select>
           );

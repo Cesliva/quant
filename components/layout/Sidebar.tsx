@@ -10,6 +10,9 @@ import {
   FileCheck, 
   FileEdit,
   BarChart3,
+  Home,
+  Upload,
+  Package,
 } from "lucide-react";
 
 const navigation = [
@@ -17,6 +20,8 @@ const navigation = [
   { name: "AI Spec Review", href: "/spec-review", icon: FileCheck },
   { name: "Proposal", href: "/proposal", icon: FileEdit },
   { name: "Reports", href: "/reports?projectId=1", icon: BarChart3 },
+  { name: "Import Quotes", href: "/import-quotes", icon: Upload },
+  { name: "Material Nesting", href: "/material-nesting", icon: Package },
 ];
 
 export default function Sidebar() {
@@ -25,11 +30,25 @@ export default function Sidebar() {
   return (
     <div className="w-64 bg-white border-r border-gray-200 min-h-screen p-4">
       <div className="mb-8">
-        <h2 className="text-xl font-bold text-gray-900">Quant Estimating AI</h2>
-        <p className="text-sm text-gray-600">Project Details</p>
+        <Link href="/" className="block">
+          <h2 className="text-xl font-bold text-gray-900 hover:text-blue-600 transition-colors">Quant Estimating AI</h2>
+          <p className="text-sm text-gray-600">Project Details</p>
+        </Link>
       </div>
       
       <nav className="space-y-1">
+        <Link
+          href="/"
+          className={cn(
+            "flex items-center gap-3 px-4 py-3 rounded-lg transition-colors",
+            pathname === "/"
+              ? "bg-gray-100 text-blue-600 font-medium"
+              : "text-gray-700 hover:bg-gray-50"
+          )}
+        >
+          <Home className="w-5 h-5" />
+          <span>Home</span>
+        </Link>
         {navigation.map((item) => {
           const Icon = item.icon;
           const isActive = pathname?.startsWith(item.href);

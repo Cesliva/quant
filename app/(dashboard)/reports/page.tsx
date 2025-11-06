@@ -5,25 +5,17 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
-import { Download, FileText, Package, Users, Paintbrush, DollarSign, Filter } from "lucide-react";
+import { Download, FileText, Package, Users, Paintbrush, DollarSign, Filter, FileSpreadsheet } from "lucide-react";
 import { subscribeToCollection } from "@/lib/firebase/firestore";
 import { getProjectPath } from "@/lib/firebase/firestore";
 import { EstimatingLine } from "@/components/estimating/EstimatingGrid";
 import { getSampleProjectData } from "@/lib/mock-data/sampleProjectData";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
-
-interface AIUsageLog {
-  id: string;
-  type: string;
-  timestamp: any;
-  cost: number;
-  tokens?: number;
-  duration?: number;
-}
+import { exportToPDF, exportToExcel } from "@/lib/utils/export";
 
 // TODO: REMOVE - This flag enables sample data for testing
 // Set to false once Firebase is fully integrated
-const USE_SAMPLE_DATA = true;
+const USE_SAMPLE_DATA = false;
 
 function ReportsContent() {
   const params = useParams();
@@ -38,7 +30,6 @@ function ReportsContent() {
   const companyId = "default"; // TODO: Get from auth context
 
   const [lines, setLines] = useState<EstimatingLine[]>([]);
-  const [aiUsage, setAiUsage] = useState<AIUsageLog[]>([]);
   const [selectedProject, setSelectedProject] = useState<string>(
     projectIdFromRoute || projectIdFromQuery || ""
   );
@@ -58,7 +49,6 @@ function ReportsContent() {
     if (USE_SAMPLE_DATA || !isFirebaseConfigured()) {
       const sampleData = getSampleProjectData(currentProjectId);
       setLines(sampleData.lines);
-      setAiUsage(sampleData.aiUsage);
       return;
     }
 
@@ -71,36 +61,63 @@ function ReportsContent() {
       }
     );
 
-    const aiLogsPath = getProjectPath(companyId, currentProjectId, "aiLogs");
-    const unsubscribeAI = subscribeToCollection<AIUsageLog>(
-      aiLogsPath,
-      (data) => {
-        setAiUsage(data);
-      }
-    );
-
     return () => {
       unsubscribe();
-      unsubscribeAI();
     };
   }, [companyId, selectedProject, projectIdFromRoute, projectIdFromQuery]);
 
+  // Helper functions to get values based on material type
+  const getWeight = (line: EstimatingLine) => {
+    return line.materialType === "Rolled" 
+      ? (line.totalWeight || 0) 
+      : (line.plateTotalWeight || 0);
+  };
+
+  const getSurfaceArea = (line: EstimatingLine) => {
+    return line.materialType === "Rolled"
+      ? (line.totalSurfaceArea || 0)
+      : (line.plateSurfaceArea || 0);
+  };
+
+  const getQuantity = (line: EstimatingLine) => {
+    return line.materialType === "Rolled"
+      ? (line.qty || 0)
+      : (line.plateQty || 0);
+  };
+
+  const getShapeDisplay = (line: EstimatingLine) => {
+    if (line.materialType === "Rolled") {
+      return line.shapeType || "-";
+    } else {
+      return "Plate";
+    }
+  };
+
+  const getSizeDisplay = (line: EstimatingLine) => {
+    if (line.materialType === "Rolled") {
+      return line.sizeDesignation || "-";
+    } else {
+      return line.thickness && line.width && line.plateLength
+        ? `${line.thickness}" × ${line.width}" × ${line.plateLength}"`
+        : "-";
+    }
+  };
+
   // Calculations
-  const materialTotal = lines.reduce((sum, line) => sum + (line.weight || 0), 0);
-  const laborTotal = lines.reduce((sum, line) => sum + (line.laborHours || 0), 0);
-  const coatingTotal = lines.reduce((sum, line) => sum + (line.surfaceArea || 0), 0);
-  const costTotal = lines.reduce((sum, line) => sum + (line.cost || 0), 0);
-  const aiCostTotal = aiUsage.reduce((sum, log) => sum + (log.cost || 0), 0);
+  const materialTotal = lines.reduce((sum, line) => sum + getWeight(line), 0);
+  const laborTotal = lines.reduce((sum, line) => sum + (line.totalLabor || 0), 0);
+  const coatingTotal = lines.reduce((sum, line) => sum + getSurfaceArea(line), 0);
+  const costTotal = lines.reduce((sum, line) => sum + (line.totalCost || 0), 0);
 
   // Material breakdown by shape
   const materialByShape = lines.reduce((acc, line) => {
-    const shape = line.shape || "Other";
+    const shape = getShapeDisplay(line) || "Other";
     if (!acc[shape]) {
       acc[shape] = { weight: 0, count: 0, cost: 0 };
     }
-    acc[shape].weight += line.weight || 0;
+    acc[shape].weight += getWeight(line);
     acc[shape].count += 1;
-    acc[shape].cost += line.cost || 0;
+    acc[shape].cost += (line.totalCost || 0);
     return acc;
   }, {} as Record<string, { weight: number; count: number; cost: number }>);
 
@@ -109,9 +126,20 @@ function ReportsContent() {
   const costPerSF = coatingTotal > 0 ? costTotal / coatingTotal : 0;
   const costPerHour = laborTotal > 0 ? costTotal / laborTotal : 0;
 
-  const handleExport = (type: string) => {
-    // TODO: Implement CSV/PDF export
-    alert(`${type} export functionality coming soon!`);
+  const handleExport = (type: "pdf" | "excel" | string) => {
+    if (type === "pdf" || type === "excel") {
+      const currentProject = projects.find((p) => p.id === selectedProject);
+      const projectName = currentProject?.name || "Project";
+      
+      if (type === "pdf") {
+        exportToPDF(lines, projectName, "Company");
+      } else if (type === "excel") {
+        exportToExcel(lines, projectName, "Company");
+      }
+    } else {
+      // Legacy export types - show coming soon for now
+      alert(`${type} export functionality coming soon!`);
+    }
   };
 
   const handleProjectChange = (newProjectId: string) => {
@@ -360,10 +388,16 @@ function ReportsContent() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>Line Item Report</CardTitle>
-                <Button variant="outline" size="sm" onClick={() => handleExport("line-items")}>
-                  <Download className="w-4 h-4 mr-2" />
-                  Export CSV
-                </Button>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => handleExport("pdf")}>
+                    <FileText className="w-4 h-4 mr-2" />
+                    Export PDF
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => handleExport("excel")}>
+                    <FileSpreadsheet className="w-4 h-4 mr-2" />
+                    Export Excel
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -389,26 +423,34 @@ function ReportsContent() {
                         </td>
                       </tr>
                     ) : (
-                      lines.map((line) => (
-                        <tr key={line.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-2 text-gray-900">{line.item}</td>
-                          <td className="px-4 py-2 text-gray-700">{line.shape}</td>
-                          <td className="px-4 py-2 text-gray-700">{line.size}</td>
-                          <td className="px-4 py-2 text-gray-700">{line.qty}</td>
-                          <td className="px-4 py-2 text-gray-700">
-                            {line.weight.toLocaleString("en-US", { maximumFractionDigits: 0 })}
-                          </td>
-                          <td className="px-4 py-2 text-gray-700">
-                            {line.surfaceArea.toFixed(1)}
-                          </td>
-                          <td className="px-4 py-2 text-gray-700">
-                            {line.laborHours.toFixed(2)}
-                          </td>
-                          <td className="px-4 py-2 text-gray-900 font-medium">
-                            ${line.cost.toLocaleString("en-US", { maximumFractionDigits: 2 })}
-                          </td>
-                        </tr>
-                      ))
+                      lines.map((line) => {
+                        const weight = getWeight(line);
+                        const surfaceArea = getSurfaceArea(line);
+                        const quantity = getQuantity(line);
+                        const labor = line.totalLabor || 0;
+                        const cost = line.totalCost || 0;
+
+                        return (
+                          <tr key={line.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-2 text-gray-900">{line.itemDescription || "-"}</td>
+                            <td className="px-4 py-2 text-gray-700">{getShapeDisplay(line)}</td>
+                            <td className="px-4 py-2 text-gray-700">{getSizeDisplay(line)}</td>
+                            <td className="px-4 py-2 text-gray-700">{quantity}</td>
+                            <td className="px-4 py-2 text-gray-700">
+                              {weight > 0 ? weight.toLocaleString("en-US", { maximumFractionDigits: 0 }) : "-"}
+                            </td>
+                            <td className="px-4 py-2 text-gray-700">
+                              {surfaceArea > 0 ? surfaceArea.toFixed(1) : "-"}
+                            </td>
+                            <td className="px-4 py-2 text-gray-700">
+                              {labor > 0 ? labor.toFixed(2) : "-"}
+                            </td>
+                            <td className="px-4 py-2 text-gray-900 font-medium">
+                              ${cost > 0 ? cost.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "0.00"}
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                     {lines.length > 0 && (
                       <tr className="bg-gray-50 font-semibold">
@@ -433,61 +475,6 @@ function ReportsContent() {
             </CardContent>
           </Card>
 
-          {/* AI Usage Dashboard */}
-          <Card>
-            <CardHeader>
-              <CardTitle>AI Usage Dashboard</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div>
-                  <p className="text-sm text-gray-600 mb-1">Total AI Cost</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    ${aiCostTotal.toFixed(2)}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">This project</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600 mb-1">AI Calls</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {aiUsage.length}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {aiUsage.filter((log) => log.type === "whisper").length} transcriptions,{" "}
-                    {aiUsage.filter((log) => log.type === "spec-review").length} reviews,{" "}
-                    {aiUsage.filter((log) => log.type === "proposal").length} proposals
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600 mb-1">Average Cost per Call</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    ${aiUsage.length > 0 ? (aiCostTotal / aiUsage.length).toFixed(2) : "0.00"}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">Cost efficiency</p>
-                </div>
-              </div>
-              {aiUsage.length > 0 && (
-                <div className="mt-6 pt-6 border-t border-gray-200">
-                  <h4 className="text-sm font-medium text-gray-900 mb-3">Recent AI Usage</h4>
-                  <div className="space-y-2">
-                    {aiUsage.slice(0, 5).map((log) => (
-                      <div key={log.id} className="flex items-center justify-between text-sm">
-                        <div className="flex items-center gap-2">
-                          <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">
-                            {log.type}
-                          </span>
-                          <span className="text-gray-600">
-                            {log.timestamp?.toDate?.()?.toLocaleDateString() || "Recent"}
-                          </span>
-                        </div>
-                        <span className="font-medium text-gray-900">${log.cost.toFixed(2)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
         </>
       )}
     </div>

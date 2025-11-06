@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { Plus, Upload, Edit, Trash2, Copy, Check, X } from "lucide-react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { Plus, Upload, Edit, Trash2, Copy, Check, X, Undo2, Redo2 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { subscribeToCollection, createDocument, updateDocument, deleteDocument } from "@/lib/firebase/firestore";
 import { getProjectPath } from "@/lib/firebase/firestore";
 import { getSampleProjectData } from "@/lib/mock-data/sampleProjectData";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
+import { useUndoRedo } from "@/lib/hooks/useUndoRedo";
 import { 
   getShapesByType, 
   getWeightPerFoot, 
@@ -20,7 +21,17 @@ import {
   calculatePlateProperties, 
   type PlateDimensions 
 } from "@/lib/utils/plateHelper";
-import EstimatingGridTable from "./EstimatingGridTable";
+import EstimatingGridCompact from "./EstimatingGridCompact";
+import {
+  loadCompanySettings,
+  loadProjectSettings,
+  getMaterialRateForGrade,
+  getLaborRate,
+  getCoatingRate,
+  calculateTotalCostWithMarkup,
+  type CompanySettings,
+  type ProjectSettings,
+} from "@/lib/utils/settingsLoader";
 
 // Expanded Estimating Line Interface
 export interface EstimatingLine {
@@ -101,20 +112,63 @@ interface EstimatingGridProps {
 }
 
 export default function EstimatingGrid({ companyId, projectId, isManualMode = false }: EstimatingGridProps) {
-  const [lines, setLines] = useState<EstimatingLine[]>([]);
+  // Undo/Redo state management
+  const {
+    state: lines,
+    setState: setLines,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+  } = useUndoRedo<EstimatingLine[]>([]);
+
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingLine, setEditingLine] = useState<Partial<EstimatingLine>>({});
   
-  // Default rates from Company Settings (TODO: Load from settings)
-  const defaultMaterialRate = 0.85; // $/lb
-  const defaultLaborRate = 50; // $/hr
-  const defaultCoatingRate = 2.50; // $/sf
+  // Track if we should add to history (skip for Firestore updates)
+  const skipHistoryRef = useRef(false);
+  
+  // Load settings from Firestore
+  const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
+  const [projectSettings, setProjectSettings] = useState<ProjectSettings | null>(null);
+
+  // Load settings on mount
+  useEffect(() => {
+    loadCompanySettings(companyId).then(setCompanySettings);
+    loadProjectSettings(companyId, projectId).then(setProjectSettings);
+  }, [companyId, projectId]);
+
+  // Keyboard shortcuts for undo/redo
+  useEffect(() => {
+    if (!isManualMode) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        if (canUndo) undo();
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === "y" || (e.key === "z" && e.shiftKey))) {
+        e.preventDefault();
+        if (canRedo) redo();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isManualMode, canUndo, canRedo, undo, redo]);
 
   useEffect(() => {
     // Use sample data if Firebase is not configured
     if (!isFirebaseConfigured()) {
       const sampleData = getSampleProjectData(projectId || "1");
       // Convert old format to new format
+      const defaultSettings = {
+        materialGrades: [{ grade: "A992", costPerPound: 1.05 }],
+        laborRates: [{ trade: "Fabricator", rate: 50 }],
+        coatingTypes: [{ type: "None", costPerSF: 0 }],
+        markupSettings: { overheadPercentage: 15, profitPercentage: 10, materialWasteFactor: 5, laborWasteFactor: 10, salesTaxRate: 0, useTaxRate: 0 },
+      };
+      const settings = companySettings || defaultSettings;
+      
       const convertedLines = sampleData.lines.map((line, index) => ({
         id: line.id,
         lineId: `L${index + 1}`,
@@ -136,16 +190,17 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
         totalSurfaceArea: line.surfaceArea,
         coatingSystem: "None",
         totalLabor: line.laborHours,
-        materialRate: defaultMaterialRate,
+        materialRate: getMaterialRateForGrade("A992", settings),
         materialCost: 0,
-        laborRate: defaultLaborRate,
+        laborRate: getLaborRate(undefined, settings),
         laborCost: 0,
         coatingCost: 0,
         totalCost: line.cost,
         status: "Active" as const,
         useStockRounding: true,
       }));
-      setLines(convertedLines);
+      skipHistoryRef.current = true; // Don't add initial load to history
+      setLines(convertedLines, false);
       return;
     }
 
@@ -153,30 +208,75 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
     const unsubscribe = subscribeToCollection<EstimatingLine>(
       linesPath,
       (data) => {
-        setLines(data);
+        skipHistoryRef.current = true; // Don't add Firestore updates to history
+        setLines(data, false);
       }
     );
 
     return () => unsubscribe();
-  }, [companyId, projectId]);
+  }, [companyId, projectId, companySettings, setLines]);
 
   // Calculate read-only fields when editing
+  // Use a ref to track if we're in the middle of a calculation to prevent infinite loops
+  const calculatingRef = useRef(false);
+  
   useEffect(() => {
     if (!editingId || !editingLine || Object.keys(editingLine).length === 0) return;
+    if (!companySettings) return; // Wait for settings to load
+    if (calculatingRef.current) {
+      // Reset the flag after a short delay to allow recalculation
+      setTimeout(() => {
+        calculatingRef.current = false;
+      }, 50);
+      return; // Prevent infinite loops
+    }
+    
+    calculatingRef.current = true;
     
     const calculated = { ...editingLine };
     
-    // For Rolled members
+    // For Rolled members - Auto-calculate weight from AISC data
+    // This runs whenever sizeDesignation, lengthFt, lengthIn, or qty changes
     if (calculated.materialType === "Rolled" && calculated.sizeDesignation) {
-      calculated.weightPerFoot = getWeightPerFoot(calculated.sizeDesignation);
-      calculated.surfaceAreaPerFoot = getSurfaceAreaPerFoot(calculated.sizeDesignation);
-      
-      const lengthInFeet = (calculated.lengthFt || 0) + ((calculated.lengthIn || 0) / 12);
-      calculated.totalWeight = (calculated.weightPerFoot || 0) * lengthInFeet * (calculated.qty || 1);
-      calculated.totalSurfaceArea = (calculated.surfaceAreaPerFoot || 0) * lengthInFeet * (calculated.qty || 1);
+      try {
+        calculated.weightPerFoot = getWeightPerFoot(calculated.sizeDesignation);
+        calculated.surfaceAreaPerFoot = getSurfaceAreaPerFoot(calculated.sizeDesignation);
+        
+        // Convert length to total feet (feet + inches/12)
+        const lengthFt = calculated.lengthFt || 0;
+        const lengthIn = calculated.lengthIn || 0;
+        const lengthInFeet = lengthFt + (lengthIn / 12);
+        
+        // Recalculate weight whenever size, length, or quantity changes
+        const qty = calculated.qty || 1;
+        calculated.totalWeight = (calculated.weightPerFoot || 0) * lengthInFeet * qty;
+        calculated.totalSurfaceArea = (calculated.surfaceAreaPerFoot || 0) * lengthInFeet * qty;
+        
+        // Debug logging (remove in production)
+        if (calculated.sizeDesignation === "W10x19") {
+          console.log("Weight Calculation Debug:", {
+            sizeDesignation: calculated.sizeDesignation,
+            weightPerFoot: calculated.weightPerFoot,
+            lengthFt,
+            lengthIn,
+            lengthInFeet,
+            qty,
+            totalWeight: calculated.totalWeight
+          });
+        }
+      } catch (error) {
+        console.warn("Error calculating weight for size:", calculated.sizeDesignation, error);
+        // Keep existing values if calculation fails
+      }
+    } else if (calculated.materialType === "Rolled") {
+      // If sizeDesignation is cleared, reset weight fields
+      calculated.weightPerFoot = 0;
+      calculated.totalWeight = 0;
+      calculated.surfaceAreaPerFoot = 0;
+      calculated.totalSurfaceArea = 0;
     }
     
-    // For Plates
+    // For Plates - Auto-calculate weight
     if (calculated.materialType === "Plate") {
       const plateProps = calculatePlateProperties({
         thickness: calculated.thickness || 0,
@@ -205,30 +305,58 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
       (calculated.laborLoadShip || 0);
     calculated.totalLabor = totalLabor;
     
+    // Auto-populate rates from settings if not already set
+    if (!calculated.materialRate) {
+      const grade = calculated.materialType === "Rolled" ? calculated.grade : calculated.plateGrade;
+      calculated.materialRate = projectSettings?.materialRate || getMaterialRateForGrade(grade, companySettings);
+    }
+    
+    if (!calculated.laborRate) {
+      calculated.laborRate = projectSettings?.laborRate || getLaborRate(undefined, companySettings);
+    }
+    
+    if (!calculated.coatingRate) {
+      calculated.coatingRate = projectSettings?.coatingRate || getCoatingRate(calculated.coatingSystem, companySettings);
+    }
+    
     // Calculate costs
     const totalWeight = calculated.materialType === "Rolled" 
       ? (calculated.totalWeight || 0)
       : (calculated.plateTotalWeight || 0);
     
-    calculated.materialCost = totalWeight * (calculated.materialRate || defaultMaterialRate);
-    calculated.laborCost = (calculated.totalLabor || 0) * (calculated.laborRate || defaultLaborRate);
+    calculated.materialCost = totalWeight * (calculated.materialRate || 0);
+    calculated.laborCost = (calculated.totalLabor || 0) * (calculated.laborRate || 0);
     
     // Coating cost
     const surfaceArea = calculated.materialType === "Rolled"
       ? (calculated.totalSurfaceArea || 0)
       : (calculated.plateSurfaceArea || 0);
     
-    calculated.coatingCost = surfaceArea * (calculated.coatingRate || defaultCoatingRate);
+    calculated.coatingCost = surfaceArea * (calculated.coatingRate || 0);
     
-    calculated.totalCost = 
-      (calculated.materialCost || 0) +
-      (calculated.laborCost || 0) +
-      (calculated.coatingCost || 0);
+    // Calculate total cost with overhead and profit
+    calculated.totalCost = calculateTotalCostWithMarkup(
+      calculated.materialCost || 0,
+      calculated.laborCost || 0,
+      calculated.coatingCost || 0,
+      companySettings,
+      projectSettings || undefined
+    );
     
     setEditingLine(calculated);
-  }, [editingId, editingLine]);
+    
+    // Reset the calculating flag after state update
+    setTimeout(() => {
+      calculatingRef.current = false;
+    }, 0);
+  }, [editingId, editingLine, companySettings, projectSettings]);
 
   const handleAddLine = () => {
+    if (!isManualMode) {
+      alert("Please enable Manual Entry Mode to add line items manually");
+      return;
+    }
+
     const newLine: Omit<EstimatingLine, "id"> = {
       lineId: `L${lines.length + 1}`,
       drawingNumber: "",
@@ -240,14 +368,29 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
       qty: 1,
       status: "Active",
       useStockRounding: true,
-      materialRate: defaultMaterialRate,
-      laborRate: defaultLaborRate,
-      coatingRate: defaultCoatingRate,
+      materialRate: companySettings ? getMaterialRateForGrade(undefined, companySettings) : 0.85,
+      laborRate: companySettings ? getLaborRate(undefined, companySettings) : 50,
+      coatingRate: companySettings ? getCoatingRate(undefined, companySettings) : 2.50,
     };
 
     try {
       const linesPath = getProjectPath(companyId, projectId, "lines");
-      createDocument(linesPath, newLine);
+      createDocument(linesPath, newLine).then((newId) => {
+        // Add to local state for immediate UI update
+        const addedLine = { ...newLine, id: newId };
+        setLines([...lines, addedLine], true); // Add to history
+        
+        // In manual mode, automatically start editing the new line
+        if (isManualMode && newId) {
+          setTimeout(() => {
+            setEditingId(newId);
+            setEditingLine(addedLine);
+          }, 100);
+        }
+      }).catch((error: any) => {
+        console.error("Failed to add line:", error);
+        alert("Firebase is not configured. Please set up Firebase credentials to save data.");
+      });
     } catch (error: any) {
       console.error("Failed to add line:", error);
       alert("Firebase is not configured. Please set up Firebase credentials to save data.");
@@ -255,21 +398,33 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
   };
 
   const handleEdit = (line: EstimatingLine) => {
-    setEditingId(line.id!);
-    setEditingLine({ ...line });
+    // In manual mode, editing is automatic when fields are clicked
+    // This function is called when a field is clicked to start editing
+    if (!isManualMode) {
+      return; // In voice mode, don't allow editing
+    }
+    // Only set editing if not already editing this line
+    if (editingId !== line.id) {
+      setEditingId(line.id!);
+      setEditingLine({ ...line });
+    }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!editingId) return;
     
     try {
-      const linePath = getProjectPath(companyId, projectId, "lines", editingId);
-      updateDocument(linePath, editingLine);
-      setEditingId(null);
-      setEditingLine({});
+      const linePath = getProjectPath(companyId, projectId, "lines");
+      await updateDocument(`${linePath}/${editingId}`, editingLine);
+      // Don't clear editing state in manual mode - keep it editable
+      // The line will be updated via Firestore subscription
     } catch (error: any) {
       console.error("Failed to save line:", error);
-      alert("Firebase is not configured. Please set up Firebase credentials to save data.");
+      if (isFirebaseConfigured()) {
+        alert(`Failed to save: ${error.message}`);
+      } else {
+        alert("Firebase is not configured. Please set up Firebase credentials to save data.");
+      }
     }
   };
 
@@ -281,6 +436,10 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
   const handleDelete = (lineId: string) => {
     if (confirm("Are you sure you want to delete this line?")) {
       try {
+        // Update local state immediately
+        const updatedLines = lines.filter((l) => l.id !== lineId);
+        setLines(updatedLines, true); // Add to history
+        
         const linePath = getProjectPath(companyId, projectId, "lines", lineId);
         deleteDocument(linePath);
       } catch (error: any) {
@@ -298,15 +457,32 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
     
     try {
       const linesPath = getProjectPath(companyId, projectId, "lines");
-      createDocument(linesPath, duplicated);
+      createDocument(linesPath, duplicated).then((newId) => {
+        const addedLine = { ...duplicated, id: newId };
+        setLines([...lines, addedLine], true); // Add to history
+      });
     } catch (error: any) {
       console.error("Failed to duplicate line:", error);
       alert("Firebase is not configured. Please set up Firebase credentials to save data.");
     }
   };
 
-  const handleChange = (field: keyof EstimatingLine, value: any) => {
-    setEditingLine({ ...editingLine, [field]: value });
+  const handleChange = (field: keyof EstimatingLine, value: any, line?: EstimatingLine) => {
+    // If a line is provided and we're not editing it, start editing it first
+    if (line && editingId !== line.id) {
+      setEditingId(line.id!);
+      setEditingLine({ ...line, [field]: value });
+    } else {
+      // Update the current editing line - create a new object to ensure React detects the change
+      const updatedLine = { ...editingLine, [field]: value };
+      setEditingLine(updatedLine);
+      
+      // Force recalculation for critical fields that affect weight
+      if (field === "sizeDesignation" || field === "lengthFt" || field === "lengthIn" || field === "qty") {
+        // Reset calculating flag to allow immediate recalculation
+        calculatingRef.current = false;
+      }
+    }
   };
 
   // Get available sizes for selected shape type
@@ -348,32 +524,56 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
           {isManualMode ? "Manual Entry Mode" : "Voice Input Mode"}
         </h2>
         <div className="flex gap-3">
-          <Button variant="outline" size="sm" onClick={handleImportCSV}>
-            <Upload className="w-4 h-4 mr-2" />
-            Import CSV
-          </Button>
-          <Button 
-            variant="primary" 
-            size="sm" 
-            onClick={handleAddLine}
-            disabled={!isManualMode}
-            title={!isManualMode ? "Enable Manual Entry to add lines manually" : ""}
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Add Line
-          </Button>
+        <Button variant="outline" size="sm" onClick={handleImportCSV}>
+          <Upload className="w-4 h-4 mr-2" />
+          Import CSV
+        </Button>
+        {isManualMode && (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={undo}
+              disabled={!canUndo}
+              title="Undo (Ctrl+Z)"
+            >
+              <Undo2 className="w-4 h-4 mr-2" />
+              Undo
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={redo}
+              disabled={!canRedo}
+              title="Redo (Ctrl+Y)"
+            >
+              <Redo2 className="w-4 h-4 mr-2" />
+              Redo
+            </Button>
+          </>
+        )}
+        <Button 
+          variant="primary" 
+          size="sm" 
+          onClick={handleAddLine}
+          disabled={!isManualMode}
+          title={!isManualMode ? "Enable Manual Entry to add lines manually" : ""}
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          Add Line
+        </Button>
         </div>
       </div>
 
       <Card>
-        <EstimatingGridTable
+        <EstimatingGridCompact
           lines={lines}
           editingId={editingId}
           editingLine={editingLine}
           isManualMode={isManualMode}
-          defaultMaterialRate={defaultMaterialRate}
-          defaultLaborRate={defaultLaborRate}
-          defaultCoatingRate={defaultCoatingRate}
+          defaultMaterialRate={companySettings ? getMaterialRateForGrade(undefined, companySettings) : 0.85}
+          defaultLaborRate={companySettings ? getLaborRate(undefined, companySettings) : 50}
+          defaultCoatingRate={companySettings ? getCoatingRate(undefined, companySettings) : 2.50}
           onEdit={handleEdit}
           onSave={handleSave}
           onCancel={handleCancel}
