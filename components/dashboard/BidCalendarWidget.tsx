@@ -107,7 +107,7 @@ export default function BidCalendarWidget({ companyId }: BidCalendarWidgetProps)
               variant="outline"
               size="sm"
               onClick={() => setIsModalOpen(true)}
-              className="gap-2"
+              className="flex items-center justify-center gap-2"
             >
               View Full Calendar
               <ChevronRight className="w-4 h-4" />
@@ -194,7 +194,7 @@ export default function BidCalendarWidget({ companyId }: BidCalendarWidgetProps)
                 variant="outline"
                 size="sm"
                 onClick={() => setIsModalOpen(true)}
-                className="w-full"
+                className="w-full flex items-center justify-center"
               >
                 View All Bids in Calendar
               </Button>

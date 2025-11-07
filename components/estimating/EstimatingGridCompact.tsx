@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { ChevronDown, ChevronRight, Edit, Trash2, Copy, X, Check } from "lucide-react";
 import { EstimatingLine } from "./EstimatingGrid";
 import EstimatingRowDetail from "./EstimatingRowDetail";
@@ -29,6 +28,8 @@ interface EstimatingGridCompactProps {
     coatingCost: number;
     totalCost: number;
   };
+  expandedRowId: string | null;
+  onExpandedRowChange: (rowId: string | null) => void;
 }
 
 export default function EstimatingGridCompact({
@@ -46,17 +47,15 @@ export default function EstimatingGridCompact({
   onDuplicate,
   onChange,
   totals,
+  expandedRowId,
+  onExpandedRowChange,
 }: EstimatingGridCompactProps) {
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-
   const toggleRow = (lineId: string) => {
-    const newExpanded = new Set(expandedRows);
-    if (newExpanded.has(lineId)) {
-      newExpanded.delete(lineId);
+    if (expandedRowId === lineId) {
+      onExpandedRowChange(null);
     } else {
-      newExpanded.add(lineId);
+      onExpandedRowChange(lineId);
     }
-    setExpandedRows(newExpanded);
   };
 
   const getSpecDisplay = (line: EstimatingLine) => {
@@ -134,7 +133,7 @@ export default function EstimatingGridCompact({
             </tr>
           ) : (
             lines.map((line) => {
-              const isExpanded = expandedRows.has(line.id || "");
+                    const isExpanded = expandedRowId === line.id;
               const isEditing = editingId === line.id;
               // Merge editingLine with line for display when editing
               const displayLine = isEditing ? { ...line, ...editingLine } : line;

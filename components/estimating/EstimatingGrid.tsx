@@ -124,6 +124,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingLine, setEditingLine] = useState<Partial<EstimatingLine>>({});
+  const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
   
   // Track if we should add to history (skip for Firestore updates)
   const skipHistoryRef = useRef(false);
@@ -523,45 +524,65 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
         <h2 className="text-xl font-semibold text-gray-900">
           {isManualMode ? "Manual Entry Mode" : "Voice Input Mode"}
         </h2>
-        <div className="flex gap-3">
-        <Button variant="outline" size="sm" onClick={handleImportCSV}>
-          <Upload className="w-4 h-4 mr-2" />
-          Import CSV
-        </Button>
-        {isManualMode && (
-          <>
+        <div className="flex gap-3 items-center">
+          <Button variant="outline" size="sm" onClick={handleImportCSV} className="flex items-center justify-center">
+            <Upload className="w-4 h-4 mr-2" />
+            Import CSV
+          </Button>
+          {isManualMode && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={undo}
+                disabled={!canUndo}
+                title="Undo (Ctrl+Z)"
+                className="flex items-center justify-center"
+              >
+                <Undo2 className="w-4 h-4 mr-2" />
+                Undo
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={redo}
+                disabled={!canRedo}
+                title="Redo (Ctrl+Y)"
+                className="flex items-center justify-center"
+              >
+                <Redo2 className="w-4 h-4 mr-2" />
+                Redo
+              </Button>
+            </>
+          )}
+          {isManualMode && expandedRowId && !editingId && (
             <Button
-              variant="outline"
+              variant="secondary"
               size="sm"
-              onClick={undo}
-              disabled={!canUndo}
-              title="Undo (Ctrl+Z)"
+              onClick={() => {
+                const lineToEdit = lines.find(l => l.id === expandedRowId);
+                if (lineToEdit) {
+                  handleEdit(lineToEdit);
+                }
+              }}
+              title="Edit expanded line"
+              className="flex items-center justify-center"
             >
-              <Undo2 className="w-4 h-4 mr-2" />
-              Undo
+              <Edit className="w-4 h-4 mr-2" />
+              Edit Line
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={redo}
-              disabled={!canRedo}
-              title="Redo (Ctrl+Y)"
-            >
-              <Redo2 className="w-4 h-4 mr-2" />
-              Redo
-            </Button>
-          </>
-        )}
-        <Button 
-          variant="primary" 
-          size="sm" 
-          onClick={handleAddLine}
-          disabled={!isManualMode}
-          title={!isManualMode ? "Enable Manual Entry to add lines manually" : ""}
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Add Line
-        </Button>
+          )}
+          <Button 
+            variant="primary" 
+            size="sm" 
+            onClick={handleAddLine}
+            disabled={!isManualMode}
+            title={!isManualMode ? "Enable Manual Entry to add lines manually" : ""}
+            className="flex items-center justify-center"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Add Line
+          </Button>
         </div>
       </div>
 
@@ -581,6 +602,8 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
           onDuplicate={handleDuplicate}
           onChange={handleChange}
           totals={totals}
+          expandedRowId={expandedRowId}
+          onExpandedRowChange={setExpandedRowId}
         />
       </Card>
     </div>

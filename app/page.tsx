@@ -112,6 +112,41 @@ export default function Home() {
 
         </div>
 
+        {/* Quick Actions - Moved to Top */}
+        <div>
+          <h3 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Quick Actions</h3>
+          <Card className="border-0 shadow-sm bg-white/80 backdrop-blur-sm">
+            <CardContent className="p-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+                <Link href="/projects/new">
+                  <Button variant="primary" className="w-full flex items-center justify-center gap-2 h-11 shadow-sm hover:shadow-md transition-shadow">
+                    <Plus className="w-4 h-4" />
+                    New Estimate
+                  </Button>
+                </Link>
+                <Link href="/spec-review">
+                  <Button variant="secondary" className="w-full flex items-center justify-center gap-2 h-11">
+                    <FileText className="w-4 h-4" />
+                    Spec Review
+                  </Button>
+                </Link>
+                <Link href="/reports?projectId=1">
+                  <Button variant="outline" className="w-full flex items-center justify-center gap-2 h-11 hover:bg-gray-50">
+                    <TrendingUp className="w-4 h-4" />
+                    View Reports
+                  </Button>
+                </Link>
+                <Link href="/import-quotes">
+                  <Button variant="outline" className="w-full flex items-center justify-center gap-2 h-11 hover:bg-gray-50">
+                    <Upload className="w-4 h-4" />
+                    Import Quotes
+                  </Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
         {/* Main Control Center Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Active Projects & Calendar */}
@@ -174,41 +209,6 @@ export default function Home() {
                         </Link>
                       );
                     })}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Quick Actions - Enhanced */}
-            <div>
-              <h3 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Quick Actions</h3>
-              <Card className="border-0 shadow-sm bg-white/80 backdrop-blur-sm">
-                <CardContent className="p-4">
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <Link href="/projects/new">
-                      <Button variant="primary" className="w-full justify-start gap-2 h-11 shadow-sm hover:shadow-md transition-shadow">
-                        <Plus className="w-4 h-4" />
-                        New Estimate
-                      </Button>
-                    </Link>
-                    <Link href="/spec-review">
-                      <Button variant="secondary" className="w-full justify-start gap-2 h-11">
-                        <FileText className="w-4 h-4" />
-                        Spec Review
-                      </Button>
-                    </Link>
-                  <Link href="/reports?projectId=1">
-                    <Button variant="outline" className="w-full justify-start gap-2 h-11 hover:bg-gray-50">
-                      <TrendingUp className="w-4 h-4" />
-                      View Reports
-                    </Button>
-                  </Link>
-                  <Link href="/import-quotes">
-                    <Button variant="outline" className="w-full justify-start gap-2 h-11 hover:bg-gray-50">
-                      <Upload className="w-4 h-4" />
-                      Import Quotes
-                    </Button>
-                  </Link>
                   </div>
                 </CardContent>
               </Card>
