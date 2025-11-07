@@ -3,14 +3,18 @@
 import { useParams } from "next/navigation";
 import EstimatingGrid from "@/components/estimating/EstimatingGrid";
 import KPISummary from "@/components/estimating/KPISummary";
-import VoiceHUD from "@/components/estimating/VoiceHUD";
+import VoiceAgent from "@/components/estimating/VoiceAgent";
+import { Sparkles } from "lucide-react";
 import { useState, useEffect } from "react";
-import { subscribeToCollection, createDocument } from "@/lib/firebase/firestore";
+import { subscribeToCollection, createDocument, updateDocument, deleteDocument } from "@/lib/firebase/firestore";
 import { getProjectPath } from "@/lib/firebase/firestore";
 import { EstimatingLine } from "@/components/estimating/EstimatingGrid";
 import { getSampleProjectData } from "@/lib/mock-data/sampleProjectData";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
-import { parseVoiceTranscription, createEstimatingLineFromParsed } from "@/lib/utils/voiceParser";
+import { parseVoiceTranscription, createEstimatingLineFromParsed, ParsedEditCommand, ParsedLine } from "@/lib/utils/voiceParser";
+import { voiceCommandHistory, VoiceAction } from "@/lib/utils/voiceCommandHistory";
+import { createLineFromStructuredData } from "@/lib/utils/structuredVoiceParser";
+import { VoiceAgentResponse } from "@/lib/openai/voiceAgent";
 
 // TODO: REMOVE - This flag enables sample data for testing
 // Set to false once Firebase is fully integrated
@@ -44,22 +48,487 @@ export default function EstimatingPage() {
     return () => unsubscribe();
   }, [companyId, projectId]);
 
+  const handleStructuredData = async (data: Partial<EstimatingLine>, shouldProcess: boolean, createNewLine?: boolean) => {
+    if (!shouldProcess) {
+      // Check if we need to create a new blank line
+      if (createNewLine || (data.lineId && !lines.find(l => l.lineId === data.lineId))) {
+        // Create a new blank line immediately
+        const defaultMaterialRate = 0.85;
+        const defaultLaborRate = 50;
+        const defaultCoatingRate = 2.50;
+        
+        const lineId = data.lineId || `L${lines.length + 1}`;
+        
+        // Create blank line with defaults
+        const blankLine: Partial<EstimatingLine> = {
+          lineId: lineId,
+          drawingNumber: "",
+          detailNumber: "",
+          itemDescription: "",
+          category: "Misc Metals",
+          subCategory: "",
+          materialType: "Rolled",
+          status: "Active",
+          materialRate: defaultMaterialRate,
+          laborRate: defaultLaborRate,
+          coatingRate: defaultCoatingRate,
+          ...data, // Include any data already provided
+        };
+        
+        try {
+          const linesPath = getProjectPath(companyId, projectId, "lines");
+          const documentId = await createDocument(linesPath, blankLine);
+          console.log(`Created new blank line ${lineId}`);
+          
+          // Track create action for undo
+          if (documentId) {
+            voiceCommandHistory.addAction({
+              type: "create",
+              timestamp: Date.now(),
+              documentId: documentId,
+              lineId: lineId,
+              newState: blankLine as EstimatingLine,
+            });
+          }
+        } catch (error: any) {
+          console.error("Failed to create new line:", error);
+        }
+        return;
+      }
+      
+      // Real-time update: update the line in real-time as fields are spoken
+      if (data.lineId) {
+        const existingLine = lines.find(l => l.lineId === data.lineId);
+        if (existingLine && existingLine.id) {
+          // Update existing line in real-time
+          try {
+            const updatedLine = { ...existingLine, ...data };
+            const linesPath = getProjectPath(companyId, projectId, "lines");
+            await updateDocument(linesPath, existingLine.id, updatedLine);
+            console.log(`Real-time update to line ${data.lineId}:`, data);
+          } catch (error: any) {
+            console.error("Failed to update line in real-time:", error);
+          }
+        } else {
+          // Line doesn't exist yet - create it
+          const defaultMaterialRate = 0.85;
+          const defaultLaborRate = 50;
+          const defaultCoatingRate = 2.50;
+          
+          const blankLine: Partial<EstimatingLine> = {
+            lineId: data.lineId,
+            drawingNumber: "",
+            detailNumber: "",
+            itemDescription: "",
+            category: "Misc Metals",
+            subCategory: "",
+            materialType: "Rolled",
+            status: "Active",
+            materialRate: defaultMaterialRate,
+            laborRate: defaultLaborRate,
+            coatingRate: defaultCoatingRate,
+            ...data,
+          };
+          
+          try {
+            const linesPath = getProjectPath(companyId, projectId, "lines");
+            await createDocument(linesPath, blankLine);
+            console.log(`Created new line ${data.lineId} with data:`, data);
+          } catch (error: any) {
+            console.error("Failed to create line:", error);
+          }
+        }
+      } else {
+        console.log("Accumulating data (no line ID yet):", data);
+      }
+      return;
+    }
+
+    // Process the accumulated data and create line (when "Enter" is said)
+    console.log("Processing structured data (Enter command):", data);
+    
+    if (!isFirebaseConfigured()) {
+      alert("Firebase is not configured. Cannot save line.");
+      return;
+    }
+
+    try {
+      const defaultMaterialRate = 0.85;
+      const defaultLaborRate = 50;
+      const defaultCoatingRate = 2.50;
+      
+      // Use the line ID from data, or generate next one
+      const lineId = data.lineId || `L${lines.length + 1}`;
+      
+      // Check if line already exists (from real-time updates)
+      const existingLine = lines.find(l => l.lineId === lineId);
+      
+      if (existingLine && existingLine.id) {
+        // Finalize the existing line
+        const finalizedLine = createLineFromStructuredData(
+          { ...existingLine, ...data },
+          lineId,
+          defaultMaterialRate,
+          defaultLaborRate,
+          defaultCoatingRate
+        );
+        
+        const linesPath = getProjectPath(companyId, projectId, "lines");
+        await updateDocument(linesPath, existingLine.id, finalizedLine);
+        console.log(`Finalized line ${lineId}`);
+      } else {
+        // Create new line
+        const newLine = createLineFromStructuredData(
+          data,
+          lineId,
+          defaultMaterialRate,
+          defaultLaborRate,
+          defaultCoatingRate
+        );
+
+        const linesPath = getProjectPath(companyId, projectId, "lines");
+        const documentId = await createDocument(linesPath, newLine);
+        
+        // Track create action for undo
+        if (documentId) {
+          voiceCommandHistory.addAction({
+            type: "create",
+            timestamp: Date.now(),
+            documentId: documentId,
+            lineId: lineId,
+            newState: newLine,
+          });
+        }
+        
+        console.log(`Successfully created line ${lineId} from structured voice input`);
+      }
+    } catch (error: any) {
+      console.error("Failed to create/update line from structured data:", error);
+      alert(`Failed to process line: ${error.message}`);
+    }
+  };
+
+  const handleVoiceAgentAction = async (response: VoiceAgentResponse) => {
+    if (!isFirebaseConfigured()) {
+      alert("Firebase is not configured. Cannot process command.");
+      return;
+    }
+
+    try {
+      const defaultMaterialRate = 0.85;
+      const defaultLaborRate = 50;
+      const defaultCoatingRate = 2.50;
+      const linesPath = getProjectPath(companyId, projectId, "lines");
+
+      if (response.action === "create") {
+        // Create new line
+        const lineId = response.lineId || `L${lines.length + 1}`;
+        const newLine = createLineFromStructuredData(
+          response.data || {},
+          lineId,
+          defaultMaterialRate,
+          defaultLaborRate,
+          defaultCoatingRate
+        );
+
+        const documentId = await createDocument(linesPath, newLine);
+        
+        if (documentId) {
+          voiceCommandHistory.addAction({
+            type: "create",
+            timestamp: Date.now(),
+            documentId: documentId,
+            lineId: lineId,
+            newState: newLine,
+          });
+        }
+        console.log(`AI created line ${lineId}`);
+      } else if (response.action === "update" && response.lineId) {
+        // Update existing line
+        const existingLine = lines.find(l => l.lineId === response.lineId);
+        if (existingLine && existingLine.id && response.data) {
+          const updatedLine = { ...existingLine, ...response.data };
+          const finalizedLine = createLineFromStructuredData(
+            updatedLine,
+            response.lineId,
+            defaultMaterialRate,
+            defaultLaborRate,
+            defaultCoatingRate
+          );
+          
+          await updateDocument(linesPath, existingLine.id, finalizedLine);
+          
+          voiceCommandHistory.addAction({
+            type: "update",
+            timestamp: Date.now(),
+            documentId: existingLine.id,
+            lineId: response.lineId,
+            previousState: existingLine,
+            newState: finalizedLine,
+          });
+          console.log(`AI updated line ${response.lineId}`);
+        }
+      } else if (response.action === "delete" && response.lineId) {
+        // Delete line
+        const existingLine = lines.find(l => l.lineId === response.lineId);
+        if (existingLine && existingLine.id) {
+          await deleteDocument(linesPath, existingLine.id);
+          
+          voiceCommandHistory.addAction({
+            type: "delete",
+            timestamp: Date.now(),
+            documentId: existingLine.id,
+            lineId: response.lineId,
+            previousState: existingLine,
+          });
+          console.log(`AI deleted line ${response.lineId}`);
+        }
+      } else if (response.action === "query") {
+        // Query - just informational, no action needed
+        console.log(`AI query: ${response.message}`);
+      }
+    } catch (error: any) {
+      console.error("Failed to execute AI action:", error);
+      throw error; // Re-throw so the agent can show error message
+    }
+  };
+
   const handleTranscription = async (text: string) => {
     console.log("Transcribed text:", text);
     
+    if (!text || text.trim().length === 0) {
+      console.warn("Empty transcription received");
+      alert("No speech detected. Please try again.");
+      return;
+    }
+    
     try {
-      // Parse the transcription into line items
-      const parsedLines = parseVoiceTranscription(text);
+      // Parse the transcription - could be edit command, new lines, edit + new line, or undo/redo
+      const parsed = parseVoiceTranscription(text);
+      console.log("Parsed result:", parsed);
       
-      if (parsedLines.length === 0) {
-        alert(`Could not parse transcription: "${text}"\n\nTry phrases like:\n- "W12x65 column, 8 pieces, 20 feet"\n- "1/2 inch plate, 48 by 96, 2 pieces"`);
+      // Check for undo/redo commands
+      if ('command' in parsed) {
+        if (parsed.command === "undo") {
+          const action = voiceCommandHistory.undo();
+          if (!action) {
+            alert("Nothing to undo.");
+            return;
+          }
+          
+          const linesPath = getProjectPath(companyId, projectId, "lines");
+          
+          // Reverse the action
+          if (action.type === "create" && action.documentId) {
+            // Undo create = delete
+            await deleteDocument(`${linesPath}/${action.documentId}`);
+            console.log(`Undo: Deleted line ${action.lineId}`);
+          } else if (action.type === "update" && action.documentId && action.previousState) {
+            // Undo update = restore previous state
+            await updateDocument(`${linesPath}/${action.documentId}`, action.previousState);
+            console.log(`Undo: Restored line ${action.lineId}`);
+          } else if (action.type === "delete" && action.documentId && action.previousState) {
+            // Undo delete = recreate
+            await createDocument(linesPath, action.previousState as EstimatingLine);
+            console.log(`Undo: Recreated line ${action.lineId}`);
+          }
+          return;
+        } else if (parsed.command === "redo") {
+          const action = voiceCommandHistory.redo();
+          if (!action) {
+            alert("Nothing to redo.");
+            return;
+          }
+          
+          const linesPath = getProjectPath(companyId, projectId, "lines");
+          
+          // Re-apply the action
+          if (action.type === "create" && action.documentId && action.newState) {
+            // Redo create = recreate
+            await createDocument(linesPath, action.newState as EstimatingLine);
+            console.log(`Redo: Recreated line ${action.lineId}`);
+          } else if (action.type === "update" && action.documentId && action.newState) {
+            // Redo update = re-apply update
+            await updateDocument(`${linesPath}/${action.documentId}`, action.newState);
+            console.log(`Redo: Re-applied update to line ${action.lineId}`);
+          } else if (action.type === "delete" && action.documentId) {
+            // Redo delete = delete again
+            await deleteDocument(`${linesPath}/${action.documentId}`);
+            console.log(`Redo: Deleted line ${action.lineId}`);
+          }
+          return;
+        }
+      }
+      
+      // Check if it's an edit command followed by new lines
+      if ('edit' in parsed && 'newLines' in parsed) {
+        const { edit: editCmd, newLines } = parsed as { edit: ParsedEditCommand; newLines: ParsedLine[] };
+        
+        // Process the edit first
+        if (!isFirebaseConfigured()) {
+          alert(`Edit command parsed for ${editCmd.targetLineId}, but Firebase is not configured.`);
+          return;
+        }
+
+        const lineToEdit = lines.find(l => l.lineId === editCmd.targetLineId);
+        if (lineToEdit && lineToEdit.id) {
+          // Recalculate if needed
+          if (editCmd.updates.sizeDesignation) {
+            const { getWeightPerFoot, getSurfaceAreaPerFoot } = await import("@/lib/utils/aiscShapes");
+            editCmd.updates.weightPerFoot = getWeightPerFoot(editCmd.updates.sizeDesignation);
+            editCmd.updates.surfaceAreaPerFoot = getSurfaceAreaPerFoot(editCmd.updates.sizeDesignation);
+            const currentLengthFt = editCmd.updates.lengthFt ?? lineToEdit.lengthFt ?? 0;
+            const currentLengthIn = editCmd.updates.lengthIn ?? lineToEdit.lengthIn ?? 0;
+            const currentQty = editCmd.updates.qty ?? lineToEdit.qty ?? 1;
+            const totalLength = currentLengthFt + (currentLengthIn / 12);
+            editCmd.updates.totalWeight = (editCmd.updates.weightPerFoot || 0) * totalLength * currentQty;
+            editCmd.updates.totalSurfaceArea = (editCmd.updates.surfaceAreaPerFoot || 0) * totalLength * currentQty;
+          } else if (editCmd.updates.lengthFt !== undefined || editCmd.updates.lengthIn !== undefined || editCmd.updates.qty !== undefined) {
+            const weightPerFoot = lineToEdit.weightPerFoot || 0;
+            const surfaceAreaPerFoot = lineToEdit.surfaceAreaPerFoot || 0;
+            const currentLengthFt = editCmd.updates.lengthFt ?? lineToEdit.lengthFt ?? 0;
+            const currentLengthIn = editCmd.updates.lengthIn ?? lineToEdit.lengthIn ?? 0;
+            const currentQty = editCmd.updates.qty ?? lineToEdit.qty ?? 1;
+            const totalLength = currentLengthFt + (currentLengthIn / 12);
+            editCmd.updates.totalWeight = weightPerFoot * totalLength * currentQty;
+            editCmd.updates.totalSurfaceArea = surfaceAreaPerFoot * totalLength * currentQty;
+          }
+
+          const linesPath = getProjectPath(companyId, projectId, "lines");
+          
+          // Store previous state for undo
+          const previousState = { ...lineToEdit };
+          
+          await updateDocument(`${linesPath}/${lineToEdit.id}`, editCmd.updates);
+          
+          // Track update action for undo
+          voiceCommandHistory.addAction({
+            type: "update",
+            timestamp: Date.now(),
+            documentId: lineToEdit.id,
+            lineId: editCmd.targetLineId,
+            previousState: previousState,
+            newState: { ...lineToEdit, ...editCmd.updates },
+          });
+          
+          console.log(`Successfully updated line ${editCmd.targetLineId}`);
+        }
+
+        // Now process the new lines
+        if (newLines.length > 0) {
+          const defaultMaterialRate = 0.85;
+          const defaultLaborRate = 50;
+          const defaultCoatingRate = 2.50;
+          const linesPath = getProjectPath(companyId, projectId, "lines");
+          
+          for (const parsedLine of newLines) {
+            const lineId = parsedLine.lineId || `L${lines.length + 1}`;
+            const newLine = createEstimatingLineFromParsed(
+              parsedLine,
+              lineId,
+              defaultMaterialRate,
+              defaultLaborRate,
+              defaultCoatingRate
+            );
+            const documentId = await createDocument(linesPath, newLine);
+            
+            // Track create action for undo
+            if (documentId) {
+              voiceCommandHistory.addAction({
+                type: "create",
+                timestamp: Date.now(),
+                documentId: documentId,
+                lineId: lineId,
+                newState: newLine,
+              });
+            }
+          }
+          console.log(`Successfully created ${newLines.length} new line(s) after edit`);
+        }
+        return;
+      }
+      
+      // Check if it's just an edit command
+      if ('isEdit' in parsed && parsed.isEdit) {
+        const editCmd = parsed as ParsedEditCommand;
+        
+        if (!isFirebaseConfigured()) {
+          alert(`Edit command parsed for ${editCmd.targetLineId}, but Firebase is not configured.`);
+          return;
+        }
+
+        // Find the line to edit by lineId
+        const lineToEdit = lines.find(l => l.lineId === editCmd.targetLineId);
+        if (!lineToEdit || !lineToEdit.id) {
+          alert(`Line ${editCmd.targetLineId} not found. Please create the line first.`);
+          return;
+        }
+
+        // Recalculate weight and surface area if size changed
+        if (editCmd.updates.sizeDesignation) {
+          const { getWeightPerFoot, getSurfaceAreaPerFoot } = await import("@/lib/utils/aiscShapes");
+          editCmd.updates.weightPerFoot = getWeightPerFoot(editCmd.updates.sizeDesignation);
+          editCmd.updates.surfaceAreaPerFoot = getSurfaceAreaPerFoot(editCmd.updates.sizeDesignation);
+          
+          // Recalculate total weight if length and qty are available
+          const currentLengthFt = editCmd.updates.lengthFt ?? lineToEdit.lengthFt ?? 0;
+          const currentLengthIn = editCmd.updates.lengthIn ?? lineToEdit.lengthIn ?? 0;
+          const currentQty = editCmd.updates.qty ?? lineToEdit.qty ?? 1;
+          const totalLength = currentLengthFt + (currentLengthIn / 12);
+          editCmd.updates.totalWeight = (editCmd.updates.weightPerFoot || 0) * totalLength * currentQty;
+          editCmd.updates.totalSurfaceArea = (editCmd.updates.surfaceAreaPerFoot || 0) * totalLength * currentQty;
+        } else if (editCmd.updates.lengthFt !== undefined || editCmd.updates.lengthIn !== undefined || editCmd.updates.qty !== undefined) {
+          // Length or quantity changed, recalculate totals
+          const weightPerFoot = lineToEdit.weightPerFoot || 0;
+          const surfaceAreaPerFoot = lineToEdit.surfaceAreaPerFoot || 0;
+          const currentLengthFt = editCmd.updates.lengthFt ?? lineToEdit.lengthFt ?? 0;
+          const currentLengthIn = editCmd.updates.lengthIn ?? lineToEdit.lengthIn ?? 0;
+          const currentQty = editCmd.updates.qty ?? lineToEdit.qty ?? 1;
+          const totalLength = currentLengthFt + (currentLengthIn / 12);
+          editCmd.updates.totalWeight = weightPerFoot * totalLength * currentQty;
+          editCmd.updates.totalSurfaceArea = surfaceAreaPerFoot * totalLength * currentQty;
+        }
+
+        // Update the line in Firestore
+        const linesPath = getProjectPath(companyId, projectId, "lines");
+        
+        // Store previous state for undo
+        const previousState = { ...lineToEdit };
+        
+        await updateDocument(`${linesPath}/${lineToEdit.id}`, editCmd.updates);
+        
+        // Track update action for undo
+        voiceCommandHistory.addAction({
+          type: "update",
+          timestamp: Date.now(),
+          documentId: lineToEdit.id,
+          lineId: editCmd.targetLineId,
+          previousState: previousState,
+          newState: { ...lineToEdit, ...editCmd.updates },
+        });
+        
+        console.log(`Successfully updated line ${editCmd.targetLineId}`);
+        // The line will automatically update via Firestore subscription
+        return;
+      }
+
+      // Otherwise, it's a new line creation
+      const parsedLines = parsed as any[];
+      console.log("Parsed lines:", parsedLines);
+      
+      if (!Array.isArray(parsedLines) || parsedLines.length === 0) {
+        console.warn("Failed to parse transcription into lines:", text);
+        alert(`Could not parse transcription: "${text}"\n\nTry phrases like:\n- "W12x65 column, 8 pieces, 20 feet"\n- "1/2 inch plate, 48 by 96, 2 pieces"\n- "L4 W10x15 beam, 5 pieces, 15 feet" (to specify line ID)\n- "edit L4, change member size to HSS 6x6x1/4" (to edit existing line)`);
         return;
       }
 
       if (!isFirebaseConfigured()) {
-        alert(`Parsed ${parsedLines.length} line(s) from transcription, but Firebase is not configured.\n\nParsed items:\n${parsedLines.map((p, i) => `${i + 1}. ${p.itemDescription}`).join("\n")}`);
+        console.warn("Firebase not configured, cannot save lines");
+        alert(`Parsed ${parsedLines.length} line(s) from transcription, but Firebase is not configured.\n\nParsed items:\n${parsedLines.map((p, i) => `${i + 1}. ${p.itemDescription}${p.lineId ? ` (Line ${p.lineId})` : ""}`).join("\n")}`);
         return;
       }
+      
+      console.log(`Processing ${parsedLines.length} line(s) for creation`);
 
       // Default rates (TODO: Load from company settings)
       const defaultMaterialRate = 0.85;
@@ -71,57 +540,98 @@ export default function EstimatingPage() {
       let createdCount = 0;
 
       for (let i = 0; i < parsedLines.length; i++) {
-        const parsed = parsedLines[i];
-        const lineId = `L${lines.length + i + 1}`;
+        const parsedLine = parsedLines[i];
+        // Use voice-provided line ID if available, otherwise auto-generate
+        const lineId = parsedLine.lineId || `L${lines.length + i + 1}`;
         
         const newLine = createEstimatingLineFromParsed(
-          parsed,
+          parsedLine,
           lineId,
           defaultMaterialRate,
           defaultLaborRate,
           defaultCoatingRate
         );
 
-        await createDocument(linesPath, newLine);
-        createdCount++;
+        console.log(`Creating line ${lineId}:`, newLine);
+        
+        try {
+          const documentId = await createDocument(linesPath, newLine);
+          console.log(`Created line ${lineId} with document ID: ${documentId}`);
+          
+          // Track create action for undo
+          if (documentId) {
+            voiceCommandHistory.addAction({
+              type: "create",
+              timestamp: Date.now(),
+              documentId: documentId,
+              lineId: lineId,
+              newState: newLine,
+            });
+          }
+          
+          createdCount++;
+        } catch (createError: any) {
+          console.error(`Failed to create line ${lineId}:`, createError);
+          alert(`Failed to create line ${lineId}: ${createError.message}`);
+        }
       }
 
       // Success feedback
       if (createdCount > 0) {
-        console.log(`Successfully created ${createdCount} line item(s) from voice transcription`);
+        const lineIds = parsedLines.map(p => p.lineId || "auto").join(", ");
+        console.log(`Successfully created ${createdCount} line item(s) from voice transcription (Line IDs: ${lineIds})`);
         // The lines will automatically appear via Firestore subscription
+      } else {
+        console.warn("No lines were created despite parsing success");
+        alert("Failed to create any lines. Please check the console for details.");
       }
     } catch (error: any) {
-      console.error("Failed to create line from transcription:", error);
-      alert(`Failed to create line items: ${error.message}`);
+      console.error("Failed to process transcription:", error);
+      alert(`Failed to process voice command: ${error.message}`);
     }
   };
 
   return (
     <div className="space-y-6 pb-24">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+        {/* Header */}
+        <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Estimating Workspace</h1>
           <p className="text-sm text-gray-600 mt-1">
             Voice input or manual entry for project {projectId || "N/A"}
           </p>
         </div>
-        {(USE_SAMPLE_DATA || !isFirebaseConfigured()) && (
-          <span className="text-xs text-orange-600 bg-orange-50 px-3 py-1 rounded-full font-medium">
-            Sample Data Mode
-          </span>
-        )}
+        <div className="flex items-center gap-3">
+          {(USE_SAMPLE_DATA || !isFirebaseConfigured()) && (
+            <span className="text-xs text-orange-600 bg-orange-50 px-3 py-1 rounded-full font-medium">
+              Sample Data Mode
+            </span>
+          )}
+          <button
+            onClick={() => {
+              // Trigger the VoiceAgent to open
+              const event = new CustomEvent('openVoiceAgent');
+              window.dispatchEvent(event);
+            }}
+            className="px-6 py-3 rounded-xl shadow-lg bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white flex items-center gap-3 transition-all hover:scale-105 font-semibold border-2 border-purple-400"
+            title="AI Assistant - Speak naturally to manage your estimate"
+          >
+            <Sparkles className="w-6 h-6" />
+            <span className="text-base">AI Assistant</span>
+          </button>
+        </div>
       </div>
 
-      {/* Voice HUD Controls */}
-      <VoiceHUD
-        companyId={companyId}
-        projectId={projectId}
-        onTranscriptionComplete={handleTranscription}
-        isManualMode={isManualMode}
-        onManualModeToggle={setIsManualMode}
-      />
+      {/* AI Voice Agent - Centered */}
+      <div className="flex justify-center">
+        <VoiceAgent
+          companyId={companyId}
+          projectId={projectId}
+          existingLines={lines}
+          onAction={handleVoiceAgentAction}
+          isManualMode={isManualMode}
+        />
+      </div>
 
       {/* KPI Summary */}
       <KPISummary lines={lines} />

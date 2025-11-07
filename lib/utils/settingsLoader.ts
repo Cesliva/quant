@@ -88,18 +88,26 @@ export async function loadCompanySettings(companyId: string): Promise<CompanySet
   }
 
   try {
-    const settingsPath = `companies/${companyId}/settings`;
-    const settings = await getDocument<CompanySettings>(settingsPath);
-    
-    if (settings) {
-      // Merge with defaults to ensure all fields exist
+    // Settings should be a subcollection: companies/{companyId}/settings/{settingsId}
+    // Or a field in the company document: companies/{companyId}
+    // For now, use the company document itself and access settings field
+    const companyPath = `companies/${companyId}`;
+    const company = await getDocument<{ settings?: CompanySettings }>(companyPath);
+    if (company?.settings) {
       return {
-        materialGrades: settings.materialGrades || DEFAULT_SETTINGS.materialGrades,
-        laborRates: settings.laborRates || DEFAULT_SETTINGS.laborRates,
-        coatingTypes: settings.coatingTypes || DEFAULT_SETTINGS.coatingTypes,
+        ...DEFAULT_SETTINGS,
+        ...company.settings,
+        companyInfo: {
+          ...DEFAULT_SETTINGS.companyInfo,
+          ...company.settings.companyInfo,
+        },
+        laborRates: {
+          ...DEFAULT_SETTINGS.laborRates,
+          ...company.settings.laborRates,
+        },
         markupSettings: {
           ...DEFAULT_SETTINGS.markupSettings,
-          ...settings.markupSettings,
+          ...company.settings.markupSettings,
         },
       };
     }
@@ -122,9 +130,10 @@ export async function loadProjectSettings(
   }
 
   try {
-    const settingsPath = `companies/${companyId}/projects/${projectId}/settings`;
-    const settings = await getDocument<ProjectSettings>(settingsPath);
-    return settings || {};
+    // Project settings should be a field in the project document
+    const projectPath = `companies/${companyId}/projects/${projectId}`;
+    const project = await getDocument<{ settings?: ProjectSettings }>(projectPath);
+    return project?.settings || {};
   } catch (error) {
     console.warn("Failed to load project settings:", error);
     return {};

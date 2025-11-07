@@ -27,17 +27,46 @@ export async function POST(request: NextRequest) {
     }
 
     // Convert File to format OpenAI expects
+    // In Next.js API routes (Node.js), we need to handle the file properly
+    // Read the file as a stream or buffer
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-    const blob = new Blob([buffer], { type: file.type });
-
-    // Create File-like object for OpenAI
-    const audioFile = new File([blob], file.name, { type: file.type });
-
-    const transcription = await openai.audio.transcriptions.create({
-      file: audioFile as any,
-      model: "whisper-1",
+    
+    console.log("Received audio file:", {
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      bufferSize: buffer.length,
     });
+
+    let transcription;
+    try {
+      // Create a File object that works in Node.js environment
+      // OpenAI SDK accepts File, but we need to ensure it's properly formatted
+      const audioFile = new File(
+        [buffer], 
+        file.name || "audio.webm", 
+        { type: file.type || "audio/webm" }
+      );
+      
+      transcription = await openai.audio.transcriptions.create({
+        file: audioFile,
+        model: "whisper-1",
+      });
+    } catch (apiError: any) {
+      console.error("OpenAI API error:", {
+        message: apiError.message,
+        status: apiError.status,
+        code: apiError.code,
+        type: apiError.type,
+        response: apiError.response?.data,
+      });
+      throw new Error(
+        `OpenAI API error: ${apiError.message || "Connection error"}. ` +
+        `Status: ${apiError.status || "unknown"}. ` +
+        `Check your API key and network connection.`
+      );
+    }
 
     // Calculate cost: $0.006 per minute
     // Estimate duration from file size (rough approximation)
@@ -51,9 +80,18 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: any) {
     console.error("Transcription error:", error);
+    console.error("Error details:", {
+      message: error.message,
+      status: error.status,
+      code: error.code,
+      type: error.type,
+    });
     return NextResponse.json(
-      { error: error.message || "Transcription failed" },
-      { status: 500 }
+      { 
+        error: error.message || "Transcription failed",
+        details: error.response?.data || error.cause || "Unknown error"
+      },
+      { status: error.status || 500 }
     );
   }
 }

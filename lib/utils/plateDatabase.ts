@@ -81,6 +81,13 @@ export function getAvailableGrades(thickness: string): string[] {
 }
 
 /**
+ * Get valid plate grades (alias for getAvailableGrades for backwards compatibility)
+ */
+export function getValidPlateGrades(thickness: string): string[] {
+  return getAvailableGrades(thickness);
+}
+
+/**
  * Calculate weight from plate dimensions using database reference
  * This is a quick reference - actual calculation should use plateHelper
  */

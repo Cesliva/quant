@@ -79,20 +79,21 @@ export const setDocument = async <T extends DocumentData>(
 };
 
 export const updateDocument = async <T extends Partial<DocumentData>>(
-  path: string,
+  collectionPath: string,
+  documentId: string,
   data: T
 ): Promise<void> => {
   checkFirebase();
-  const docRef = doc(db!, path);
+  const docRef = doc(collection(db!, collectionPath), documentId);
   await updateDoc(docRef, {
     ...data,
     updatedAt: Timestamp.now(),
   });
 };
 
-export const deleteDocument = async (path: string): Promise<void> => {
+export const deleteDocument = async (collectionPath: string, documentId: string): Promise<void> => {
   checkFirebase();
-  const docRef = doc(db!, path);
+  const docRef = doc(collection(db!, collectionPath), documentId);
   await deleteDoc(docRef);
 };
 

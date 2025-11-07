@@ -20,7 +20,10 @@ export async function transcribeAudio(
   });
 
   if (!response.ok) {
-    throw new Error("Transcription failed");
+    const errorData = await response.json().catch(() => ({}));
+    const errorMessage = errorData.error || `HTTP ${response.status}: ${response.statusText}`;
+    console.error("Transcription API error:", errorMessage, errorData);
+    throw new Error(errorMessage);
   }
 
   const data = await response.json();

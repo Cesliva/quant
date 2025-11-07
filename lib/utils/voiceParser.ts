@@ -7,13 +7,30 @@
  * - "Add 5 W12x26 beams, 20 feet long, A992 grade"
  * - "HSS 8x8x3/8, 3 pieces, 30 feet"
  * - "1/2 inch plate, 48 by 96, 2 pieces"
+ * - "L4 W10x15 beam, 5 pieces, 15 feet" (specifies line ID L4)
+ * - "line 4 W10x15 beam" (alternative line ID format)
+ * - "edit L4, change member size to HSS 6x6x1/4" (edit existing line)
+ * - "edit L4, change quantity to 4" (edit quantity)
+ * 
+ * Line ID Detection:
+ * When you say a line ID (e.g., "L4", "line 4", "line id 4"), the parser will:
+ * 1. Create a new line with that specific ID
+ * 2. If there's text before the line ID, it will be parsed as a separate line first
+ * 3. The text after the line ID will be assigned to the new line
+ * 
+ * Edit Commands:
+ * When you say "edit L4" followed by field changes, the parser will:
+ * 1. Identify the line to edit
+ * 2. Parse the field changes (size, quantity, length, grade, etc.)
+ * 3. Return edit instructions instead of new line data
  */
 
 import { EstimatingLine } from "@/components/estimating/EstimatingGrid";
 import { getShapeByDesignation, SHAPE_TYPES } from "@/lib/utils/aiscShapes";
 import { getWeightPerFoot, getSurfaceAreaPerFoot } from "@/lib/utils/aiscShapes";
 
-interface ParsedLine {
+export interface ParsedLine {
+  lineId?: string; // Optional line ID from voice (e.g., "L4", "L10")
   itemDescription: string;
   materialType: "Rolled" | "Plate";
   shapeType?: string;
@@ -32,31 +49,285 @@ interface ParsedLine {
   subCategory?: string;
 }
 
+export interface ParsedEditCommand {
+  isEdit: true;
+  targetLineId: string; // Line ID to edit (e.g., "L4")
+  updates: Partial<EstimatingLine>; // Fields to update
+}
+
 /**
- * Parse voice transcription into estimating line items
+ * Extract line ID from text (e.g., "L4", "line 4", "line id 4")
+ * Returns the line ID in format "L{number}" or null if not found
  */
-export function parseVoiceTranscription(text: string): ParsedLine[] {
-  const lines: ParsedLine[] = [];
-  const normalizedText = text.toLowerCase().trim();
+function extractLineId(text: string): string | null {
+  // Patterns: "L4", "line 4", "line id 4", "line number 4", "L 4"
+  const patterns = [
+    /\bL\s*(\d+)\b/i,                    // L4, L 4
+    /\bline\s+id\s+(\d+)\b/i,             // line id 4
+    /\bline\s+number\s+(\d+)\b/i,         // line number 4
+    /\bline\s+(\d+)\b/i,                  // line 4
+  ];
 
-  // Split by common separators (periods, commas, "and", "also")
-  const segments = normalizedText
-    .split(/[.,;]| and | also | then /)
-    .map(s => s.trim())
-    .filter(s => s.length > 0);
-
-  for (const segment of segments) {
-    const parsed = parseSegment(segment);
-    if (parsed) {
-      lines.push(parsed);
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match) {
+      return `L${match[1]}`;
     }
   }
 
-  // If no segments found, try parsing the whole text
-  if (lines.length === 0) {
-    const parsed = parseSegment(normalizedText);
+  return null;
+}
+
+/**
+ * Parse edit command (e.g., "edit L4, change member size to HSS 6x6x1/4")
+ * Returns ParsedEditCommand if it's an edit, null otherwise
+ */
+function parseEditCommand(text: string): ParsedEditCommand | null {
+  const normalized = text.toLowerCase().trim();
+  
+  // Check if it starts with "edit"
+  const editMatch = normalized.match(/^edit\s+(?:line\s+id\s+)?(?:L\s*(\d+)|line\s+(\d+)|line\s+id\s+(\d+)|line\s+number\s+(\d+))/i);
+  if (!editMatch) {
+    return null;
+  }
+
+  // Extract line ID
+  const lineIdNum = editMatch[1] || editMatch[2] || editMatch[3] || editMatch[4];
+  if (!lineIdNum) {
+    return null;
+  }
+  const targetLineId = `L${lineIdNum}`;
+
+  // Get the rest of the text after "edit L4, " or "edit L4 "
+  const afterEdit = normalized.substring(editMatch[0].length).trim();
+  if (!afterEdit) {
+    return null; // No changes specified
+  }
+
+  const updates: Partial<EstimatingLine> = {};
+
+  // Parse field changes
+  // "change member size to HSS 6x6x1/4"
+  // "change size to W12x65"
+  const sizeMatch = afterEdit.match(/change\s+(?:member\s+)?size\s+to\s+(.+?)(?:,|$)/i);
+  if (sizeMatch) {
+    const sizeText = sizeMatch[1].trim();
+    // Try to parse as rolled member to extract shape and size
+    const parsed = parseRolledMember(sizeText);
+    if (parsed && parsed.shapeType && parsed.sizeDesignation) {
+      updates.shapeType = parsed.shapeType as any;
+      updates.sizeDesignation = parsed.sizeDesignation;
+      // Recalculate weight if we have the size
+      if (parsed.sizeDesignation) {
+        updates.weightPerFoot = getWeightPerFoot(parsed.sizeDesignation);
+        updates.surfaceAreaPerFoot = getSurfaceAreaPerFoot(parsed.sizeDesignation);
+      }
+    }
+  }
+
+  // "change quantity to 4"
+  // "change qty to 4"
+  const qtyMatch = afterEdit.match(/change\s+(?:quantity|qty)\s+to\s+(\d+)/i);
+  if (qtyMatch) {
+    updates.qty = parseInt(qtyMatch[1]);
+  }
+
+  // "change length to 20 feet"
+  // "change length to 15 feet 6 inches"
+  const lengthMatch = afterEdit.match(/change\s+length\s+to\s+(?:(\d+)\s*(?:feet|ft|')\s*(?:(\d+)\s*(?:inch|in|"))?|(\d+)\s*(?:inch|in|"))/i);
+  if (lengthMatch) {
+    if (lengthMatch[1]) {
+      updates.lengthFt = parseInt(lengthMatch[1]);
+      updates.lengthIn = lengthMatch[2] ? parseInt(lengthMatch[2]) : 0;
+    } else if (lengthMatch[3]) {
+      updates.lengthFt = 0;
+      updates.lengthIn = parseInt(lengthMatch[3]);
+    }
+  }
+
+  // "change grade to A992"
+  const gradeMatch = afterEdit.match(/change\s+grade\s+to\s+([A-Za-z0-9\s]+?)(?:,|$)/i);
+  if (gradeMatch) {
+    updates.grade = gradeMatch[1].trim();
+  }
+
+  // "change category to Columns"
+  const categoryMatch = afterEdit.match(/change\s+category\s+to\s+([A-Za-z\s]+?)(?:,|$)/i);
+  if (categoryMatch) {
+    updates.category = categoryMatch[1].trim();
+  }
+
+  // If no specific updates found, try to parse the whole thing as a material description
+  if (Object.keys(updates).length === 0) {
+    // Try parsing as a complete material description
+    const parsed = parseSegment(afterEdit);
     if (parsed) {
-      lines.push(parsed);
+      if (parsed.materialType === "Rolled") {
+        if (parsed.shapeType) updates.shapeType = parsed.shapeType as any;
+        if (parsed.sizeDesignation) {
+          updates.sizeDesignation = parsed.sizeDesignation;
+          updates.weightPerFoot = getWeightPerFoot(parsed.sizeDesignation);
+          updates.surfaceAreaPerFoot = getSurfaceAreaPerFoot(parsed.sizeDesignation);
+        }
+        if (parsed.grade) updates.grade = parsed.grade;
+        if (parsed.qty) updates.qty = parsed.qty;
+        if (parsed.lengthFt !== undefined) updates.lengthFt = parsed.lengthFt;
+        if (parsed.lengthIn !== undefined) updates.lengthIn = parsed.lengthIn;
+      }
+    }
+  }
+
+  return {
+    isEdit: true,
+    targetLineId,
+    updates,
+  };
+}
+
+/**
+ * Parse voice transcription into estimating line items or edit commands
+ * Supports line ID detection (e.g., "L4", "line 4") to trigger new lines
+ * Supports edit commands (e.g., "edit L4, change size to...")
+ * Supports edit followed by new line (e.g., "edit L4, change size to..., L5 W10x15...")
+ * Supports undo/redo commands (e.g., "undo", "redo")
+ */
+export type VoiceCommandResult = 
+  | ParsedLine[] 
+  | ParsedEditCommand 
+  | { edit: ParsedEditCommand; newLines: ParsedLine[] }
+  | { command: "undo" }
+  | { command: "redo" };
+
+export function parseVoiceTranscription(text: string): VoiceCommandResult {
+  const normalizedText = text.toLowerCase().trim();
+
+  // Check for undo/redo commands first
+  if (normalizedText === "undo" || normalizedText === "undo last" || normalizedText === "undo that") {
+    return { command: "undo" };
+  }
+  
+  if (normalizedText === "redo" || normalizedText === "redo last" || normalizedText === "redo that") {
+    return { command: "redo" };
+  }
+
+  // First, check if this is an edit command
+  const editCommand = parseEditCommand(normalizedText);
+  if (editCommand) {
+    // Check if there's a new line ID after the edit command
+    // Find where the edit command ends by looking for the target line ID and what comes after
+    const editMatch = normalizedText.match(/^edit\s+(?:line\s+id\s+)?(?:L\s*\d+|line\s+(?:id\s+)?\d+|line\s+number\s+\d+)/i);
+    if (editMatch) {
+      const afterEditStart = editMatch.index! + editMatch[0].length;
+      const afterEdit = normalizedText.substring(afterEditStart).trim();
+      
+      // Look for line ID patterns in the text after the edit command
+      // But exclude the target line ID itself
+      const lineIdPattern = /\b(?:L\s*\d+|line\s+(?:id\s+)?\d+|line\s+number\s+\d+)\b/gi;
+      const lineIdMatches = [...afterEdit.matchAll(lineIdPattern)];
+      
+      // Filter out the target line ID if it appears again
+      const validMatches = lineIdMatches.filter(match => {
+        const extracted = extractLineId(match[0]);
+        return extracted && extracted !== editCommand.targetLineId;
+      });
+      
+      if (validMatches.length > 0) {
+        // There's a new line ID after the edit - parse it
+        const newLineId = extractLineId(validMatches[0][0]);
+        if (newLineId) {
+          // Get text after the new line ID
+          const matchIndex = validMatches[0].index!;
+          const newLineText = afterEdit.substring(matchIndex + validMatches[0][0].length).trim();
+          if (newLineText) {
+            const parsed = parseSegment(newLineText);
+            if (parsed) {
+              parsed.lineId = newLineId;
+              return { edit: editCommand, newLines: [parsed] };
+            }
+          }
+        }
+      }
+    }
+    
+    return editCommand;
+  }
+
+  const lines: ParsedLine[] = [];
+
+  // Check if the text starts with a line ID
+  // Split text by line ID patterns to separate different lines
+  // Pattern: Look for "L4", "line 4", "line id 4", etc.
+  const lineIdPattern = /\b(?:L\s*\d+|line\s+(?:id\s+)?\d+|line\s+number\s+\d+)\b/gi;
+  const lineIdMatches = [...normalizedText.matchAll(lineIdPattern)];
+  
+  if (lineIdMatches.length > 0) {
+    // Split text by line IDs
+    let lastIndex = 0;
+    for (let i = 0; i < lineIdMatches.length; i++) {
+      const match = lineIdMatches[i];
+      const matchIndex = match.index!;
+      
+      // Get text before this line ID (if any) - this is the previous line's content
+      if (matchIndex > lastIndex) {
+        const previousText = normalizedText.substring(lastIndex, matchIndex).trim();
+        if (previousText) {
+          const parsed = parseSegment(previousText);
+          if (parsed) {
+            lines.push(parsed);
+          }
+        }
+      }
+      
+      // Extract the line ID
+      const lineId = extractLineId(match[0]);
+      
+      // Get text after this line ID (up to next line ID or end)
+      const nextMatchIndex = i < lineIdMatches.length - 1 
+        ? lineIdMatches[i + 1].index! 
+        : normalizedText.length;
+      const lineText = normalizedText.substring(matchIndex + match[0].length, nextMatchIndex).trim();
+      
+      if (lineText) {
+        const parsed = parseSegment(lineText);
+        if (parsed && lineId) {
+          parsed.lineId = lineId;
+          lines.push(parsed);
+        }
+      }
+      
+      lastIndex = nextMatchIndex;
+    }
+    
+    // If there's text after the last line ID, parse it
+    if (lastIndex < normalizedText.length) {
+      const remainingText = normalizedText.substring(lastIndex).trim();
+      if (remainingText) {
+        const parsed = parseSegment(remainingText);
+        if (parsed) {
+          lines.push(parsed);
+        }
+      }
+    }
+  } else {
+    // No line IDs found, use original logic - split by common separators
+    const segments = normalizedText
+      .split(/[.,;]| and | also | then /)
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    for (const segment of segments) {
+      const parsed = parseSegment(segment);
+      if (parsed) {
+        lines.push(parsed);
+      }
+    }
+
+    // If no segments found, try parsing the whole text
+    if (lines.length === 0) {
+      const parsed = parseSegment(normalizedText);
+      if (parsed) {
+        lines.push(parsed);
+      }
     }
   }
 
@@ -321,13 +592,13 @@ function parseRolledMember(text: string): ParsedLine | null {
  */
 export function createEstimatingLineFromParsed(
   parsed: ParsedLine,
-  lineId: string,
+  lineId: string, // Fallback line ID if parsed.lineId is not provided
   defaultMaterialRate: number,
   defaultLaborRate: number,
   defaultCoatingRate: number
 ): Partial<EstimatingLine> {
   const line: Partial<EstimatingLine> = {
-    lineId,
+    lineId: parsed.lineId || lineId, // Use voice-provided line ID if available, otherwise use fallback
     itemDescription: parsed.itemDescription,
     materialType: parsed.materialType,
     category: parsed.category || "Structural",

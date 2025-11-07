@@ -60,7 +60,22 @@ export default function EstimatingGridCompact({
 
   const getSpecDisplay = (line: EstimatingLine) => {
     if (line.materialType === "Rolled") {
-      return `${line.shapeType || ""} ${line.sizeDesignation || ""}`.trim() || "-";
+      const shapeType = line.shapeType || "";
+      const sizeDesignation = line.sizeDesignation || "";
+      
+      // Check if sizeDesignation already starts with the shapeType to avoid duplication
+      // e.g., if shapeType is "W" and sizeDesignation is "W10X15", don't add "W" again
+      if (sizeDesignation && shapeType) {
+        const sizeUpper = sizeDesignation.toUpperCase();
+        const shapeUpper = shapeType.toUpperCase();
+        if (sizeUpper.startsWith(shapeUpper)) {
+          // sizeDesignation already includes the shape type, just return it
+          return sizeDesignation;
+        }
+      }
+      
+      // Otherwise, combine shapeType and sizeDesignation
+      return `${shapeType} ${sizeDesignation}`.trim() || "-";
     } else if (line.materialType === "Plate") {
       if (line.thickness && line.width && line.plateLength) {
         return `${line.thickness}" × ${line.width}" × ${line.plateLength}"`;

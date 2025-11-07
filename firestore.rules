@@ -1,6 +1,13 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // DEVELOPMENT MODE: Open access for testing
+    // TODO: Replace with proper authentication rules before production
+    match /{document=**} {
+      allow read, write: if true;
+    }
+    
+    /* PRODUCTION RULES (commented out for development)
     // Helper function to check if user is authenticated
     function isAuthenticated() {
       return request.auth != null;
@@ -42,6 +49,7 @@ service cloud.firestore {
         }
       }
     }
+    */
   }
 }
 
