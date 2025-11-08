@@ -4,6 +4,7 @@ import { useParams } from "next/navigation";
 import EstimatingGrid from "@/components/estimating/EstimatingGrid";
 import KPISummary from "@/components/estimating/KPISummary";
 import VoiceAgent from "@/components/estimating/VoiceAgent";
+import VoiceRecognitionSmokeTest from "@/components/estimating/VoiceRecognitionSmokeTest";
 import { Sparkles } from "lucide-react";
 import { useState, useEffect } from "react";
 import { subscribeToCollection, createDocument, updateDocument, deleteDocument } from "@/lib/firebase/firestore";
@@ -57,7 +58,23 @@ export default function EstimatingPage() {
         const defaultLaborRate = 50;
         const defaultCoatingRate = 2.50;
         
-        const lineId = data.lineId || `L${lines.length + 1}`;
+        // Use proper line ID manager to ensure sequential format (L1, L2, L3, etc.)
+        // and prevent duplicates
+        const { getNextLineId, extractLineNumber } = await import("@/lib/utils/lineIdManager");
+        let lineId = data.lineId || getNextLineId(lines);
+        
+        // Check for duplicates and get next available if needed
+        let attempts = 0;
+        while (lines.some(l => l.lineId === lineId) && attempts < 100) {
+          const num = extractLineNumber(lineId);
+          lineId = `L${num + 1}`;
+          attempts++;
+        }
+        
+        if (attempts >= 100) {
+          console.error("Could not generate unique line ID after 100 attempts");
+          lineId = `L${Date.now()}`; // Fallback to timestamp only if all else fails
+        }
         
         // Create blank line with defaults
         const blankLine: Partial<EstimatingLine> = {
@@ -221,8 +238,15 @@ export default function EstimatingPage() {
       const linesPath = getProjectPath(companyId, projectId, "lines");
 
       if (response.action === "create") {
-        // Create new line
-        const lineId = response.lineId || `L${lines.length + 1}`;
+        // Create new line - use sequential ID
+        const maxNum = Math.max(
+          ...lines.map(l => {
+            const match = l.lineId.match(/L?(\d+)/);
+            return match ? parseInt(match[1], 10) : 0;
+          }),
+          0
+        );
+        const lineId = response.lineId || `L${maxNum + 1}`;
         const newLine = createLineFromStructuredData(
           response.data || {},
           lineId,
@@ -283,6 +307,21 @@ export default function EstimatingPage() {
           });
           console.log(`AI deleted line ${response.lineId}`);
         }
+      } else if (response.action === "copy" && response.data) {
+        // Copy line - create new line with copy format line ID
+        const copiedLine = response.data as EstimatingLine;
+        const documentId = await createDocument(linesPath, copiedLine);
+        
+        if (documentId) {
+          voiceCommandHistory.addAction({
+            type: "create",
+            timestamp: Date.now(),
+            documentId: documentId,
+            lineId: copiedLine.lineId,
+            newState: copiedLine,
+          });
+        }
+        console.log(`AI copied line to ${copiedLine.lineId}`);
       } else if (response.action === "query") {
         // Query - just informational, no action needed
         console.log(`AI query: ${response.message}`);
@@ -321,11 +360,11 @@ export default function EstimatingPage() {
           // Reverse the action
           if (action.type === "create" && action.documentId) {
             // Undo create = delete
-            await deleteDocument(`${linesPath}/${action.documentId}`);
+            await deleteDocument(linesPath, action.documentId);
             console.log(`Undo: Deleted line ${action.lineId}`);
           } else if (action.type === "update" && action.documentId && action.previousState) {
             // Undo update = restore previous state
-            await updateDocument(`${linesPath}/${action.documentId}`, action.previousState);
+            await updateDocument(linesPath, action.documentId, action.previousState);
             console.log(`Undo: Restored line ${action.lineId}`);
           } else if (action.type === "delete" && action.documentId && action.previousState) {
             // Undo delete = recreate
@@ -349,11 +388,11 @@ export default function EstimatingPage() {
             console.log(`Redo: Recreated line ${action.lineId}`);
           } else if (action.type === "update" && action.documentId && action.newState) {
             // Redo update = re-apply update
-            await updateDocument(`${linesPath}/${action.documentId}`, action.newState);
+            await updateDocument(linesPath, action.documentId, action.newState);
             console.log(`Redo: Re-applied update to line ${action.lineId}`);
           } else if (action.type === "delete" && action.documentId) {
             // Redo delete = delete again
-            await deleteDocument(`${linesPath}/${action.documentId}`);
+            await deleteDocument(linesPath, action.documentId);
             console.log(`Redo: Deleted line ${action.lineId}`);
           }
           return;
@@ -495,7 +534,12 @@ export default function EstimatingPage() {
         // Store previous state for undo
         const previousState = { ...lineToEdit };
         
-        await updateDocument(`${linesPath}/${lineToEdit.id}`, editCmd.updates);
+        if (!lineToEdit.id) {
+          console.error("Line missing ID, cannot update");
+          return;
+        }
+        
+        await updateDocument(linesPath, lineToEdit.id, editCmd.updates);
         
         // Track update action for undo
         voiceCommandHistory.addAction({
@@ -622,6 +666,9 @@ export default function EstimatingPage() {
         </div>
       </div>
 
+      {/* Voice Recognition Smoke Test */}
+      <VoiceRecognitionSmokeTest />
+      
       {/* AI Voice Agent - Centered */}
       <div className="flex justify-center">
         <VoiceAgent

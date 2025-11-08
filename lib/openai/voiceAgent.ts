@@ -1,7 +1,7 @@
 import { EstimatingLine } from "@/components/estimating/EstimatingGrid";
 
 export interface VoiceAgentResponse {
-  action: "create" | "update" | "delete" | "query" | "unknown";
+  action: "create" | "update" | "delete" | "copy" | "query" | "conversation" | "unknown";
   lineId?: string;
   data?: Partial<EstimatingLine>;
   message: string;
@@ -18,7 +18,8 @@ export interface ConversationMessage {
 export async function processVoiceCommand(
   userMessage: string,
   existingLines: EstimatingLine[] = [],
-  conversationHistory: ConversationMessage[] = []
+  conversationHistory: ConversationMessage[] = [],
+  trainingContext: string = "" // Additional context from speech training
 ): Promise<VoiceAgentResponse> {
   console.log("Calling /api/voice-agent with:", {
     userMessage,
@@ -26,6 +27,10 @@ export async function processVoiceCommand(
     conversationHistoryLength: conversationHistory.length,
   });
 
+  // Add timeout and abort controller for request
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+  
   let response;
   try {
     response = await fetch("/api/voice-agent", {
@@ -44,10 +49,17 @@ export async function processVoiceCommand(
           lengthFt: line.lengthFt,
         })),
         conversationHistory,
+        trainingContext,
       }),
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
     console.log("Response status:", response.status, response.statusText);
   } catch (fetchError: any) {
+    clearTimeout(timeoutId);
+    if (fetchError.name === 'AbortError') {
+      throw new Error("Request timeout: The server took too long to respond. Please try again.");
+    }
     console.error("Fetch error:", fetchError);
     throw new Error(`Network error: ${fetchError.message || "Failed to reach server"}`);
   }

@@ -236,7 +236,15 @@ function EstimatingContent() {
       const linesPath = getProjectPath(companyId, selectedProject, "lines");
 
       if (response.action === "create") {
-        const lineId = response.lineId || `L${lines.length + 1}`;
+        // Create new line - use sequential ID
+        const maxNum = Math.max(
+          ...lines.map(l => {
+            const match = l.lineId.match(/L?(\d+)/);
+            return match ? parseInt(match[1], 10) : 0;
+          }),
+          0
+        );
+        const lineId = response.lineId || `L${maxNum + 1}`;
         const newLine = createLineFromStructuredData(
           response.data || {},
           lineId,
@@ -295,6 +303,21 @@ function EstimatingContent() {
           });
           console.log(`AI deleted line ${response.lineId}`);
         }
+      } else if (response.action === "copy" && response.data) {
+        // Copy line - create new line with copy format line ID
+        const copiedLine = response.data as EstimatingLine;
+        const documentId = await createDocument(linesPath, copiedLine);
+        
+        if (documentId) {
+          voiceCommandHistory.addAction({
+            type: "create",
+            timestamp: Date.now(),
+            documentId: documentId,
+            lineId: copiedLine.lineId,
+            newState: copiedLine,
+          });
+        }
+        console.log(`AI copied line to ${copiedLine.lineId}`);
       } else if (response.action === "query") {
         console.log(`AI query: ${response.message}`);
       }

@@ -434,15 +434,23 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
     setEditingLine({});
   };
 
-  const handleDelete = (lineId: string) => {
+  const handleDelete = async (lineId: string) => {
     if (confirm("Are you sure you want to delete this line?")) {
       try {
+        // Find the line to get its document ID
+        const lineToDelete = lines.find((l) => l.id === lineId);
+        if (!lineToDelete || !lineToDelete.id) {
+          console.error("Line not found or missing ID");
+          return;
+        }
+        
         // Update local state immediately
         const updatedLines = lines.filter((l) => l.id !== lineId);
         setLines(updatedLines, true); // Add to history
         
-        const linePath = getProjectPath(companyId, projectId, "lines", lineId);
-        deleteDocument(linePath);
+        // Delete from Firestore using correct signature: (collectionPath, documentId)
+        const linesPath = getProjectPath(companyId, projectId, "lines");
+        await deleteDocument(linesPath, lineToDelete.id);
       } catch (error: any) {
         console.error("Failed to delete line:", error);
         alert("Firebase is not configured. Please set up Firebase credentials to delete data.");
