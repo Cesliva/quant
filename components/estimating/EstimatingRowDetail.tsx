@@ -6,6 +6,7 @@ import { SHAPE_TYPES, getShapesByType, getValidGrades } from "@/lib/utils/aiscSh
 import { getAvailableThicknesses, getValidPlateGrades } from "@/lib/utils/plateDatabase";
 import LaborInput from "./LaborInput";
 import { Info } from "lucide-react";
+import { getNumberFromField } from "@/lib/utils/fieldNumberMap";
 
 interface EstimatingRowDetailProps {
   line: EstimatingLine;
@@ -41,7 +42,15 @@ export default function EstimatingRowDetail({
 
   const categories = ["Columns", "Beams", "Misc Metals", "Plates", "Connections", "Other"];
   const subCategories = ["Base Plate", "Gusset", "Stiffener", "Clip", "Brace", "Other"];
-  const coatingSystems = ["None", "Paint", "Powder", "Galv"];
+  const coatingSystems = [
+    "None",
+    "Standard Shop Primer",
+    "Zinc Primer",
+    "Paint",
+    "Powder Coat",
+    "Galvanizing",
+    "Specialty Coating"
+  ];
 
   const availableSizes = currentLine.shapeType
     ? getShapesByType(currentLine.shapeType).map((shape) => shape["Member Size"])
@@ -82,16 +91,25 @@ export default function EstimatingRowDetail({
       return <span className="text-gray-700">{value?.toString() || "-"}</span>;
     }
 
-    // Edit mode
+    // Edit mode - Add IDs and data attributes for keyboard shortcuts
+    const fieldId = line.id ? `field-${line.id}-${field}` : undefined;
+    const fieldDataAttrs = {
+      "data-field": field,
+      "data-line-id": line.id || "",
+    };
+
     if (type === "select" && options) {
       return (
         <select
+          id={fieldId}
+          {...fieldDataAttrs}
           value={value as string || ""}
           onChange={(e) => {
             onChange(field, e.target.value, line);
-            // Auto-save on change for select fields
+            // Auto-save on change for select fields (debounced)
             if (isEditing) {
-              setTimeout(() => onSave(), 100);
+              // Save immediately for selects since they're discrete choices
+              onSave();
             }
           }}
           className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -107,6 +125,8 @@ export default function EstimatingRowDetail({
     if (type === "textarea") {
       return (
         <textarea
+          id={fieldId}
+          {...fieldDataAttrs}
           value={value as string || ""}
           onChange={(e) => onChange(field, e.target.value, line)}
           onBlur={() => {
@@ -123,12 +143,15 @@ export default function EstimatingRowDetail({
     if (type === "checkbox") {
       return (
         <input
+          id={fieldId}
+          {...fieldDataAttrs}
           type="checkbox"
           checked={value as boolean || false}
           onChange={(e) => {
             onChange(field, e.target.checked, line);
             if (isEditing) {
-              setTimeout(() => onSave(), 100);
+              // Save immediately for checkboxes
+              onSave();
             }
           }}
           className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
@@ -138,13 +161,19 @@ export default function EstimatingRowDetail({
 
     return (
       <input
+        id={fieldId}
+        {...fieldDataAttrs}
         type={type}
-        value={typeof value === "number" ? value : (value as string || "")}
+        value={typeof value === "number" ? (value || 0) : (value as string || "")}
         onChange={(e) => {
-          onChange(field, type === "number" ? parseFloat(e.target.value) || 0 : e.target.value, line);
+          const newValue = type === "number" 
+            ? (e.target.value === "" ? undefined : parseFloat(e.target.value))
+            : e.target.value;
+          onChange(field, newValue !== undefined ? newValue : (type === "number" ? 0 : ""), line);
         }}
         onBlur={() => {
           if (isEditing && !isReadOnly) {
+            // Immediate save on blur
             onSave();
           }
         }}
@@ -184,27 +213,39 @@ export default function EstimatingRowDetail({
           <h4 className="font-semibold text-gray-900 border-b border-gray-200 pb-2">Identification</h4>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Drawing #</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                <span className="text-blue-600 font-bold">{getNumberFromField("drawingNumber")}.</span> Drawing #
+              </label>
               {renderField("Drawing #", "drawingNumber", "text")}
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Detail #</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                <span className="text-blue-600 font-bold">{getNumberFromField("detailNumber")}.</span> Detail #
+              </label>
               {renderField("Detail #", "detailNumber", "text")}
             </div>
             <div className="col-span-2">
-              <label className="block text-xs font-medium text-gray-700 mb-1">Item Description</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                <span className="text-blue-600 font-bold">{getNumberFromField("itemDescription")}.</span> Item Description
+              </label>
               {renderField("Item", "itemDescription", "text")}
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Category</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                <span className="text-blue-600 font-bold">{getNumberFromField("category")}.</span> Category
+              </label>
               {renderField("Category", "category", "select", categories)}
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Sub-Category</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                <span className="text-blue-600 font-bold">{getNumberFromField("subCategory")}.</span> Sub-Category
+              </label>
               {renderField("Sub-Category", "subCategory", "select", subCategories)}
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Material Type</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                <span className="text-blue-600 font-bold">{getNumberFromField("materialType")}.</span> Material Type
+              </label>
               {isEditing ? (
                 <select
                   value={editingLine.materialType || "Rolled"}
@@ -234,27 +275,39 @@ export default function EstimatingRowDetail({
             <h4 className="font-semibold text-gray-900 border-b border-gray-200 pb-2">Material</h4>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Shape Type</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  <span className="text-blue-600 font-bold">{getNumberFromField("shapeType")}.</span> Shape Type
+                </label>
                 {renderField("Shape", "shapeType", "select", SHAPE_TYPES as string[])}
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Size</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  <span className="text-blue-600 font-bold">{getNumberFromField("sizeDesignation")}.</span> Size
+                </label>
                 {renderField("Size", "sizeDesignation", "select", availableSizes)}
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Grade</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  <span className="text-blue-600 font-bold">{getNumberFromField("grade")}.</span> Grade
+                </label>
                 {renderField("Grade", "grade", "select", availableGrades)}
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Quantity</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  <span className="text-blue-600 font-bold">{getNumberFromField("qty")}.</span> Quantity
+                </label>
                 {renderField("Qty", "qty", "number")}
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Length (ft)</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  <span className="text-blue-600 font-bold">{getNumberFromField("lengthFt")}.</span> Length (ft)
+                </label>
                 {renderField("Length (ft)", "lengthFt", "number")}
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Length (in)</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  <span className="text-blue-600 font-bold">{getNumberFromField("lengthIn")}.</span> Length (in)
+                </label>
                 {renderField("Length (in)", "lengthIn", "number")}
               </div>
               <div>
@@ -283,27 +336,39 @@ export default function EstimatingRowDetail({
             <h4 className="font-semibold text-gray-900 border-b border-gray-200 pb-2">Plate Material</h4>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Thickness (in)</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  <span className="text-blue-600 font-bold">{getNumberFromField("thickness")}.</span> Thickness (in)
+                </label>
                 {renderField("Thickness", "thickness", "select", plateThicknesses.map(t => t.toString()))}
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Width (in)</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  <span className="text-blue-600 font-bold">{getNumberFromField("width")}.</span> Width (in)
+                </label>
                 {renderField("Width", "width", "number")}
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Length (in)</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  <span className="text-blue-600 font-bold">{getNumberFromField("plateLength")}.</span> Length (in)
+                </label>
                 {renderField("Length", "plateLength", "number")}
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Quantity</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  <span className="text-blue-600 font-bold">{getNumberFromField("plateQty")}.</span> Quantity
+                </label>
                 {renderField("Qty", "plateQty", "number")}
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Grade</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  <span className="text-blue-600 font-bold">{getNumberFromField("plateGrade")}.</span> Grade
+                </label>
                 {renderField("Grade", "plateGrade", "select", availableGrades)}
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">One Side Coat</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  <span className="text-blue-600 font-bold">{getNumberFromField("oneSideCoat")}.</span> One Side Coat
+                </label>
                 {renderField("1-Side", "oneSideCoat", "checkbox")}
               </div>
               <div>
@@ -330,7 +395,9 @@ export default function EstimatingRowDetail({
         <div className="space-y-4">
           <h4 className="font-semibold text-gray-900 border-b border-gray-200 pb-2">Coating</h4>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Coating System</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              <span className="text-blue-600 font-bold">{getNumberFromField("coatingSystem")}.</span> Coating System
+            </label>
             {renderField("Coating", "coatingSystem", "select", coatingSystems)}
           </div>
         </div>
@@ -355,8 +422,10 @@ export default function EstimatingRowDetail({
           </div>
 
           <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Unload</label>
+            <div id={line.id ? `field-${line.id}-laborUnload` : undefined} data-field="laborUnload" data-line-id={line.id || ""}>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                <span className="text-blue-600 font-bold">{getNumberFromField("laborUnload")}.</span> Unload
+              </label>
               {isManualMode ? (
                 <LaborInput
                   value={currentLine.laborUnload || 0}
@@ -378,8 +447,10 @@ export default function EstimatingRowDetail({
                 </div>
               )}
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Cut</label>
+            <div id={line.id ? `field-${line.id}-laborCut` : undefined} data-field="laborCut" data-line-id={line.id || ""}>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                <span className="text-blue-600 font-bold">{getNumberFromField("laborCut")}.</span> Cut
+              </label>
               {isManualMode ? (
                 <LaborInput
                   value={currentLine.laborCut || 0}
@@ -401,8 +472,10 @@ export default function EstimatingRowDetail({
                 </div>
               )}
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Cope</label>
+            <div id={line.id ? `field-${line.id}-laborCope` : undefined} data-field="laborCope" data-line-id={line.id || ""}>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                <span className="text-blue-600 font-bold">{getNumberFromField("laborCope")}.</span> Cope
+              </label>
               {isManualMode ? (
                 <LaborInput
                   value={currentLine.laborCope || 0}
@@ -424,8 +497,10 @@ export default function EstimatingRowDetail({
                 </div>
               )}
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Process</label>
+            <div id={line.id ? `field-${line.id}-laborProcessPlate` : undefined} data-field="laborProcessPlate" data-line-id={line.id || ""}>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                <span className="text-blue-600 font-bold">{getNumberFromField("laborProcessPlate")}.</span> Process
+              </label>
               {isManualMode ? (
                 <LaborInput
                   value={currentLine.laborProcessPlate || 0}
@@ -447,8 +522,10 @@ export default function EstimatingRowDetail({
                 </div>
               )}
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Drill/Punch</label>
+            <div id={line.id ? `field-${line.id}-laborDrillPunch` : undefined} data-field="laborDrillPunch" data-line-id={line.id || ""}>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                <span className="text-blue-600 font-bold">{getNumberFromField("laborDrillPunch")}.</span> Drill/Punch
+              </label>
               {isManualMode ? (
                 <LaborInput
                   value={currentLine.laborDrillPunch || 0}
@@ -470,8 +547,10 @@ export default function EstimatingRowDetail({
                 </div>
               )}
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Fit</label>
+            <div id={line.id ? `field-${line.id}-laborFit` : undefined} data-field="laborFit" data-line-id={line.id || ""}>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                <span className="text-blue-600 font-bold">{getNumberFromField("laborFit")}.</span> Fit
+              </label>
               {isManualMode ? (
                 <LaborInput
                   value={currentLine.laborFit || 0}
@@ -493,8 +572,10 @@ export default function EstimatingRowDetail({
                 </div>
               )}
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Weld</label>
+            <div id={line.id ? `field-${line.id}-laborWeld` : undefined} data-field="laborWeld" data-line-id={line.id || ""}>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                <span className="text-blue-600 font-bold">{getNumberFromField("laborWeld")}.</span> Weld
+              </label>
               {isManualMode ? (
                 <LaborInput
                   value={currentLine.laborWeld || 0}
@@ -516,8 +597,10 @@ export default function EstimatingRowDetail({
                 </div>
               )}
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Prep/Clean</label>
+            <div id={line.id ? `field-${line.id}-laborPrepClean` : undefined} data-field="laborPrepClean" data-line-id={line.id || ""}>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                <span className="text-blue-600 font-bold">{getNumberFromField("laborPrepClean")}.</span> Prep/Clean
+              </label>
               {isManualMode ? (
                 <LaborInput
                   value={currentLine.laborPrepClean || 0}
@@ -539,8 +622,10 @@ export default function EstimatingRowDetail({
                 </div>
               )}
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Paint</label>
+            <div id={line.id ? `field-${line.id}-laborPaint` : undefined} data-field="laborPaint" data-line-id={line.id || ""}>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                <span className="text-blue-600 font-bold">{getNumberFromField("laborPaint")}.</span> Paint
+              </label>
               {isManualMode ? (
                 <LaborInput
                   value={currentLine.laborPaint || 0}
@@ -562,8 +647,10 @@ export default function EstimatingRowDetail({
                 </div>
               )}
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Handle/Move</label>
+            <div id={line.id ? `field-${line.id}-laborHandleMove` : undefined} data-field="laborHandleMove" data-line-id={line.id || ""}>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                <span className="text-blue-600 font-bold">{getNumberFromField("laborHandleMove")}.</span> Handle/Move
+              </label>
               {isManualMode ? (
                 <LaborInput
                   value={currentLine.laborHandleMove || 0}
@@ -585,8 +672,10 @@ export default function EstimatingRowDetail({
                 </div>
               )}
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Load/Ship</label>
+            <div id={line.id ? `field-${line.id}-laborLoadShip` : undefined} data-field="laborLoadShip" data-line-id={line.id || ""}>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                <span className="text-blue-600 font-bold">{getNumberFromField("laborLoadShip")}.</span> Load/Ship
+              </label>
               {isManualMode ? (
                 <LaborInput
                   value={currentLine.laborLoadShip || 0}
@@ -663,21 +752,29 @@ export default function EstimatingRowDetail({
           <h4 className="font-semibold text-gray-900 border-b border-gray-200 pb-2">Admin & Notes</h4>
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Notes</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                <span className="text-blue-600 font-bold">{getNumberFromField("notes")}.</span> Notes
+              </label>
               {renderField("Notes", "notes", "textarea")}
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Hashtags</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                <span className="text-blue-600 font-bold">{getNumberFromField("hashtags")}.</span> Hashtags
+              </label>
               {renderField("Hashtags", "hashtags", "text")}
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                <span className="text-blue-600 font-bold">{getNumberFromField("status")}.</span> Status
+              </label>
               {renderField("Status", "status", "select", ["Active", "Void"])}
             </div>
             <div>
               <label className="flex items-center gap-2">
                 {renderField("Stock Rounding", "useStockRounding", "checkbox")}
-                <span className="text-xs font-medium text-gray-700">Use Stock Rounding</span>
+                <span className="text-xs font-medium text-gray-700">
+                  <span className="text-blue-600 font-bold">{getNumberFromField("useStockRounding")}.</span> Use Stock Rounding
+                </span>
               </label>
             </div>
           </div>

@@ -4,6 +4,7 @@ import { Edit, Trash2, Copy, Check, X } from "lucide-react";
 import { EstimatingLine } from "./EstimatingGrid";
 import { SHAPE_TYPES, type ShapeType, getShapesByType, getValidGrades } from "@/lib/utils/aiscShapes";
 import { getAvailableThicknesses } from "@/lib/utils/plateDatabase";
+import { getNumberFromField } from "@/lib/utils/fieldNumberMap";
 
 interface EstimatingGridTableProps {
   lines: EstimatingLine[];

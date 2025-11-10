@@ -3,10 +3,8 @@
 import { useParams } from "next/navigation";
 import EstimatingGrid from "@/components/estimating/EstimatingGrid";
 import KPISummary from "@/components/estimating/KPISummary";
-import VoiceAgent from "@/components/estimating/VoiceAgent";
-import VoiceRecognitionSmokeTest from "@/components/estimating/VoiceRecognitionSmokeTest";
-import { Sparkles } from "lucide-react";
-import { useState, useEffect } from "react";
+import { Save, Upload } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
 import { subscribeToCollection, createDocument, updateDocument, deleteDocument } from "@/lib/firebase/firestore";
 import { getProjectPath } from "@/lib/firebase/firestore";
 import { EstimatingLine } from "@/components/estimating/EstimatingGrid";
@@ -15,7 +13,7 @@ import { isFirebaseConfigured } from "@/lib/firebase/config";
 import { parseVoiceTranscription, createEstimatingLineFromParsed, ParsedEditCommand, ParsedLine } from "@/lib/utils/voiceParser";
 import { voiceCommandHistory, VoiceAction } from "@/lib/utils/voiceCommandHistory";
 import { createLineFromStructuredData } from "@/lib/utils/structuredVoiceParser";
-import { VoiceAgentResponse } from "@/lib/openai/voiceAgent";
+import { exportToQuant, importFromQuant } from "@/lib/utils/quantExport";
 
 // TODO: REMOVE - This flag enables sample data for testing
 // Set to false once Firebase is fully integrated
@@ -27,7 +25,7 @@ export default function EstimatingPage() {
   const companyId = "default"; // TODO: Get from auth context
   
   const [lines, setLines] = useState<EstimatingLine[]>([]);
-  const [isManualMode, setIsManualMode] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     // Use sample data if Firebase is not configured or USE_SAMPLE_DATA is true
@@ -225,112 +223,7 @@ export default function EstimatingPage() {
     }
   };
 
-  const handleVoiceAgentAction = async (response: VoiceAgentResponse) => {
-    if (!isFirebaseConfigured()) {
-      alert("Firebase is not configured. Cannot process command.");
-      return;
-    }
-
-    try {
-      const defaultMaterialRate = 0.85;
-      const defaultLaborRate = 50;
-      const defaultCoatingRate = 2.50;
-      const linesPath = getProjectPath(companyId, projectId, "lines");
-
-      if (response.action === "create") {
-        // Create new line - use sequential ID
-        const maxNum = Math.max(
-          ...lines.map(l => {
-            const match = l.lineId.match(/L?(\d+)/);
-            return match ? parseInt(match[1], 10) : 0;
-          }),
-          0
-        );
-        const lineId = response.lineId || `L${maxNum + 1}`;
-        const newLine = createLineFromStructuredData(
-          response.data || {},
-          lineId,
-          defaultMaterialRate,
-          defaultLaborRate,
-          defaultCoatingRate
-        );
-
-        const documentId = await createDocument(linesPath, newLine);
-        
-        if (documentId) {
-          voiceCommandHistory.addAction({
-            type: "create",
-            timestamp: Date.now(),
-            documentId: documentId,
-            lineId: lineId,
-            newState: newLine,
-          });
-        }
-        console.log(`AI created line ${lineId}`);
-      } else if (response.action === "update" && response.lineId) {
-        // Update existing line
-        const existingLine = lines.find(l => l.lineId === response.lineId);
-        if (existingLine && existingLine.id && response.data) {
-          const updatedLine = { ...existingLine, ...response.data };
-          const finalizedLine = createLineFromStructuredData(
-            updatedLine,
-            response.lineId,
-            defaultMaterialRate,
-            defaultLaborRate,
-            defaultCoatingRate
-          );
-          
-          await updateDocument(linesPath, existingLine.id, finalizedLine);
-          
-          voiceCommandHistory.addAction({
-            type: "update",
-            timestamp: Date.now(),
-            documentId: existingLine.id,
-            lineId: response.lineId,
-            previousState: existingLine,
-            newState: finalizedLine,
-          });
-          console.log(`AI updated line ${response.lineId}`);
-        }
-      } else if (response.action === "delete" && response.lineId) {
-        // Delete line
-        const existingLine = lines.find(l => l.lineId === response.lineId);
-        if (existingLine && existingLine.id) {
-          await deleteDocument(linesPath, existingLine.id);
-          
-          voiceCommandHistory.addAction({
-            type: "delete",
-            timestamp: Date.now(),
-            documentId: existingLine.id,
-            lineId: response.lineId,
-            previousState: existingLine,
-          });
-          console.log(`AI deleted line ${response.lineId}`);
-        }
-      } else if (response.action === "copy" && response.data) {
-        // Copy line - create new line with copy format line ID
-        const copiedLine = response.data as EstimatingLine;
-        const documentId = await createDocument(linesPath, copiedLine);
-        
-        if (documentId) {
-          voiceCommandHistory.addAction({
-            type: "create",
-            timestamp: Date.now(),
-            documentId: documentId,
-            lineId: copiedLine.lineId,
-            newState: copiedLine,
-          });
-        }
-        console.log(`AI copied line to ${copiedLine.lineId}`);
-      } else if (response.action === "query") {
-        // Query - just informational, no action needed
-        console.log(`AI query: ${response.message}`);
-      }
-    } catch (error: any) {
-      console.error("Failed to execute AI action:", error);
-      throw error; // Re-throw so the agent can show error message
-    }
-  };
+  // Removed: handleVoiceAgentAction - AI voice assistant removed
 
   const handleTranscription = async (text: string) => {
     console.log("Transcribed text:", text);
@@ -642,7 +535,7 @@ export default function EstimatingPage() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Estimating Workspace</h1>
           <p className="text-sm text-gray-600 mt-1">
-            Voice input or manual entry for project {projectId || "N/A"}
+            Manual entry for project {projectId || "N/A"}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -651,34 +544,53 @@ export default function EstimatingPage() {
               Sample Data Mode
             </span>
           )}
+          {/* Import Estimate Button */}
           <button
-            onClick={() => {
-              // Trigger the VoiceAgent to open
-              const event = new CustomEvent('openVoiceAgent');
-              window.dispatchEvent(event);
-            }}
-            className="px-6 py-3 rounded-xl shadow-lg bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white flex items-center gap-3 transition-all hover:scale-105 font-semibold border-2 border-purple-400"
-            title="AI Assistant - Speak naturally to manage your estimate"
+            onClick={handleImportEstimate}
+            className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2 transition-all shadow-md font-medium"
+            title="Import estimate from Quant proprietary format (.quant)"
           >
-            <Sparkles className="w-6 h-6" />
-            <span className="text-base">AI Assistant</span>
+            <Upload className="w-4 h-4" />
+            <span className="text-sm">Import Estimate</span>
+          </button>
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".quant,application/json"
+            onChange={handleFileChange}
+            className="hidden"
+          />
+          {/* Save Estimate Button */}
+          <button
+            onClick={async () => {
+              try {
+                await exportToQuant(lines, projectId, companyId);
+                // Check if browser supports File System Access API
+                const supportsSaveDialog = 'showSaveFilePicker' in window;
+                if (supportsSaveDialog) {
+                  alert("Estimate saved successfully to your chosen location!");
+                } else {
+                  alert("Estimate saved successfully!\n\nThe file has been downloaded to your default Downloads folder.");
+                }
+              } catch (error: any) {
+                if (error.message === 'Save cancelled') {
+                  // User cancelled - don't show error
+                  return;
+                }
+                console.error("Failed to save estimate:", error);
+                alert(`Failed to save estimate: ${error.message}`);
+              }
+            }}
+            className="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white flex items-center gap-2 transition-all shadow-md font-medium"
+            title="Save estimate in Quant proprietary format (.quant)"
+          >
+            <Save className="w-4 h-4" />
+            <span className="text-sm">Save Estimate</span>
           </button>
         </div>
       </div>
 
-      {/* Voice Recognition Smoke Test */}
-      <VoiceRecognitionSmokeTest />
-      
-      {/* AI Voice Agent - Centered */}
-      <div className="flex justify-center">
-        <VoiceAgent
-          companyId={companyId}
-          projectId={projectId}
-          existingLines={lines}
-          onAction={handleVoiceAgentAction}
-          isManualMode={isManualMode}
-        />
-      </div>
 
       {/* KPI Summary */}
       <KPISummary lines={lines} />
@@ -687,7 +599,7 @@ export default function EstimatingPage() {
       <EstimatingGrid 
         companyId={companyId} 
         projectId={projectId}
-        isManualMode={isManualMode}
+        isManualMode={true}
       />
     </div>
   );

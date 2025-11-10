@@ -2,10 +2,20 @@
 
 ## 🎯 How to Speak Commands
 
-The AI understands commands in a **structured format** where you say the **field name** followed by the **value**. Think of it like filling out a form: you name the field, then provide the value.
+The AI understands commands in **TWO formats**. The **LETTER FORMAT** is fastest and most reliable!
 
-## 📋 Basic Format
+### Format 1: Letter Format (PREFERRED ⭐)
+```
+[LETTER]. [VALUE]
+```
 
+**Examples:**
+- `a. column` → Puts "Column" in the Item field (a = Item)
+- `b. beams` → Puts "Beams" in the Category field (b = Category)
+- `h. W12x24` → Puts "W12x24" in the Size field (h = Size)
+- `l. 5` → Puts 5 in the Quantity field (l = Quantity)
+
+### Format 2: Field Name Format (Also Supported)
 ```
 [FIELD NAME], [VALUE]
 ```
@@ -53,94 +63,90 @@ AI: "✅ Data entered successfully for line L1! Say 'add new line' to create ano
 
 ### Identification Fields
 
-| Field Name | Value Examples | What It Does |
-|------------|---------------|--------------|
-| `item` | `column`, `beam`, `base plate` | Sets the item description |
-| `category` | `columns`, `beams`, `misc metals`, `plates` | Sets the category |
-| `sub category` | `base plate`, `gusset`, `stiffener` | Sets the sub-category |
-| `drawing` | `D-101`, `S-205` | Sets the drawing number |
-| `detail` | `D1`, `D2` | Sets the detail number |
-| `notes` | `install after concrete` | Sets notes |
-| `hashtags` | `phase1 critical` | Sets hashtags (becomes #phase1 #critical) |
+| Letter | Field Name | Value Examples | What It Does |
+|--------|------------|---------------|--------------|
+| **a** | `item` | `column`, `beam`, `base plate` | Sets the item description |
+| **b** | `category` | `columns`, `beams`, `misc metals`, `plates` | Sets the category |
+| **c** | `sub category` | `base plate`, `gusset`, `stiffener` | Sets the sub-category |
+| **d** | `drawing` | `D-101`, `S-205` | Sets the drawing number |
+| **e** | `detail` | `D1`, `D2` | Sets the detail number |
+| **f** | `type` | `rolled`, `plate` | Sets the material type |
 
 ### Material Fields (Rolled Members)
 
-| Field Name | Value Examples | What It Does |
-|------------|---------------|--------------|
-| `type` or `shape` | `wide flange`, `W`, `HSS`, `channel` | Sets the shape type |
-| `spec` or `size` | `W12x24`, `HSS 6x6x1/4` | Sets the size designation |
-| `grade` | `A992`, `A572 Gr50`, `A36` | Sets the material grade |
-| `quantity` or `qty` | `5`, `3`, `10` | Sets the quantity |
-| `length` or `feet` | `20 feet`, `15 ft`, `25'` | Sets length in feet |
-| `inches` | `6 inches`, `3 in`, `6"` | Sets length in inches |
+| Letter | Field Name | Value Examples | What It Does |
+|--------|------------|---------------|--------------|
+| **g** | `type` or `shape` | `wide flange`, `W`, `HSS`, `channel` | Sets the shape type |
+| **h** | `spec` or `size` | `W12x24`, `HSS 6x6x1/4` | Sets the size designation |
+| **i** | `grade` | `A992`, `A572 Gr50`, `A36` | Sets the material grade |
+| **j** | `length` or `feet` | `20 feet`, `15 ft`, `25'` | Sets length in feet |
+| **k** | `inches` | `6 inches`, `3 in`, `6"` | Sets length in inches |
+| **l** | `quantity` or `qty` | `5`, `3`, `10` | Sets the quantity |
 
 ### Material Fields (Plates)
 
-| Field Name | Value Examples | What It Does |
-|------------|---------------|--------------|
-| `thickness` or `thick` | `1/2 inch`, `0.5`, `quarter inch` | Sets plate thickness |
-| `width` | `12 inches`, `48`, `24 in` | Sets plate width |
-| `plate length` | `24 inches`, `96`, `48 in` | Sets plate length |
-| `plate quantity` | `4`, `2`, `10` | Sets plate quantity |
-| `plate grade` | `A36`, `A572 Gr50` | Sets plate grade |
+| Letter | Field Name | Value Examples | What It Does |
+|--------|------------|---------------|--------------|
+| **m** | `thickness` or `thick` | `1/2 inch`, `0.5`, `quarter inch` | Sets plate thickness |
+| **n** | `width` | `12 inches`, `48`, `24 in` | Sets plate width |
+| **o** | `plate length` | `24 inches`, `96`, `48 in` | Sets plate length |
+| **p** | `plate quantity` | `4`, `2`, `10` | Sets plate quantity |
+| **q** | `plate grade` | `A36`, `A572 Gr50` | Sets plate grade |
 
 ### Labor Fields (All in Hours)
 
-| Field Name | Value Examples | What It Does |
-|------------|---------------|--------------|
-| `unload` | `0.5 hours`, `30 minutes` | Sets unloading labor |
-| `cut` | `1 hour`, `2 hrs` | Sets cutting labor |
-| `cope` | `0.25 hours`, `15 min` | Sets coping labor |
-| `process` | `1.5 hours` | Sets plate processing labor |
-| `drill` or `punch` | `0.5 hours` | Sets drilling/punching labor |
-| `fit` | `2 hours` | Sets fitting labor |
-| `weld` or `welding` | `2 hours`, `1.5 hrs` | Sets welding labor |
-| `prep` or `clean` | `0.5 hours` | Sets prep and cleaning labor |
-| `paint` | `1 hour` | Sets painting labor |
-| `handle` or `move` | `0.25 hours` | Sets handling/moving labor |
-| `load` or `ship` | `0.5 hours` | Sets loading/shipping labor |
+| Letter | Field Name | Value Examples | What It Does |
+|--------|------------|---------------|--------------|
+| **s** | `unload` | `0.5 hours`, `30 minutes` | Sets unloading labor |
+| **t** | `cut` | `1 hour`, `2 hrs` | Sets cutting labor |
+| **u** | `cope` | `0.25 hours`, `15 min` | Sets coping labor |
+| **v** | `process` | `1.5 hours` | Sets plate processing labor |
+| **w** | `drill` or `punch` | `0.5 hours` | Sets drilling/punching labor |
+| **x** | `fit` | `2 hours` | Sets fitting labor |
+| **y** | `weld` or `welding` | `2 hours`, `1.5 hrs` | Sets welding labor |
+| **z** | `prep` or `clean` | `0.5 hours` | Sets prep and cleaning labor |
 
 ### Coating
 
-| Field Name | Value Examples | What It Does |
-|------------|---------------|--------------|
-| `coating` | `paint`, `powder`, `galv`, `none` | Sets the coating system |
+| Letter | Field Name | Value Examples | What It Does |
+|--------|------------|---------------|--------------|
+| **r** | `coating` | `paint`, `powder`, `galv`, `none` | Sets the coating system |
 
-## 🎬 Complete Example Session
+## 🎬 Complete Example Session (Letter Format - Fastest!)
 
 ```
 You: "add new line"
 AI: "✅ Created new blank line L1. You can now speak the data for this line."
 
-You: "item, column"
+You: "a. column"
 AI: "I've added to line L1: • Item: Column. Say 'enter' when ready to save this data."
 
-You: "category, columns"
+You: "b. columns"
 AI: "I've added to line L1: • Category: Columns. Say 'enter' when ready to save this data."
 
-You: "type, wide flange"
-AI: "I've added to line L1: • Type: Wide Flange. Say 'enter' when ready to save this data."
+You: "g. wide flange"
+AI: "I've added to line L1: • Shape: Wide Flange. Say 'enter' when ready to save this data."
 
-You: "spec, W12x24"
+You: "h. W12x24"
 AI: "I've added to line L1: • Size: W12x24. Say 'enter' when ready to save this data."
 
-You: "quantity, 5"
+You: "l. 5"
 AI: "I've added to line L1: • Quantity: 5. Say 'enter' when ready to save this data."
 
-You: "length, 20 feet"
+You: "j. 20 feet"
 AI: "I've added to line L1: • Length: 20 ft. Say 'enter' when ready to save this data."
 
-You: "grade, A992"
+You: "i. A992"
 AI: "I've added to line L1: • Grade: A992. Say 'enter' when ready to save this data."
 
-You: "weld, 2 hours"
+You: "y. 2 hours"
 AI: "I've added to line L1: • Welding: 2 hours. Say 'enter' when ready to save this data."
 
 You: "enter"
 AI: "I will be entering the following data:
 • Item: Column
 • Category: Columns
-• Type: Wide Flange
+• Shape: Wide Flange
 • Size: W12x24
 • Quantity: 5
 • Length: 20 ft
@@ -152,13 +158,29 @@ You: "yes"
 AI: "✅ Data entered successfully for line L1! Say 'add new line' to create another line."
 ```
 
+## ⌨️ Keyboard Shortcuts (Manual Entry Mode)
+
+When in **Manual Entry Mode**, you can use keyboard shortcuts to quickly navigate fields:
+
+1. **Type a letter** (a-z) - This "remembers" the letter for 1 second
+2. **Press Enter** - Focuses the field corresponding to that letter
+3. **Start typing** - The field is now focused and ready for input
+
+**Example:**
+- Type `a` then `Enter` → Focuses the Item field
+- Type `h` then `Enter` → Focuses the Size field
+- Type `l` then `Enter` → Focuses the Quantity field
+
+This is **much faster** than using the mouse!
+
 ## 💡 Tips
 
 1. **Always start with "add new line"** - This creates a blank line first
-2. **Use commas for clarity** - `item, column` is clearer than `item column`
+2. **Use letter format for speed** - `a. column` is faster than `item, column`
 3. **Say one field at a time** - You can add multiple fields, just say them one by one
 4. **Say "enter" when done** - This shows you a summary and asks for confirmation
 5. **Say "yes" to confirm** - This actually saves the data to the database
+6. **Use keyboard shortcuts** - Type letter + Enter to jump to fields in manual mode
 
 ## 🔧 Alternative: Natural Language (Less Reliable)
 

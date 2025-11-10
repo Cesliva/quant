@@ -8,6 +8,7 @@ import { subscribeToCollection, createDocument, updateDocument, deleteDocument }
 import { getProjectPath } from "@/lib/firebase/firestore";
 import { getSampleProjectData } from "@/lib/mock-data/sampleProjectData";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
+import { getFieldFromNumber, parseNumberFieldFormat } from "@/lib/utils/fieldNumberMap";
 import { useUndoRedo } from "@/lib/hooks/useUndoRedo";
 import { 
   getShapesByType, 
@@ -129,6 +130,9 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
   // Track if we should add to history (skip for Firestore updates)
   const skipHistoryRef = useRef(false);
   
+  // Debounce save operations
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
   // Load settings from Firestore
   const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
   const [projectSettings, setProjectSettings] = useState<ProjectSettings | null>(null);
@@ -139,23 +143,199 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
     loadProjectSettings(companyId, projectId).then(setProjectSettings);
   }, [companyId, projectId]);
 
-  // Keyboard shortcuts for undo/redo
+  // Track number being entered for multi-digit field navigation (Ctrl+Alt+number)
+  const numberBufferRef = useRef<string>("");
+  const numberTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Keyboard shortcuts for undo/redo and field navigation
   useEffect(() => {
     if (!isManualMode) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Undo/Redo shortcuts
       if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
         e.preventDefault();
         if (canUndo) undo();
+        return;
       } else if ((e.ctrlKey || e.metaKey) && (e.key === "y" || (e.key === "z" && e.shiftKey))) {
         e.preventDefault();
         if (canRedo) redo();
+        return;
+      }
+
+      // Field navigation shortcuts: Ctrl+Alt+number (supports multi-digit like 10, 11, 12, etc.)
+      const target = e.target as HTMLElement;
+      const isInputField = target.tagName === "INPUT" || 
+                          target.tagName === "TEXTAREA" || 
+                          target.tagName === "SELECT" ||
+                          target.isContentEditable ||
+                          target.closest('input, textarea, select');
+      
+      // Only work when a row is expanded or being edited
+      const hasActiveRow = editingId || expandedRowId;
+      
+      // Ctrl+Alt+number - allows multi-digit entry (e.g., Ctrl+Alt+1 then 0 = field 10)
+      if ((e.ctrlKey || e.metaKey) && e.altKey && !e.shiftKey && e.key.length === 1 && /^[0-9]$/.test(e.key) && hasActiveRow) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        
+        // Add digit to buffer
+        numberBufferRef.current += e.key;
+        
+        // Clear existing timeout
+        if (numberTimeoutRef.current) {
+          clearTimeout(numberTimeoutRef.current);
+        }
+        
+        // Set timeout to process after 500ms of no input (allows time for second digit)
+        numberTimeoutRef.current = setTimeout(() => {
+          const number = parseInt(numberBufferRef.current, 10);
+          if (number > 0 && number <= 50) { // Max field number
+            // Get material type from the expanded row or editing line
+            const targetLine = lines.find(l => l.id === (editingId || expandedRowId));
+            const materialType = targetLine?.materialType || editingLine.materialType as "Rolled" | "Plate" | undefined;
+            const field = getFieldFromNumber(number, materialType);
+            
+            if (field) {
+              // Try to find the field in the currently editing line or expanded row
+              const targetLineId = editingId || expandedRowId;
+              if (targetLineId) {
+                // First, try to find the expanded detail row container
+                // The expanded detail is in a <tr> with a <td> containing EstimatingRowDetail
+                // Find the row that contains the field with the target line ID
+                const expandedRow = Array.from(document.querySelectorAll('tr')).find(tr => {
+                  const td = tr.querySelector('td[colspan="13"]');
+                  return td && td.querySelector(`[data-line-id="${targetLineId}"]`);
+                }) as HTMLElement;
+                
+                // Search within the expanded detail row first (if it exists)
+                let inputElement: HTMLElement | null = null;
+                if (expandedRow) {
+                  const inputId = `field-${targetLineId}-${field}`;
+                  inputElement = expandedRow.querySelector(`#${inputId}`) as HTMLElement;
+                  
+                  // If not found by ID, try data attributes within the expanded row
+                  if (!inputElement) {
+                    inputElement = expandedRow.querySelector(`[data-field="${field}"][data-line-id="${targetLineId}"]`) as HTMLElement;
+                  }
+                }
+                
+                // Fallback: search document-wide if not found in expanded row
+                if (!inputElement) {
+                  const inputId = `field-${targetLineId}-${field}`;
+                  inputElement = document.getElementById(inputId) as HTMLElement;
+                  
+                  // If not found by ID, try data attributes
+                  if (!inputElement) {
+                    inputElement = document.querySelector(`[data-field="${field}"][data-line-id="${targetLineId}"]`) as HTMLElement;
+                  }
+                }
+                
+                // For labor fields, the container div has the ID, so find the first input inside it
+                if (inputElement && !(inputElement instanceof HTMLInputElement || inputElement instanceof HTMLTextAreaElement || inputElement instanceof HTMLSelectElement)) {
+                  const nestedInput = inputElement.querySelector('input, textarea, select') as HTMLElement;
+                  if (nestedInput) {
+                    inputElement = nestedInput;
+                  }
+                }
+                
+                if (inputElement) {
+                  inputElement.focus();
+                  if (inputElement instanceof HTMLInputElement || inputElement instanceof HTMLTextAreaElement || inputElement instanceof HTMLSelectElement) {
+                    // Select text if it's a text input
+                    if (inputElement instanceof HTMLInputElement && inputElement.type !== "checkbox") {
+                      inputElement.select();
+                    }
+                  }
+                }
+              }
+            }
+          }
+          // Clear buffer after processing
+          numberBufferRef.current = "";
+        }, 500);
+        
+        return;
+      }
+      
+      // If Ctrl+Alt is released, process immediately
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && numberBufferRef.current.length > 0) {
+        // Clear timeout and process immediately
+        if (numberTimeoutRef.current) {
+          clearTimeout(numberTimeoutRef.current);
+          numberTimeoutRef.current = null;
+        }
+        
+        const number = parseInt(numberBufferRef.current, 10);
+        if (number > 0 && number <= 50) {
+          const targetLine = lines.find(l => l.id === (editingId || expandedRowId));
+          const materialType = targetLine?.materialType || editingLine.materialType as "Rolled" | "Plate" | undefined;
+          const field = getFieldFromNumber(number, materialType);
+          
+          if (field && hasActiveRow) {
+            const targetLineId = editingId || expandedRowId;
+            if (targetLineId) {
+              // First, try to find the expanded detail row container
+              // Find the row that contains the field with the target line ID
+              const expandedRow = Array.from(document.querySelectorAll('tr')).find(tr => {
+                const td = tr.querySelector('td[colspan="13"]');
+                return td && td.querySelector(`[data-line-id="${targetLineId}"]`);
+              }) as HTMLElement;
+              
+              // Search within the expanded detail row first (if it exists)
+              let inputElement: HTMLElement | null = null;
+              if (expandedRow) {
+                const inputId = `field-${targetLineId}-${field}`;
+                inputElement = expandedRow.querySelector(`#${inputId}`) as HTMLElement;
+                
+                // If not found by ID, try data attributes within the expanded row
+                if (!inputElement) {
+                  inputElement = expandedRow.querySelector(`[data-field="${field}"][data-line-id="${targetLineId}"]`) as HTMLElement;
+                }
+              }
+              
+              // Fallback: search document-wide if not found in expanded row
+              if (!inputElement) {
+                const inputId = `field-${targetLineId}-${field}`;
+                inputElement = document.getElementById(inputId) as HTMLElement;
+                
+                // If not found by ID, try data attributes
+                if (!inputElement) {
+                  inputElement = document.querySelector(`[data-field="${field}"][data-line-id="${targetLineId}"]`) as HTMLElement;
+                }
+              }
+              
+              // For labor fields, the container div has the ID, so find the first input inside it
+              if (inputElement && !(inputElement instanceof HTMLInputElement || inputElement instanceof HTMLTextAreaElement || inputElement instanceof HTMLSelectElement)) {
+                const nestedInput = inputElement.querySelector('input, textarea, select') as HTMLElement;
+                if (nestedInput) {
+                  inputElement = nestedInput;
+                }
+              }
+              
+              if (inputElement) {
+                inputElement.focus();
+                if (inputElement instanceof HTMLInputElement && inputElement.type !== "checkbox") {
+                  inputElement.select();
+                }
+              }
+            }
+          }
+        }
+        numberBufferRef.current = "";
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isManualMode, canUndo, canRedo, undo, redo]);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      if (numberTimeoutRef.current) {
+        clearTimeout(numberTimeoutRef.current);
+      }
+      numberBufferRef.current = "";
+    };
+  }, [isManualMode, canUndo, canRedo, undo, redo, editingId, expandedRowId, editingLine.materialType, lines]);
 
   useEffect(() => {
     // Use sample data if Firebase is not configured
@@ -220,26 +400,66 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
   // Calculate read-only fields when editing
   // Use a ref to track if we're in the middle of a calculation to prevent infinite loops
   const calculatingRef = useRef(false);
+  const calculationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastCalculatedRef = useRef<string>("");
   
   useEffect(() => {
     if (!editingId || !editingLine || Object.keys(editingLine).length === 0) return;
     if (!companySettings) return; // Wait for settings to load
     if (calculatingRef.current) {
-      // Reset the flag after a short delay to allow recalculation
-      setTimeout(() => {
-        calculatingRef.current = false;
-      }, 50);
       return; // Prevent infinite loops
     }
     
-    calculatingRef.current = true;
+    // Debounce calculations to avoid running on every keystroke
+    if (calculationTimeoutRef.current) {
+      clearTimeout(calculationTimeoutRef.current);
+    }
     
-    const calculated = { ...editingLine };
-    
-    // For Rolled members - Auto-calculate weight from AISC data
-    // This runs whenever sizeDesignation, lengthFt, lengthIn, or qty changes
-    if (calculated.materialType === "Rolled" && calculated.sizeDesignation) {
-      try {
+    calculationTimeoutRef.current = setTimeout(() => {
+      if (calculatingRef.current) return;
+      
+      // Create a hash of the fields that affect calculations to avoid unnecessary recalculations
+      const calculationKey = JSON.stringify({
+        sizeDesignation: editingLine.sizeDesignation,
+        lengthFt: editingLine.lengthFt,
+        lengthIn: editingLine.lengthIn,
+        qty: editingLine.qty,
+        materialType: editingLine.materialType,
+        thickness: editingLine.thickness,
+        width: editingLine.width,
+        plateLength: editingLine.plateLength,
+        plateQty: editingLine.plateQty,
+        oneSideCoat: editingLine.oneSideCoat,
+        laborUnload: editingLine.laborUnload,
+        laborCut: editingLine.laborCut,
+        laborCope: editingLine.laborCope,
+        laborProcessPlate: editingLine.laborProcessPlate,
+        laborDrillPunch: editingLine.laborDrillPunch,
+        laborFit: editingLine.laborFit,
+        laborWeld: editingLine.laborWeld,
+        laborPrepClean: editingLine.laborPrepClean,
+        laborPaint: editingLine.laborPaint,
+        laborHandleMove: editingLine.laborHandleMove,
+        laborLoadShip: editingLine.laborLoadShip,
+        coatingSystem: editingLine.coatingSystem,
+        grade: editingLine.grade,
+        plateGrade: editingLine.plateGrade,
+      });
+      
+      // Skip if nothing that affects calculations has changed
+      if (lastCalculatedRef.current === calculationKey) {
+        return;
+      }
+      
+      lastCalculatedRef.current = calculationKey;
+      calculatingRef.current = true;
+      
+      const calculated = { ...editingLine };
+      
+      // For Rolled members - Auto-calculate weight from AISC data
+      // This runs whenever sizeDesignation, lengthFt, lengthIn, or qty changes
+      if (calculated.materialType === "Rolled" && calculated.sizeDesignation) {
+        try {
         calculated.weightPerFoot = getWeightPerFoot(calculated.sizeDesignation);
         calculated.surfaceAreaPerFoot = getSurfaceAreaPerFoot(calculated.sizeDesignation);
         
@@ -265,91 +485,113 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
             totalWeight: calculated.totalWeight
           });
         }
-      } catch (error) {
-        console.warn("Error calculating weight for size:", calculated.sizeDesignation, error);
-        // Keep existing values if calculation fails
+        } catch (error) {
+          console.warn("Error calculating weight for size:", calculated.sizeDesignation, error);
+          // Keep existing values if calculation fails
+        }
+      } else if (calculated.materialType === "Rolled") {
+        // If sizeDesignation is cleared, reset weight fields
+        calculated.weightPerFoot = 0;
+        calculated.totalWeight = 0;
+        calculated.surfaceAreaPerFoot = 0;
+        calculated.totalSurfaceArea = 0;
       }
-    } else if (calculated.materialType === "Rolled") {
-      // If sizeDesignation is cleared, reset weight fields
-      calculated.weightPerFoot = 0;
-      calculated.totalWeight = 0;
-      calculated.surfaceAreaPerFoot = 0;
-      calculated.totalSurfaceArea = 0;
-    }
-    
-    // For Plates - Auto-calculate weight
-    if (calculated.materialType === "Plate") {
-      const plateProps = calculatePlateProperties({
+      
+      // For Plates - Auto-calculate weight
+      if (calculated.materialType === "Plate") {
+        const plateProps = calculatePlateProperties({
         thickness: calculated.thickness || 0,
         width: calculated.width || 0,
         length: calculated.plateLength || 0,
-        oneSideCoat: calculated.oneSideCoat || false,
-      });
-      calculated.plateArea = plateProps.area;
-      calculated.edgePerimeter = plateProps.edgePerimeter;
-      calculated.plateSurfaceArea = plateProps.surfaceArea;
-      calculated.plateTotalWeight = plateProps.totalWeight * (calculated.plateQty || 1);
-    }
-    
-    // Calculate total labor
-    const totalLabor = 
-      (calculated.laborUnload || 0) +
-      (calculated.laborCut || 0) +
-      (calculated.laborCope || 0) +
-      (calculated.laborProcessPlate || 0) +
-      (calculated.laborDrillPunch || 0) +
-      (calculated.laborFit || 0) +
-      (calculated.laborWeld || 0) +
-      (calculated.laborPrepClean || 0) +
-      (calculated.laborPaint || 0) +
-      (calculated.laborHandleMove || 0) +
-      (calculated.laborLoadShip || 0);
-    calculated.totalLabor = totalLabor;
-    
-    // Auto-populate rates from settings if not already set
-    if (!calculated.materialRate) {
-      const grade = calculated.materialType === "Rolled" ? calculated.grade : calculated.plateGrade;
-      calculated.materialRate = projectSettings?.materialRate || getMaterialRateForGrade(grade, companySettings);
-    }
-    
-    if (!calculated.laborRate) {
-      calculated.laborRate = projectSettings?.laborRate || getLaborRate(undefined, companySettings);
-    }
-    
-    if (!calculated.coatingRate) {
-      calculated.coatingRate = projectSettings?.coatingRate || getCoatingRate(calculated.coatingSystem, companySettings);
-    }
-    
-    // Calculate costs
-    const totalWeight = calculated.materialType === "Rolled" 
-      ? (calculated.totalWeight || 0)
-      : (calculated.plateTotalWeight || 0);
-    
-    calculated.materialCost = totalWeight * (calculated.materialRate || 0);
-    calculated.laborCost = (calculated.totalLabor || 0) * (calculated.laborRate || 0);
-    
-    // Coating cost
-    const surfaceArea = calculated.materialType === "Rolled"
-      ? (calculated.totalSurfaceArea || 0)
-      : (calculated.plateSurfaceArea || 0);
-    
-    calculated.coatingCost = surfaceArea * (calculated.coatingRate || 0);
-    
-    // Calculate total cost with overhead and profit
-    calculated.totalCost = calculateTotalCostWithMarkup(
-      calculated.materialCost || 0,
-      calculated.laborCost || 0,
-      calculated.coatingCost || 0,
-      companySettings,
-      projectSettings || undefined
-    );
-    
-    setEditingLine(calculated);
-    
-    // Reset the calculating flag after state update
-    setTimeout(() => {
+          oneSideCoat: calculated.oneSideCoat || false,
+        });
+        calculated.plateArea = plateProps.area;
+        calculated.edgePerimeter = plateProps.edgePerimeter;
+        calculated.plateSurfaceArea = plateProps.surfaceArea;
+        calculated.plateTotalWeight = plateProps.totalWeight * (calculated.plateQty || 1);
+      }
+      
+      // Calculate total labor
+      const totalLabor = 
+        (calculated.laborUnload || 0) +
+        (calculated.laborCut || 0) +
+        (calculated.laborCope || 0) +
+        (calculated.laborProcessPlate || 0) +
+        (calculated.laborDrillPunch || 0) +
+        (calculated.laborFit || 0) +
+        (calculated.laborWeld || 0) +
+        (calculated.laborPrepClean || 0) +
+        (calculated.laborPaint || 0) +
+        (calculated.laborHandleMove || 0) +
+        (calculated.laborLoadShip || 0);
+      calculated.totalLabor = totalLabor;
+      
+      // Auto-populate rates from settings if not already set
+      if (!calculated.materialRate) {
+        const grade = calculated.materialType === "Rolled" ? calculated.grade : calculated.plateGrade;
+        calculated.materialRate = projectSettings?.materialRate || getMaterialRateForGrade(grade, companySettings);
+      }
+      
+      if (!calculated.laborRate) {
+        calculated.laborRate = projectSettings?.laborRate || getLaborRate(undefined, companySettings);
+      }
+      
+      if (!calculated.coatingRate) {
+        calculated.coatingRate = projectSettings?.coatingRate || getCoatingRate(calculated.coatingSystem, companySettings);
+      }
+      
+      // Calculate costs
+      const totalWeight = calculated.materialType === "Rolled" 
+        ? (calculated.totalWeight || 0)
+        : (calculated.plateTotalWeight || 0);
+      
+      calculated.materialCost = totalWeight * (calculated.materialRate || 0);
+      calculated.laborCost = (calculated.totalLabor || 0) * (calculated.laborRate || 0);
+      
+      // Coating cost calculation
+      // Galvanizing: cost per pound × total weight
+      // Paint/Powder: cost per gallon × surface area (SF)
+      // Other coatings: cost per SF × surface area
+      const coatingSystem = calculated.coatingSystem || "None";
+      const surfaceArea = calculated.materialType === "Rolled"
+        ? (calculated.totalSurfaceArea || 0)
+        : (calculated.plateSurfaceArea || 0);
+      
+      if (coatingSystem === "Galvanizing" || coatingSystem === "Galv") {
+        // Galvanizing is calculated per pound
+        calculated.coatingCost = totalWeight * (calculated.coatingRate || 0);
+      } else if (coatingSystem === "Paint" || coatingSystem === "Powder Coat" || coatingSystem === "Specialty Coating") {
+        // Paint/Powder/Specialty: cost per gallon × surface area (SF)
+        // coatingRate is in $/gallon, surfaceArea is in SF
+        calculated.coatingCost = surfaceArea * (calculated.coatingRate || 0);
+      } else if (coatingSystem === "Standard Shop Primer" || coatingSystem === "Zinc Primer") {
+        // Primers: cost per SF × surface area
+        calculated.coatingCost = surfaceArea * (calculated.coatingRate || 0);
+      } else {
+        // None or unknown: no cost
+        calculated.coatingCost = 0;
+      }
+      
+      // Calculate total cost with overhead and profit
+      calculated.totalCost = calculateTotalCostWithMarkup(
+        calculated.materialCost || 0,
+        calculated.laborCost || 0,
+        calculated.coatingCost || 0,
+        companySettings,
+        projectSettings || undefined
+      );
+      
+      setEditingLine(calculated);
+      
+      // Reset the calculating flag after state update
       calculatingRef.current = false;
-    }, 0);
+    }, 100); // Debounce by 100ms - only calculate after user stops typing
+    
+    return () => {
+      if (calculationTimeoutRef.current) {
+        clearTimeout(calculationTimeoutRef.current);
+      }
+    };
   }, [editingId, editingLine, companySettings, projectSettings]);
 
   const handleAddLine = () => {
@@ -411,25 +653,45 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
     }
   };
 
-  const handleSave = async () => {
+  const handleSave = async (immediate = false) => {
     if (!editingId) return;
     
-    try {
-      const linePath = getProjectPath(companyId, projectId, "lines");
-      await updateDocument(`${linePath}/${editingId}`, editingLine);
-      // Don't clear editing state in manual mode - keep it editable
-      // The line will be updated via Firestore subscription
-    } catch (error: any) {
-      console.error("Failed to save line:", error);
-      if (isFirebaseConfigured()) {
-        alert(`Failed to save: ${error.message}`);
-      } else {
-        alert("Firebase is not configured. Please set up Firebase credentials to save data.");
+    // Clear any pending save
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
+    }
+    
+    const performSave = async () => {
+      try {
+        const linePath = getProjectPath(companyId, projectId, "lines");
+        await updateDocument(linePath, editingId, editingLine);
+        // Don't clear editing state in manual mode - keep it editable
+        // The line will be updated via Firestore subscription
+      } catch (error: any) {
+        console.error("Failed to save line:", error);
+        if (isFirebaseConfigured()) {
+          alert(`Failed to save: ${error.message}`);
+        } else {
+          alert("Firebase is not configured. Please set up Firebase credentials to save data.");
+        }
       }
+    };
+    
+    if (immediate) {
+      await performSave();
+    } else {
+      // Debounce saves to avoid too frequent updates during typing
+      saveTimeoutRef.current = setTimeout(performSave, 500);
     }
   };
 
   const handleCancel = () => {
+    // Clear any pending saves
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
+    }
     setEditingId(null);
     setEditingLine({});
   };
@@ -482,14 +744,22 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
       setEditingId(line.id!);
       setEditingLine({ ...line, [field]: value });
     } else {
-      // Update the current editing line - create a new object to ensure React detects the change
-      const updatedLine = { ...editingLine, [field]: value };
-      setEditingLine(updatedLine);
+      // Use functional update to avoid stale closures and optimize performance
+      setEditingLine((prev) => {
+        // Only create new object if value actually changed
+        if (prev[field] === value) {
+          return prev; // No change, return same reference
+        }
+        return { ...prev, [field]: value };
+      });
       
-      // Force recalculation for critical fields that affect weight
-      if (field === "sizeDesignation" || field === "lengthFt" || field === "lengthIn" || field === "qty") {
-        // Reset calculating flag to allow immediate recalculation
-        calculatingRef.current = false;
+      // Clear calculation cache for fields that affect calculations
+      if (field === "sizeDesignation" || field === "lengthFt" || field === "lengthIn" || field === "qty" ||
+          field === "materialType" || field === "thickness" || field === "width" || field === "plateLength" ||
+          field === "plateQty" || field === "oneSideCoat" || field.startsWith("labor") || 
+          field === "coatingSystem" || field === "grade" || field === "plateGrade") {
+        // Invalidate cache to force recalculation
+        lastCalculatedRef.current = "";
       }
     }
   };
@@ -524,7 +794,15 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
 
   const categories = ["Columns", "Beams", "Misc Metals", "Plates", "Connections", "Other"];
   const subCategories = ["Base Plate", "Gusset", "Stiffener", "Clip", "Brace", "Other"];
-  const coatingSystems = ["None", "Paint", "Powder", "Galv"];
+      const coatingSystems = [
+        "None",
+        "Standard Shop Primer",
+        "Zinc Primer",
+        "Paint",
+        "Powder Coat",
+        "Galvanizing",
+        "Specialty Coating"
+      ];
 
   return (
     <div className="space-y-4">

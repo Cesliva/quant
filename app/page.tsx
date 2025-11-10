@@ -8,9 +8,39 @@ import BidCalendarWidget from "@/components/dashboard/BidCalendarWidget";
 import WinLossWidget from "@/components/dashboard/WinLossWidget";
 import PerformanceMetrics from "@/components/dashboard/PerformanceMetrics";
 import ActivityFeed from "@/components/dashboard/ActivityFeed";
+import CompanyAddressBook from "@/components/settings/CompanyAddressBook";
+import { subscribeToCollection } from "@/lib/firebase/firestore";
+import { isFirebaseConfigured } from "@/lib/firebase/config";
+import { useState, useEffect } from "react";
+import { Target, Percent } from "lucide-react";
 
 export default function Home() {
   const companyId = "default"; // TODO: Get from auth context
+  const [winRate, setWinRate] = useState(0);
+  const [totalBids, setTotalBids] = useState(0);
+  
+  // Load win/loss data for win rate calculation
+  useEffect(() => {
+    if (!isFirebaseConfigured()) return;
+
+    const recordsPath = `companies/${companyId}/winLossRecords`;
+    const unsubscribe = subscribeToCollection(
+      recordsPath,
+      (records: any[]) => {
+        if (records.length > 0) {
+          const wins = records.filter((r: any) => r.status === "won").length;
+          const rate = (wins / records.length) * 100;
+          setWinRate(Math.round(rate * 10) / 10); // Round to 1 decimal
+          setTotalBids(records.length);
+        } else {
+          setWinRate(0);
+          setTotalBids(0);
+        }
+      }
+    );
+
+    return () => unsubscribe();
+  }, [companyId]);
   
   // Mock data - replace with real data from Firestore
   const activeProjects = [
@@ -51,12 +81,20 @@ export default function Home() {
               Welcome back • {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
             </p>
           </div>
-          <Link href="/projects/new">
-            <Button variant="primary" size="lg" className="gap-2 shadow-md hover:shadow-lg transition-shadow">
-              <Plus className="w-5 h-5" />
-              New Project
-            </Button>
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link href="/settings">
+              <Button variant="outline" size="lg" className="gap-2">
+                <FileText className="w-5 h-5" />
+                Company Settings
+              </Button>
+            </Link>
+            <Link href="/projects/new">
+              <Button variant="primary" size="lg" className="gap-2 shadow-md hover:shadow-lg transition-shadow">
+                <Plus className="w-5 h-5" />
+                New Project
+              </Button>
+            </Link>
+          </div>
         </div>
 
         {/* Quick Stats - Enhanced */}
@@ -110,41 +148,30 @@ export default function Home() {
             </CardContent>
           </Card>
 
-        </div>
-
-        {/* Quick Actions - Moved to Top */}
-        <div>
-          <h3 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Quick Actions</h3>
-          <Card className="border-0 shadow-sm bg-white/80 backdrop-blur-sm">
-            <CardContent className="p-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
-                <Link href="/projects/new">
-                  <Button variant="primary" className="w-full flex items-center justify-center gap-2 h-11 shadow-sm hover:shadow-md transition-shadow">
-                    <Plus className="w-4 h-4" />
-                    New Estimate
-                  </Button>
-                </Link>
-                <Link href="/spec-review">
-                  <Button variant="secondary" className="w-full flex items-center justify-center gap-2 h-11">
-                    <FileText className="w-4 h-4" />
-                    Spec Review
-                  </Button>
-                </Link>
-                <Link href="/reports?projectId=1">
-                  <Button variant="outline" className="w-full flex items-center justify-center gap-2 h-11 hover:bg-gray-50">
-                    <TrendingUp className="w-4 h-4" />
-                    View Reports
-                  </Button>
-                </Link>
-                <Link href="/import-quotes">
-                  <Button variant="outline" className="w-full flex items-center justify-center gap-2 h-11 hover:bg-gray-50">
-                    <Upload className="w-4 h-4" />
-                    Import Quotes
-                  </Button>
-                </Link>
+          <Card className="border-0 shadow-sm hover:shadow-md transition-shadow bg-white/80 backdrop-blur-sm">
+            <CardContent className="p-5">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Win Rate</p>
+                  <p className="text-3xl font-bold text-gray-900 mb-1">
+                    {winRate}%
+                  </p>
+                  <p className="text-xs text-purple-600 font-medium">
+                    {totalBids > 0 ? `${totalBids} total bids` : "No data yet"}
+                  </p>
+                </div>
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <Target className="w-5 h-5 text-purple-600" />
+                </div>
               </div>
             </CardContent>
           </Card>
+
+        </div>
+
+        {/* Company Address Book */}
+        <div>
+          <CompanyAddressBook companyId={companyId} compact={true} />
         </div>
 
         {/* Main Control Center Layout */}

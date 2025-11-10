@@ -101,6 +101,7 @@ export default function LaborInput({
           className="w-12 px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           placeholder="0"
           maxLength={3}
+          tabIndex={0}
         />
         <span className="text-xs text-gray-600">h</span>
         <input
@@ -113,6 +114,7 @@ export default function LaborInput({
           className="w-12 px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           placeholder="0"
           maxLength={2}
+          tabIndex={0}
         />
         <span className="text-xs text-gray-600">m</span>
       </div>

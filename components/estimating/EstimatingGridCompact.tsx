@@ -130,9 +130,11 @@ export default function EstimatingGridCompact({
             <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700">Grade</th>
             <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700">Qty</th>
             <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700">Length</th>
-            <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700">Weight (lbs)</th>
-            <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700">Labor (hrs)</th>
-            <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700">Cost ($)</th>
+            <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700 bg-blue-50">Material ($)</th>
+            <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700 bg-blue-50">Weight (lbs)</th>
+            <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700 bg-purple-50">Finishes ($)</th>
+            <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700 bg-green-50">Labor (hrs)</th>
+            <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700 bg-amber-50">Cost ($)</th>
             <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700">Status</th>
             <th className="sticky right-0 z-10 bg-gray-50 border-l-2 border-gray-300 px-3 py-3 text-center font-semibold text-xs uppercase">
               Actions
@@ -142,7 +144,7 @@ export default function EstimatingGridCompact({
         <tbody className="divide-y divide-gray-200">
           {lines.length === 0 ? (
             <tr>
-              <td colSpan={13} className="px-4 py-8 text-center text-gray-500">
+              <td colSpan={14} className="px-4 py-8 text-center text-gray-500">
                 No lines yet. Click &quot;Add Line&quot; to get started.
               </td>
             </tr>
@@ -191,17 +193,25 @@ export default function EstimatingGridCompact({
                       {isManualMode ? (
                         <input
                           type="text"
+                          id={line.id ? `field-${line.id}-itemDescription` : undefined}
+                          data-field="itemDescription"
+                          data-line-id={line.id}
                           value={isEditing ? (editingLine.itemDescription || "") : (line.itemDescription || "")}
                           onChange={(e) => {
                             if (!isEditing) {
                               onEdit(line);
                             }
                             onChange("itemDescription", e.target.value, line);
+                            // Don't auto-save on every keystroke - only on blur
                           }}
                           onBlur={() => {
                             if (isEditing) {
                               onSave();
                             }
+                          }}
+                          onKeyDown={(e) => {
+                            // Allow normal typing - don't interfere
+                            e.stopPropagation();
                           }}
                           className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                           placeholder="Item description"
@@ -536,18 +546,28 @@ export default function EstimatingGridCompact({
                       )}
                     </td>
 
+                    {/* Material Cost */}
+                    <td className="px-4 py-2 text-gray-700 font-medium bg-blue-50">
+                      ${(displayLine.materialCost || 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}
+                    </td>
+
                     {/* Weight */}
-                    <td className="px-4 py-2 text-gray-700 font-medium">
-                      {getTotalWeight(line).toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                    <td className="px-4 py-2 text-gray-700 font-medium bg-blue-50">
+                      {getTotalWeight(displayLine).toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                    </td>
+
+                    {/* Finishes (Coating Cost) */}
+                    <td className="px-4 py-2 text-gray-700 font-medium bg-purple-50">
+                      ${(displayLine.coatingCost || 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}
                     </td>
 
                     {/* Labor */}
-                    <td className="px-4 py-2 text-gray-700">
+                    <td className="px-4 py-2 text-gray-700 bg-green-50">
                       {(displayLine.totalLabor || 0).toFixed(2)}
                     </td>
 
                     {/* Cost */}
-                    <td className="px-4 py-2 text-gray-900 font-semibold">
+                    <td className="px-4 py-2 text-gray-900 font-semibold bg-amber-50">
                       ${(displayLine.totalCost || 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}
                     </td>
 
@@ -608,7 +628,7 @@ export default function EstimatingGridCompact({
                   {/* Expanded Detail Panel */}
                   {isExpanded && (
                     <tr key={`${line.id}-detail`}>
-                      <td colSpan={13} className="px-0 py-0 bg-gray-50 border-b-2 border-gray-300">
+                      <td colSpan={14} className="px-0 py-0 bg-gray-50 border-b-2 border-gray-300">
                         <EstimatingRowDetail
                           line={line}
                           editingId={editingId}
@@ -637,16 +657,23 @@ export default function EstimatingGridCompact({
                 TOTALS:
               </td>
               <td colSpan={5} className="px-4 py-3"></td>
-              <td className="px-4 py-3 text-gray-900">
+              <td className="px-4 py-3"></td>
+              <td className="px-4 py-3 text-gray-900 font-medium bg-blue-50">
+                ${totals.materialCost.toLocaleString("en-US", { maximumFractionDigits: 2 })}
+              </td>
+              <td className="px-4 py-3 text-gray-900 font-medium bg-blue-50">
                 {totals.totalWeight.toLocaleString("en-US", { maximumFractionDigits: 0 })}
               </td>
-              <td className="px-4 py-3 text-gray-900">
+              <td className="px-4 py-3 text-gray-900 font-medium bg-purple-50">
+                ${totals.coatingCost.toLocaleString("en-US", { maximumFractionDigits: 2 })}
+              </td>
+              <td className="px-4 py-3 text-gray-900 font-medium bg-green-50">
                 {totals.totalLabor.toFixed(2)}
               </td>
-              <td className="px-4 py-3 text-gray-900">
+              <td className="px-4 py-3 text-gray-900 font-medium bg-amber-50">
                 ${totals.totalCost.toLocaleString("en-US", { maximumFractionDigits: 2 })}
               </td>
-              <td colSpan={3} className="px-4 py-3"></td>
+              <td colSpan={2} className="px-4 py-3"></td>
             </tr>
           )}
         </tbody>

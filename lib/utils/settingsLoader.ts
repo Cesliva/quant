@@ -3,7 +3,7 @@
  * Loads and saves company and project default settings from Firestore
  */
 
-import { getDocument, setDocument } from "@/lib/firebase/firestore";
+import { getDocument, setDocument, updateDocument } from "@/lib/firebase/firestore";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
 
 export interface CompanyInfo {
@@ -46,6 +46,7 @@ export interface ProjectSettings {
   coatingRate?: number; // Override company default
   overheadPercentage?: number; // Override company default
   profitPercentage?: number; // Override company default
+  laborRates?: Array<{ trade: string; rate: number }>; // Project-specific labor rates
 }
 
 const DEFAULT_SETTINGS: CompanySettings = {
@@ -65,9 +66,12 @@ const DEFAULT_SETTINGS: CompanySettings = {
   ],
   coatingTypes: [
     { type: "None", costPerSF: 0 },
-    { type: "Galvanized", costPerSF: 2.50 },
-    { type: "Paint (Primer + Topcoat)", costPerSF: 3.25 },
-    { type: "Powder Coat", costPerSF: 4.00 },
+    { type: "Standard Shop Primer", costPerSF: 0.75 },
+    { type: "Zinc Primer", costPerSF: 1.25 },
+    { type: "Paint", costPerSF: 2.50 }, // Cost per gallon × coverage (typically 400 SF/gallon)
+    { type: "Powder Coat", costPerSF: 3.50 }, // Cost per gallon × coverage
+    { type: "Galvanizing", costPerSF: 0.15 }, // Cost per pound (converted to SF equivalent for default)
+    { type: "Specialty Coating", costPerSF: 5.00 },
   ],
   markupSettings: {
     overheadPercentage: 15,
@@ -281,8 +285,9 @@ export async function saveProjectSettings(
   }
 
   try {
-    const settingsPath = `companies/${companyId}/projects/${projectId}/settings`;
-    await setDocument(settingsPath, settings, true);
+    // Project settings should be saved as a field in the project document
+    const projectPath = `companies/${companyId}/projects`;
+    await updateDocument(projectPath, projectId, { settings });
   } catch (error) {
     console.error("Failed to save project settings:", error);
     throw error;

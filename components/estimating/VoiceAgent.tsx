@@ -9,6 +9,7 @@ import { getProjectPath, getDocument, setDocument } from "@/lib/firebase/firesto
 import { isFirebaseConfigured } from "@/lib/firebase/config";
 import { TRAINING_PHRASES, storeSpeechPattern, applyCorrections, generateTrainingContext, type SpeechPattern } from "@/lib/utils/speechTraining";
 import { getNextLineId, extractLineNumber } from "@/lib/utils/lineIdManager";
+import { parseNumberFieldFormat } from "@/lib/utils/fieldNumberMap";
 
 interface VoiceAgentProps {
   companyId: string;
@@ -945,25 +946,39 @@ export default function VoiceAgent({
       console.log("Processing user message:", message);
       console.log("Existing lines:", existingLines.length);
       
-      // Apply speech pattern corrections before processing
-      const corrections = speechPatterns.reduce((acc, pattern) => {
-        if (pattern.correctedTranscription) {
-          acc[pattern.userSpoke.toLowerCase()] = pattern.correctedTranscription;
-        } else if (pattern.userSpoke.toLowerCase() !== pattern.intendedCommand.toLowerCase()) {
-          acc[pattern.userSpoke.toLowerCase()] = pattern.intendedCommand;
-        }
-        return acc;
-      }, {} as Record<string, string>);
+      // Declare correctedMessage at the top
+      let correctedMessage: string;
       
-      let correctedMessage = message;
-      Object.entries(corrections).forEach(([wrong, correct]) => {
-        if (correctedMessage.toLowerCase().includes(wrong)) {
-          correctedMessage = correctedMessage.replace(
-            new RegExp(wrong.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'),
-            correct
-          );
-        }
-      });
+      // Check for number format first (e.g., "1. column", "1 column", "1, column", "number 1 column", "number one column")
+      const numberFormat = parseNumberFieldFormat(message);
+      if (numberFormat && numberFormat.field) {
+        // User spoke in number format - convert to field name format for AI
+        const fieldName = numberFormat.field;
+        const value = numberFormat.value;
+        // Convert to "fieldName, value" format for AI processing
+        correctedMessage = `${fieldName}, ${value}`;
+      } else {
+        // Apply speech pattern corrections before processing
+        const corrections = speechPatterns.reduce((acc, pattern) => {
+          if (pattern.correctedTranscription) {
+            acc[pattern.userSpoke.toLowerCase()] = pattern.correctedTranscription;
+          } else if (pattern.userSpoke.toLowerCase() !== pattern.intendedCommand.toLowerCase()) {
+            acc[pattern.userSpoke.toLowerCase()] = pattern.intendedCommand;
+          }
+          return acc;
+        }, {} as Record<string, string>);
+        
+        let correctedMessageTemp = message;
+        Object.entries(corrections).forEach(([wrong, correct]) => {
+          if (correctedMessageTemp.toLowerCase().includes(wrong)) {
+            correctedMessageTemp = correctedMessageTemp.replace(
+              new RegExp(wrong.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'),
+              correct
+            );
+          }
+        });
+        correctedMessage = correctedMessageTemp;
+      }
 
       // Process with AI agent (use corrected message and training context)
       const response = await processVoiceCommand(
@@ -981,6 +996,33 @@ export default function VoiceAgent({
         const mergedData = { ...accumulatedData, ...response.data, lineId: currentLineId };
         setAccumulatedData(mergedData);
         
+        // Try to find the line in Firestore (may not exist yet if just created)
+        let existingLine = existingLines.find(l => l.lineId === currentLineId);
+        
+        // If line doesn't exist yet, wait a moment for Firestore subscription to update
+        if (!existingLine || !existingLine.id) {
+          // Wait 200ms for Firestore subscription to update
+          await new Promise(resolve => setTimeout(resolve, 200));
+          // Check again after waiting
+          existingLine = existingLines.find(l => l.lineId === currentLineId);
+        }
+        
+        // If line exists in Firestore (has an id), update it immediately in real-time
+        if (existingLine && existingLine.id) {
+          // Immediately update the line in Firestore
+          const updateResponse: VoiceAgentResponse = {
+            action: "update",
+            lineId: currentLineId,
+            data: mergedData,
+            message: `Updated line ${currentLineId}`,
+            confidence: 1.0,
+          };
+          await onAction(updateResponse);
+        } else {
+          // Line doesn't exist yet - this shouldn't happen, but log it
+          console.warn(`Line ${currentLineId} not found in Firestore yet. Data will be saved when you say "enter".`);
+        }
+        
         // Show what was added in chat
         let updateMessage = `I've added to line ${currentLineId}:\n\n`;
         if (response.data.itemDescription) updateMessage += `• Item: ${response.data.itemDescription}\n`;
@@ -991,7 +1033,16 @@ export default function VoiceAgent({
         if (response.data.lengthIn) updateMessage += ` ${response.data.lengthIn} in\n`;
         if (response.data.grade) updateMessage += `• Grade: ${response.data.grade}\n`;
         
-        updateMessage += `\nSay "enter" when ready to save this data.`;
+        // Show all accumulated fields, not just the new one
+        if (mergedData.itemDescription && !response.data.itemDescription) updateMessage += `• Item: ${mergedData.itemDescription}\n`;
+        if (mergedData.category && !response.data.category) updateMessage += `• Category: ${mergedData.category}\n`;
+        if (mergedData.sizeDesignation && !response.data.sizeDesignation) updateMessage += `• Size: ${mergedData.sizeDesignation}\n`;
+        if (mergedData.qty && !response.data.qty) updateMessage += `• Quantity: ${mergedData.qty}\n`;
+        if (mergedData.lengthFt && !response.data.lengthFt) updateMessage += `• Length: ${mergedData.lengthFt} ft`;
+        if (mergedData.lengthIn && !response.data.lengthIn) updateMessage += ` ${mergedData.lengthIn} in\n`;
+        if (mergedData.grade && !response.data.grade) updateMessage += `• Grade: ${mergedData.grade}\n`;
+        
+        updateMessage += `\nSay "enter" when ready to finalize this data.`;
         
         const assistantMessage: ConversationMessage = {
           role: "assistant",
@@ -1008,13 +1059,40 @@ export default function VoiceAgent({
         const updatedData = { ...accumulatedData, ...response.data };
         setAccumulatedData(updatedData);
         
+        // Try to find the line in Firestore (may not exist yet if just created)
+        let existingLine = existingLines.find(l => l.lineId === currentLineId);
+        
+        // If line doesn't exist yet, wait a moment for Firestore subscription to update
+        if (!existingLine || !existingLine.id) {
+          // Wait 200ms for Firestore subscription to update
+          await new Promise(resolve => setTimeout(resolve, 200));
+          // Check again after waiting
+          existingLine = existingLines.find(l => l.lineId === currentLineId);
+        }
+        
+        // If line exists in Firestore (has an id), update it immediately in real-time
+        if (existingLine && existingLine.id) {
+          // Immediately update the line in Firestore
+          const updateResponse: VoiceAgentResponse = {
+            action: "update",
+            lineId: currentLineId,
+            data: updatedData,
+            message: `Updated line ${currentLineId}`,
+            confidence: 1.0,
+          };
+          await onAction(updateResponse);
+        } else {
+          // Line doesn't exist yet - this shouldn't happen, but log it
+          console.warn(`Line ${currentLineId} not found in Firestore yet. Data will be saved when you say "enter".`);
+        }
+        
         let editMessage = `I've updated line ${currentLineId}:\n\n`;
         Object.entries(response.data).forEach(([key, value]) => {
           if (value !== undefined && value !== null && value !== "") {
             editMessage += `• ${key}: ${value}\n`;
           }
         });
-        editMessage += `\nSay "enter" when ready to save.`;
+        editMessage += `\nSay "enter" when ready to finalize.`;
         
         const assistantMessage: ConversationMessage = {
           role: "assistant",

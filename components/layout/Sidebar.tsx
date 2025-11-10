@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils/cn";
 import { 
-  Settings, 
   FileText, 
   ClipboardList, 
   FileCheck, 
@@ -70,21 +69,6 @@ export default function Sidebar() {
           );
         })}
       </nav>
-      
-      <div className="mt-8 pt-8 border-t border-gray-200">
-        <Link
-          href="/settings"
-          className={cn(
-            "flex items-center gap-3 px-4 py-3 rounded-lg transition-colors",
-            pathname?.startsWith("/settings")
-              ? "bg-gray-100 text-blue-600 font-medium"
-              : "text-gray-700 hover:bg-gray-50"
-          )}
-        >
-          <Settings className="w-5 h-5" />
-          <span>Settings</span>
-        </Link>
-      </div>
     </div>
   );
 }
