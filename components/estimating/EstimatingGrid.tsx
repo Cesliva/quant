@@ -1,12 +1,11 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Plus, Upload, Edit, Trash2, Copy, Check, X, Undo2, Redo2 } from "lucide-react";
+import { Plus, Upload, Edit, Trash2, Copy, Check, X, Undo2, Redo2, Download } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { subscribeToCollection, createDocument, updateDocument, deleteDocument } from "@/lib/firebase/firestore";
 import { getProjectPath } from "@/lib/firebase/firestore";
-import { getSampleProjectData } from "@/lib/mock-data/sampleProjectData";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
 import { getFieldFromNumber, parseNumberFieldFormat } from "@/lib/utils/fieldNumberMap";
 import { useUndoRedo } from "@/lib/hooks/useUndoRedo";
@@ -22,6 +21,15 @@ import {
   calculatePlateProperties, 
   type PlateDimensions 
 } from "@/lib/utils/plateHelper";
+import {
+  convertThicknessInputToInches,
+  getThicknessLabelFromInches,
+} from "@/lib/utils/plateDatabase";
+import { 
+  downloadCSVTemplate, 
+  parseCSVFile, 
+  type CSVValidationError 
+} from "@/lib/utils/csvImport";
 import EstimatingGridCompact from "./EstimatingGridCompact";
 import {
   loadCompanySettings,
@@ -47,9 +55,9 @@ export interface EstimatingLine {
   subCategory: string; // Base Plate, Gusset, Stiffener, Clip, etc.
   
   // Material Type
-  materialType: "Rolled" | "Plate"; // Determines which fields to show
+  materialType: "Material" | "Plate"; // Determines which fields to show
   
-  // B) Material - Rolled Members (when materialType = "Rolled")
+  // B) Material - Structural Members (when materialType = "Material")
   shapeType?: ShapeType; // W, HSS, C, L, T, etc.
   sizeDesignation?: string; // e.g., W12x65
   grade?: string; // A992, A572 Gr50, etc.
@@ -62,7 +70,7 @@ export interface EstimatingLine {
   totalSurfaceArea?: number; // Read-only
   
   // C) Material - Plates (when materialType = "Plate")
-  thickness?: number; // inches
+  thickness?: number; // inches (decimal)
   width?: number; // inches
   plateLength?: number; // inches
   plateArea?: number; // Read-only (sf)
@@ -90,14 +98,22 @@ export interface EstimatingLine {
   laborLoadShip?: number;
   totalLabor?: number; // Read-only
   
-  // E) Cost (applies to any line type)
+  // E) Hardware & Connections (applies to any line type)
+  hardwareBoltDiameter?: string; // e.g., "3/4", "1", "1-1/4"
+  hardwareBoltType?: string; // A325, A490, A307, A193 B7, etc.
+  hardwareBoltLength?: number; // inches (optional)
+  hardwareQuantity?: number; // Number of bolt sets (auto from holes or manual)
+  hardwareCostPerSet?: number; // Cost per bolt set (bolt + nut + washer)
+  hardwareCost?: number; // Read-only: quantity × cost per set
+  
+  // F) Cost (applies to any line type)
   materialRate?: number; // $/lb (from Company Defaults, override allowed)
   materialCost?: number; // Read-only
   laborRate?: number; // $/hr (from Company Defaults, override allowed)
   laborCost?: number; // Read-only
   coatingRate?: number; // $/sf for Paint/Powder or $/lb for Galv
   coatingCost?: number; // Read-only
-  totalCost?: number; // Read-only
+  totalCost?: number; // Read-only: material + labor + coating + hardware
   
   // F) Admin / Controls
   notes?: string;
@@ -132,6 +148,9 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
   
   // Debounce save operations
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // CSV import file input ref
+  const csvFileInputRef = useRef<HTMLInputElement>(null);
   
   // Load settings from Firestore
   const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
@@ -194,7 +213,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
           if (number > 0 && number <= 50) { // Max field number
             // Get material type from the expanded row or editing line
             const targetLine = lines.find(l => l.id === (editingId || expandedRowId));
-            const materialType = targetLine?.materialType || editingLine.materialType as "Rolled" | "Plate" | undefined;
+            const materialType = targetLine?.materialType || editingLine.materialType as "Material" | "Plate" | undefined;
             const field = getFieldFromNumber(number, materialType);
             
             if (field) {
@@ -338,51 +357,11 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
   }, [isManualMode, canUndo, canRedo, undo, redo, editingId, expandedRowId, editingLine.materialType, lines]);
 
   useEffect(() => {
-    // Use sample data if Firebase is not configured
     if (!isFirebaseConfigured()) {
-      const sampleData = getSampleProjectData(projectId || "1");
-      // Convert old format to new format
-      const defaultSettings = {
-        materialGrades: [{ grade: "A992", costPerPound: 1.05 }],
-        laborRates: [{ trade: "Fabricator", rate: 50 }],
-        coatingTypes: [{ type: "None", costPerSF: 0 }],
-        markupSettings: { overheadPercentage: 15, profitPercentage: 10, materialWasteFactor: 5, laborWasteFactor: 10, salesTaxRate: 0, useTaxRate: 0 },
-      };
-      const settings = companySettings || defaultSettings;
-      
-      const convertedLines = sampleData.lines.map((line, index) => ({
-        id: line.id,
-        lineId: `L${index + 1}`,
-        drawingNumber: "",
-        detailNumber: "",
-        itemDescription: line.item,
-        category: "Structural",
-        subCategory: "",
-        materialType: "Rolled" as const,
-        shapeType: "W" as ShapeType,
-        sizeDesignation: line.size,
-        grade: "A992",
-        lengthFt: parseFloat(line.length) || 20,
-        lengthIn: 0,
-        qty: line.qty,
-        weightPerFoot: 0,
-        totalWeight: line.weight,
-        surfaceAreaPerFoot: 0,
-        totalSurfaceArea: line.surfaceArea,
-        coatingSystem: "None",
-        totalLabor: line.laborHours,
-        materialRate: getMaterialRateForGrade("A992", settings),
-        materialCost: 0,
-        laborRate: getLaborRate(undefined, settings),
-        laborCost: 0,
-        coatingCost: 0,
-        totalCost: line.cost,
-        status: "Active" as const,
-        useStockRounding: true,
-      }));
-      skipHistoryRef.current = true; // Don't add initial load to history
-      setLines(convertedLines, false);
-      return;
+      console.warn("Firebase is not configured. Estimating grid data is unavailable until configuration is complete.");
+      skipHistoryRef.current = true;
+      setLines([], false);
+      return () => {};
     }
 
     const linesPath = getProjectPath(companyId, projectId, "lines");
@@ -395,7 +374,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
     );
 
     return () => unsubscribe();
-  }, [companyId, projectId, companySettings, setLines]);
+  }, [companyId, projectId, setLines]);
 
   // Calculate read-only fields when editing
   // Use a ref to track if we're in the middle of a calculation to prevent infinite loops
@@ -444,6 +423,8 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
         coatingSystem: editingLine.coatingSystem,
         grade: editingLine.grade,
         plateGrade: editingLine.plateGrade,
+        hardwareQuantity: editingLine.hardwareQuantity,
+        hardwareCostPerSet: editingLine.hardwareCostPerSet,
       });
       
       // Skip if nothing that affects calculations has changed
@@ -456,9 +437,9 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
       
       const calculated = { ...editingLine };
       
-      // For Rolled members - Auto-calculate weight from AISC data
+      // For Material members - Auto-calculate weight from AISC data
       // This runs whenever sizeDesignation, lengthFt, lengthIn, or qty changes
-      if (calculated.materialType === "Rolled" && calculated.sizeDesignation) {
+      if (calculated.materialType === "Material" && calculated.sizeDesignation) {
         try {
         calculated.weightPerFoot = getWeightPerFoot(calculated.sizeDesignation);
         calculated.surfaceAreaPerFoot = getSurfaceAreaPerFoot(calculated.sizeDesignation);
@@ -489,7 +470,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
           console.warn("Error calculating weight for size:", calculated.sizeDesignation, error);
           // Keep existing values if calculation fails
         }
-      } else if (calculated.materialType === "Rolled") {
+      } else if (calculated.materialType === "Material") {
         // If sizeDesignation is cleared, reset weight fields
         calculated.weightPerFoot = 0;
         calculated.totalWeight = 0;
@@ -499,16 +480,29 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
       
       // For Plates - Auto-calculate weight
       if (calculated.materialType === "Plate") {
+        const normalizedThickness = convertThicknessInputToInches(
+          typeof calculated.thickness === "number" ? calculated.thickness : (calculated.thickness as string | undefined)
+        );
+        calculated.thickness = normalizedThickness;
         const plateProps = calculatePlateProperties({
-        thickness: calculated.thickness || 0,
-        width: calculated.width || 0,
-        length: calculated.plateLength || 0,
+          thickness: normalizedThickness || 0,
+          width: Number(calculated.width) || 0,
+          length: Number(calculated.plateLength) || 0,
           oneSideCoat: calculated.oneSideCoat || false,
         });
-        calculated.plateArea = plateProps.area;
-        calculated.edgePerimeter = plateProps.edgePerimeter;
-        calculated.plateSurfaceArea = plateProps.surfaceArea;
-        calculated.plateTotalWeight = plateProps.totalWeight * (calculated.plateQty || 1);
+        const safeArea = Number.isFinite(plateProps.area) ? plateProps.area : 0;
+        const safePerimeter = Number.isFinite(plateProps.edgePerimeter) ? plateProps.edgePerimeter : 0;
+        const safeSurfaceArea = Number.isFinite(plateProps.surfaceArea) ? plateProps.surfaceArea : 0;
+        const singlePlateWeight = Number.isFinite(plateProps.totalWeight) ? plateProps.totalWeight : 0;
+        const plateQuantityRaw = calculated.plateQty ?? calculated.qty ?? 1;
+        const plateQuantity = Number(plateQuantityRaw);
+        const safeQuantity = Number.isFinite(plateQuantity) ? plateQuantity : 0;
+        calculated.plateQty = safeQuantity;
+        calculated.qty = safeQuantity;
+        calculated.plateArea = safeArea;
+        calculated.edgePerimeter = safePerimeter;
+        calculated.plateSurfaceArea = safeSurfaceArea;
+        calculated.plateTotalWeight = singlePlateWeight * safeQuantity;
       }
       
       // Calculate total labor
@@ -528,7 +522,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
       
       // Auto-populate rates from settings if not already set
       if (!calculated.materialRate) {
-        const grade = calculated.materialType === "Rolled" ? calculated.grade : calculated.plateGrade;
+        const grade = calculated.materialType === "Material" ? calculated.grade : calculated.plateGrade;
         calculated.materialRate = projectSettings?.materialRate || getMaterialRateForGrade(grade, companySettings);
       }
       
@@ -541,19 +535,24 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
       }
       
       // Calculate costs
-      const totalWeight = calculated.materialType === "Rolled" 
+      const totalWeight = calculated.materialType === "Material" 
         ? (calculated.totalWeight || 0)
         : (calculated.plateTotalWeight || 0);
       
       calculated.materialCost = totalWeight * (calculated.materialRate || 0);
       calculated.laborCost = (calculated.totalLabor || 0) * (calculated.laborRate || 0);
       
+      // Hardware cost calculation
+      const hardwareQty = calculated.hardwareQuantity || 0;
+      const hardwareCostPerSet = calculated.hardwareCostPerSet || 0;
+      calculated.hardwareCost = hardwareQty * hardwareCostPerSet;
+      
       // Coating cost calculation
       // Galvanizing: cost per pound × total weight
       // Paint/Powder: cost per gallon × surface area (SF)
       // Other coatings: cost per SF × surface area
       const coatingSystem = calculated.coatingSystem || "None";
-      const surfaceArea = calculated.materialType === "Rolled"
+      const surfaceArea = calculated.materialType === "Material"
         ? (calculated.totalSurfaceArea || 0)
         : (calculated.plateSurfaceArea || 0);
       
@@ -577,6 +576,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
         calculated.materialCost || 0,
         calculated.laborCost || 0,
         calculated.coatingCost || 0,
+        calculated.hardwareCost || 0,
         companySettings,
         projectSettings || undefined
       );
@@ -607,7 +607,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
       itemDescription: "",
       category: "Structural",
       subCategory: "",
-      materialType: "Rolled",
+      materialType: "Material",
       qty: 1,
       status: "Active",
       useStockRounding: true,
@@ -739,10 +739,32 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
   };
 
   const handleChange = (field: keyof EstimatingLine, value: any, line?: EstimatingLine) => {
+    const syncPlateQuantities = (target: Partial<EstimatingLine>, fallbackLine?: EstimatingLine) => {
+      const materialType = target.materialType || fallbackLine?.materialType || editingLine.materialType;
+      if (materialType === "Plate") {
+        if (field === "qty" && typeof value === "number") {
+          target.plateQty = value;
+        } else if (field === "plateQty" && typeof value === "number") {
+          target.qty = value;
+        }
+      }
+    };
+
+    if (field === "thickness") {
+      value = convertThicknessInputToInches(value);
+    }
     // If a line is provided and we're not editing it, start editing it first
     if (line && editingId !== line.id) {
       setEditingId(line.id!);
-      setEditingLine({ ...line, [field]: value });
+      const newEditingLine = { ...line, [field]: value };
+      syncPlateQuantities(newEditingLine, line);
+      // Auto-calculate hardware cost if hardwareQuantity or hardwareCostPerSet changed
+      if (field === "hardwareQuantity" || field === "hardwareCostPerSet") {
+        const qty = field === "hardwareQuantity" ? (value || 0) : (newEditingLine.hardwareQuantity || 0);
+        const costPerSet = field === "hardwareCostPerSet" ? (value || 0) : (newEditingLine.hardwareCostPerSet || 0);
+        newEditingLine.hardwareCost = qty * costPerSet;
+      }
+      setEditingLine(newEditingLine);
     } else {
       // Use functional update to avoid stale closures and optimize performance
       setEditingLine((prev) => {
@@ -750,14 +772,25 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
         if (prev[field] === value) {
           return prev; // No change, return same reference
         }
-        return { ...prev, [field]: value };
+        const updated = { ...prev, [field]: value };
+        syncPlateQuantities(updated);
+        
+        // Auto-calculate hardware cost immediately when quantity or cost per set changes
+        if (field === "hardwareQuantity" || field === "hardwareCostPerSet") {
+          const qty = field === "hardwareQuantity" ? (value || 0) : (updated.hardwareQuantity || 0);
+          const costPerSet = field === "hardwareCostPerSet" ? (value || 0) : (updated.hardwareCostPerSet || 0);
+          updated.hardwareCost = qty * costPerSet;
+        }
+        
+        return updated;
       });
       
       // Clear calculation cache for fields that affect calculations
       if (field === "sizeDesignation" || field === "lengthFt" || field === "lengthIn" || field === "qty" ||
           field === "materialType" || field === "thickness" || field === "width" || field === "plateLength" ||
           field === "plateQty" || field === "oneSideCoat" || field.startsWith("labor") || 
-          field === "coatingSystem" || field === "grade" || field === "plateGrade") {
+          field === "coatingSystem" || field === "grade" || field === "plateGrade" ||
+          field === "hardwareQuantity" || field === "hardwareCostPerSet" || field === "hardwareCost") {
         // Invalidate cache to force recalculation
         lastCalculatedRef.current = "";
       }
@@ -775,21 +808,222 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
     const activeLines = lines.filter(line => line.status !== "Void");
     return {
       totalWeight: activeLines.reduce((sum, line) => 
-        sum + (line.materialType === "Rolled" ? (line.totalWeight || 0) : (line.plateTotalWeight || 0)), 0
+        sum + (line.materialType === "Material" ? (line.totalWeight || 0) : (line.plateTotalWeight || 0)), 0
       ),
       totalSurfaceArea: activeLines.reduce((sum, line) => 
-        sum + (line.materialType === "Rolled" ? (line.totalSurfaceArea || 0) : (line.plateSurfaceArea || 0)), 0
+        sum + (line.materialType === "Material" ? (line.totalSurfaceArea || 0) : (line.plateSurfaceArea || 0)), 0
       ),
       totalLabor: activeLines.reduce((sum, line) => sum + (line.totalLabor || 0), 0),
       materialCost: activeLines.reduce((sum, line) => sum + (line.materialCost || 0), 0),
       laborCost: activeLines.reduce((sum, line) => sum + (line.laborCost || 0), 0),
       coatingCost: activeLines.reduce((sum, line) => sum + (line.coatingCost || 0), 0),
+      hardwareCost: activeLines.reduce((sum, line) => {
+        const lineHardwareCost =
+          line.hardwareCost !== undefined && line.hardwareCost !== null
+            ? line.hardwareCost
+            : (line.hardwareQuantity || 0) * (line.hardwareCostPerSet || 0);
+        return sum + lineHardwareCost;
+      }, 0),
       totalCost: activeLines.reduce((sum, line) => sum + (line.totalCost || 0), 0),
     };
   }, [lines]);
 
+  const handleDownloadCSVTemplate = () => {
+    downloadCSVTemplate();
+  };
+
   const handleImportCSV = () => {
-    alert("CSV import functionality coming soon");
+    csvFileInputRef.current?.click();
+  };
+
+  const handleCSVFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Reset input so same file can be selected again
+    e.target.value = "";
+
+    // Validate file type
+    if (!file.name.endsWith(".csv")) {
+      alert("Please select a CSV file (.csv)");
+      return;
+    }
+
+    try {
+      // Get existing line IDs to check for duplicates
+      const existingLineIds = lines.map(line => line.lineId).filter(Boolean) as string[];
+
+      // Parse and validate CSV
+      const { lines: importedLines, errors } = await parseCSVFile(file, existingLineIds);
+
+      // Show validation errors if any
+      if (errors.length > 0) {
+        const errorMessages = errors.map(err => 
+          `Row ${err.row}, ${err.field}: ${err.message}`
+        ).join("\n");
+        
+        const proceed = confirm(
+          `Found ${errors.length} validation error(s):\n\n${errorMessages}\n\n` +
+          `Only ${importedLines.length} valid line(s) will be imported.\n\n` +
+          `Do you want to proceed with importing the valid lines?`
+        );
+        
+        if (!proceed) {
+          return;
+        }
+      }
+
+      if (importedLines.length === 0) {
+        alert("No valid lines found in CSV file. Please check the file format.");
+        return;
+      }
+
+      // Confirm import
+      const confirmMessage = `Import ${importedLines.length} line(s) from ${file.name}?`;
+      if (!confirm(confirmMessage)) {
+        return;
+      }
+
+      if (!isFirebaseConfigured()) {
+        alert("Firebase is not configured. Cannot import CSV.");
+        return;
+      }
+
+      // Import lines to Firestore
+      const linesPath = getProjectPath(companyId, projectId, "lines");
+      let importedCount = 0;
+      let errorCount = 0;
+
+      for (const lineData of importedLines) {
+        try {
+          // Set defaults for required fields if missing
+          const lineToImport: Partial<EstimatingLine> = {
+            ...lineData,
+            status: lineData.status || "Active",
+            useStockRounding: lineData.useStockRounding ?? true,
+            // Set default rates from settings if not provided
+            materialRate: lineData.materialRate || 
+              (companySettings ? getMaterialRateForGrade(lineData.grade || lineData.plateGrade, companySettings) : 0.85),
+            laborRate: lineData.laborRate || 
+              (companySettings ? getLaborRate(undefined, companySettings) : 50),
+            coatingRate: lineData.coatingRate || 
+              (companySettings ? getCoatingRate(lineData.coatingSystem, companySettings) : 2.50),
+          };
+
+          // Calculate read-only fields before saving
+          // For Material members
+          if (lineToImport.materialType === "Material" && lineToImport.sizeDesignation) {
+            try {
+              lineToImport.weightPerFoot = getWeightPerFoot(lineToImport.sizeDesignation);
+              lineToImport.surfaceAreaPerFoot = getSurfaceAreaPerFoot(lineToImport.sizeDesignation);
+              
+              const lengthFt = lineToImport.lengthFt || 0;
+              const lengthIn = lineToImport.lengthIn || 0;
+              const lengthInFeet = lengthFt + (lengthIn / 12);
+              const qty = lineToImport.qty || 1;
+              
+              lineToImport.totalWeight = (lineToImport.weightPerFoot || 0) * lengthInFeet * qty;
+              lineToImport.totalSurfaceArea = (lineToImport.surfaceAreaPerFoot || 0) * lengthInFeet * qty;
+            } catch (error) {
+              console.warn("Error calculating weight for imported line:", error);
+            }
+          }
+
+          // For Plates
+          if (lineToImport.materialType === "Plate") {
+            const plateProps = calculatePlateProperties({
+              thickness: lineToImport.thickness || 0,
+              width: lineToImport.width || 0,
+              length: lineToImport.plateLength || 0,
+              oneSideCoat: lineToImport.oneSideCoat || false,
+            });
+            lineToImport.plateArea = plateProps.area;
+            lineToImport.edgePerimeter = plateProps.edgePerimeter;
+            lineToImport.plateSurfaceArea = plateProps.surfaceArea;
+            const importPlateQty = lineToImport.plateQty || lineToImport.qty || 1;
+            lineToImport.plateQty = importPlateQty;
+            lineToImport.qty = importPlateQty;
+            lineToImport.plateTotalWeight = plateProps.totalWeight * importPlateQty;
+          }
+
+          // Calculate total labor
+          const totalLabor = 
+            (lineToImport.laborUnload || 0) +
+            (lineToImport.laborCut || 0) +
+            (lineToImport.laborCope || 0) +
+            (lineToImport.laborProcessPlate || 0) +
+            (lineToImport.laborDrillPunch || 0) +
+            (lineToImport.laborFit || 0) +
+            (lineToImport.laborWeld || 0) +
+            (lineToImport.laborPrepClean || 0) +
+            (lineToImport.laborPaint || 0) +
+            (lineToImport.laborHandleMove || 0) +
+            (lineToImport.laborLoadShip || 0);
+          lineToImport.totalLabor = totalLabor;
+
+          // Calculate costs
+          const totalWeight = lineToImport.materialType === "Material" 
+            ? (lineToImport.totalWeight || 0)
+            : (lineToImport.plateTotalWeight || 0);
+          
+          lineToImport.materialCost = totalWeight * (lineToImport.materialRate || 0);
+          lineToImport.laborCost = (lineToImport.totalLabor || 0) * (lineToImport.laborRate || 0);
+
+          // Coating cost calculation
+          const coatingSystem = lineToImport.coatingSystem || "None";
+          const surfaceArea = lineToImport.materialType === "Material"
+            ? (lineToImport.totalSurfaceArea || 0)
+            : (lineToImport.plateSurfaceArea || 0);
+
+          if (coatingSystem === "Galvanizing" || coatingSystem === "Galv") {
+            lineToImport.coatingCost = totalWeight * (lineToImport.coatingRate || 0);
+          } else if (coatingSystem === "Paint" || coatingSystem === "Powder Coat" || coatingSystem === "Specialty Coating") {
+            lineToImport.coatingCost = surfaceArea * (lineToImport.coatingRate || 0);
+          } else if (coatingSystem === "Standard Shop Primer" || coatingSystem === "Zinc Primer") {
+            lineToImport.coatingCost = surfaceArea * (lineToImport.coatingRate || 0);
+          } else {
+            lineToImport.coatingCost = 0;
+          }
+
+          // Hardware cost calculation
+          const importHardwareQty = lineToImport.hardwareQuantity || 0;
+          const importHardwareCostPerSet = lineToImport.hardwareCostPerSet || 0;
+          lineToImport.hardwareCost = importHardwareQty * importHardwareCostPerSet;
+
+          // Calculate total cost with markup
+          lineToImport.totalCost = calculateTotalCostWithMarkup(
+            lineToImport.materialCost || 0,
+            lineToImport.laborCost || 0,
+            lineToImport.coatingCost || 0,
+            lineToImport.hardwareCost || 0,
+            companySettings,
+            projectSettings || undefined
+          );
+
+          // Create document in Firestore
+          await createDocument(linesPath, lineToImport);
+          importedCount++;
+        } catch (error: any) {
+          console.error(`Failed to import line ${lineData.lineId}:`, error);
+          errorCount++;
+        }
+      }
+
+      // Show results
+      if (errorCount > 0) {
+        alert(
+          `Import completed with errors:\n\n` +
+          `Successfully imported: ${importedCount} line(s)\n` +
+          `Failed: ${errorCount} line(s)\n\n` +
+          `Check the browser console for details.`
+        );
+      } else {
+        alert(`Successfully imported ${importedCount} line(s) from ${file.name}`);
+      }
+    } catch (error: any) {
+      console.error("Failed to import CSV:", error);
+      alert(`Failed to import CSV: ${error.message || "Unknown error"}`);
+    }
   };
 
   const categories = ["Columns", "Beams", "Misc Metals", "Plates", "Connections", "Other"];
@@ -811,6 +1045,23 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
           {isManualMode ? "Manual Entry Mode" : "Voice Input Mode"}
         </h2>
         <div className="flex gap-3 items-center">
+          <input
+            type="file"
+            ref={csvFileInputRef}
+            accept=".csv"
+            onChange={handleCSVFileChange}
+            className="hidden"
+          />
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleDownloadCSVTemplate} 
+            className="flex items-center justify-center"
+            title="Download CSV template with all column headers"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Download CSV Template
+          </Button>
           <Button variant="outline" size="sm" onClick={handleImportCSV} className="flex items-center justify-center">
             <Upload className="w-4 h-4 mr-2" />
             Import CSV

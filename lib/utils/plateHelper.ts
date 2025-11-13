@@ -1,3 +1,5 @@
+import { getWeightPerSqFtFromInches } from "./plateDatabase";
+
 /**
  * Plate Helper Utility
  * Calculates plate properties from dimensions
@@ -24,25 +26,27 @@ export interface PlateCalculations {
  * Calculate plate area in square feet
  */
 export function calculatePlateArea(dimensions: PlateDimensions): number {
-  const { width, length } = dimensions;
+  const widthIn = Number(dimensions.width) || 0;
+  const lengthIn = Number(dimensions.length) || 0;
   // Convert inches to feet and calculate area
-  return (width / 12) * (length / 12);
+  return (widthIn / 12) * (lengthIn / 12);
 }
 
 /**
  * Calculate edge perimeter in feet
  */
 export function calculateEdgePerimeter(dimensions: PlateDimensions): number {
-  const { width, length } = dimensions;
+  const widthIn = Number(dimensions.width) || 0;
+  const lengthIn = Number(dimensions.length) || 0;
   // Perimeter = 2 * (width + length) in inches, convert to feet
-  return (2 * (width + length)) / 12;
+  return (2 * (widthIn + lengthIn)) / 12;
 }
 
 /**
  * Calculate surface area for coating in square feet
  */
 export function calculateSurfaceArea(dimensions: PlateDimensions): number {
-  const { width, length, oneSideCoat } = dimensions;
+  const { oneSideCoat } = dimensions;
   const area = calculatePlateArea(dimensions);
   
   if (oneSideCoat) {
@@ -56,16 +60,24 @@ export function calculateSurfaceArea(dimensions: PlateDimensions): number {
 
 /**
  * Calculate total weight in pounds
- * Steel density: 490 lb/ft³ or 0.2833 lb/in³
+ * Uses the reference weight-per-square-foot database for accuracy,
+ * falls back to density-based math if unavailable.
  */
 export function calculatePlateWeight(dimensions: PlateDimensions): number {
-  const { thickness, width, length } = dimensions;
-  // Volume in cubic inches
-  const volumeIn3 = thickness * width * length;
-  // Convert to cubic feet
-  const volumeFt3 = volumeIn3 / 1728; // 12^3 = 1728
-  // Weight = volume * density
-  return volumeFt3 * 490; // 490 lb/ft³
+  const areaSqFt = calculatePlateArea(dimensions);
+  const thickness = Number(dimensions.thickness) || 0;
+  const widthIn = Number(dimensions.width) || 0;
+  const lengthIn = Number(dimensions.length) || 0;
+  const weightPerSqFt = getWeightPerSqFtFromInches(thickness);
+
+  if (weightPerSqFt > 0) {
+    return areaSqFt * weightPerSqFt;
+  }
+
+  // Fallback to density-based calculation (490 lb/ft³)
+  const volumeIn3 = thickness * widthIn * lengthIn;
+  const volumeFt3 = volumeIn3 / 1728;
+  return volumeFt3 * 490;
 }
 
 /**
