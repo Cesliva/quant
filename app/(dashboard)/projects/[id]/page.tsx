@@ -10,12 +10,13 @@ import {
   Edit,
   ClipboardList, 
   FileCheck, 
-  FileEdit, 
-  BarChart3,
+  FileEdit,
+  FileText,
   Calendar,
   DollarSign,
   TrendingUp,
   Users,
+  Building2,
   MapPin,
   Clock,
   Target,
@@ -25,14 +26,16 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
-  MoreVertical
+  MoreVertical,
+  Archive,
+  Sparkles
 } from "lucide-react";
-import { getDocument, subscribeToCollection } from "@/lib/firebase/firestore";
+import { getDocument, subscribeToCollection, updateDocument, getDocRef } from "@/lib/firebase/firestore";
 import { getProjectPath } from "@/lib/firebase/firestore";
 import { EstimatingLine } from "@/components/estimating/EstimatingGrid";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
-import { getSampleProjectData } from "@/lib/mock-data/sampleProjectData";
 import ProjectSettingsPanel from "@/components/settings/ProjectSettingsPanel";
+import { onSnapshot } from "firebase/firestore";
 
 interface Project {
   id?: string;
@@ -54,6 +57,7 @@ interface Project {
   competitionLevel?: string;
   probabilityOfWin?: number;
   notes?: string;
+  archived?: boolean;
   createdAt?: any;
   updatedAt?: any;
 }
@@ -77,48 +81,73 @@ export default function ProjectDashboard() {
     if (projectId && projectId !== "new") {
       loadProject();
       const unsubscribe = loadEstimatingStats();
+      const unsubscribeProject = subscribeToProject();
       return () => {
         if (unsubscribe) unsubscribe();
+        if (unsubscribeProject) unsubscribeProject();
       };
     } else {
       setLoading(false);
     }
   }, [projectId]);
 
+  const subscribeToProject = () => {
+    if (!isFirebaseConfigured()) {
+      return () => {};
+    }
+
+    try {
+      const projectPath = getProjectPath(companyId, projectId);
+      const projectDocRef = getDocRef(projectPath);
+      
+      return onSnapshot(projectDocRef, (snapshot) => {
+        if (snapshot.exists()) {
+          setProject({ id: snapshot.id, ...snapshot.data() } as Project);
+        }
+      }, (error) => {
+        console.error("Error subscribing to project:", error);
+      });
+    } catch (error) {
+      console.error("Failed to subscribe to project:", error);
+      return () => {};
+    }
+  };
+
   const loadEstimatingStats = () => {
     try {
-      // Check if Firebase is configured
       if (!isFirebaseConfigured()) {
-        // Use sample data if Firebase is not configured
-        const sampleData = getSampleProjectData(projectId);
-        if (sampleData && sampleData.lines) {
-          const activeLines = sampleData.lines.filter(line => line.status !== "Void");
-          const stats = {
-            totalLines: activeLines.length,
-            totalWeight: activeLines.reduce((sum, line) => 
-              sum + (line.materialType === "Rolled" ? (line.totalWeight || 0) : (line.plateTotalWeight || 0)), 0
-            ),
-            totalCost: activeLines.reduce((sum, line) => sum + (line.totalCost || 0), 0),
-            totalLabor: activeLines.reduce((sum, line) => sum + (line.totalLabor || 0), 0),
-          };
-          setEstimatingStats(stats);
-        }
-        return () => {}; // Return no-op unsubscribe function
+        setEstimatingStats({
+          totalLines: 0,
+          totalWeight: 0,
+          totalCost: 0,
+          totalLabor: 0,
+        });
+        return () => {};
       }
-      
-      // Try to load from Firestore
+
       const linesPath = getProjectPath(companyId, projectId, "lines");
       const unsubscribe = subscribeToCollection<EstimatingLine>(
         linesPath,
         (lines) => {
-          const activeLines = lines.filter(line => line.status !== "Void");
+          const activeLines = lines.filter((line) => line.status !== "Void");
           const stats = {
             totalLines: activeLines.length,
-            totalWeight: activeLines.reduce((sum, line) => 
-              sum + (line.materialType === "Rolled" ? (line.totalWeight || 0) : (line.plateTotalWeight || 0)), 0
+            totalWeight: activeLines.reduce(
+              (sum, line) =>
+                sum +
+                (line.materialType === "Rolled"
+                  ? line.totalWeight || 0
+                  : line.plateTotalWeight || 0),
+              0
             ),
-            totalCost: activeLines.reduce((sum, line) => sum + (line.totalCost || 0), 0),
-            totalLabor: activeLines.reduce((sum, line) => sum + (line.totalLabor || 0), 0),
+            totalCost: activeLines.reduce(
+              (sum, line) => sum + (line.totalCost || 0),
+              0
+            ),
+            totalLabor: activeLines.reduce(
+              (sum, line) => sum + (line.totalLabor || 0),
+              0
+            ),
           };
           setEstimatingStats(stats);
         }
@@ -126,25 +155,13 @@ export default function ProjectDashboard() {
       return unsubscribe;
     } catch (error) {
       console.error("Failed to load estimating stats:", error);
-      // Try sample data as fallback
-      try {
-        const sampleData = getSampleProjectData(projectId);
-        if (sampleData && sampleData.lines) {
-          const activeLines = sampleData.lines.filter(line => line.status !== "Void");
-          const stats = {
-            totalLines: activeLines.length,
-            totalWeight: activeLines.reduce((sum, line) => 
-              sum + (line.materialType === "Rolled" ? (line.totalWeight || 0) : (line.plateTotalWeight || 0)), 0
-            ),
-            totalCost: activeLines.reduce((sum, line) => sum + (line.totalCost || 0), 0),
-            totalLabor: activeLines.reduce((sum, line) => sum + (line.totalLabor || 0), 0),
-          };
-          setEstimatingStats(stats);
-        }
-      } catch (fallbackError) {
-        console.error("Failed to load sample estimating stats:", fallbackError);
-      }
-      return () => {}; // Return no-op function if subscription fails
+      setEstimatingStats({
+        totalLines: 0,
+        totalWeight: 0,
+        totalCost: 0,
+        totalLabor: 0,
+      });
+      return () => {};
     }
   };
 
@@ -152,99 +169,21 @@ export default function ProjectDashboard() {
     try {
       setLoading(true);
       
-      // Check if Firebase is configured
       if (!isFirebaseConfigured()) {
-        // Use sample data if Firebase is not configured
-        const sampleProject = getSampleProject(projectId);
-        if (sampleProject) {
-          setProject(sampleProject);
-          setLoading(false);
-          return;
-        }
+        setProject(null);
+        return;
       }
-      
-      // Try to load from Firestore
+
       const projectPath = getProjectPath(companyId, projectId);
       const projectData = await getDocument<Project>(projectPath);
       
-      if (projectData) {
-        setProject(projectData);
-      } else {
-        // If not found in Firestore, try sample data as fallback
-        const sampleProject = getSampleProject(projectId);
-        if (sampleProject) {
-          setProject(sampleProject);
-        }
-      }
+      setProject(projectData);
     } catch (error) {
       console.error("Failed to load project:", error);
-      // Try sample data as fallback
-      const sampleProject = getSampleProject(projectId);
-      if (sampleProject) {
-        setProject(sampleProject);
-      }
+      setProject(null);
     } finally {
       setLoading(false);
     }
-  };
-
-  const getSampleProject = (id: string): Project | null => {
-    // Sample projects matching the landing page
-    const sampleProjects: Record<string, Project> = {
-      "1": {
-        id: "1",
-        projectNumber: "PROJ-2024-001",
-        projectName: "Downtown Office Building",
-        projectType: "structural",
-        status: "draft",
-        generalContractor: "ABC Construction",
-        estimator: "John Smith",
-        location: "123 Main St, Downtown",
-        bidDueDate: "2024-12-15",
-        decisionDate: "2024-12-20",
-        deliveryDate: "2025-03-01",
-        estimatedValue: "2500000",
-        competitionLevel: "medium",
-        probabilityOfWin: 65,
-        notes: "Large office building project with structural steel frame.",
-      },
-      "2": {
-        id: "2",
-        projectNumber: "PROJ-2024-002",
-        projectName: "Industrial Warehouse",
-        projectType: "structural",
-        status: "active",
-        generalContractor: "XYZ Builders",
-        estimator: "Jane Doe",
-        location: "456 Industrial Blvd",
-        bidDueDate: "2024-12-20",
-        decisionDate: "2024-12-25",
-        deliveryDate: "2025-04-15",
-        estimatedValue: "1800000",
-        competitionLevel: "high",
-        probabilityOfWin: 45,
-        notes: "Warehouse expansion with steel structure.",
-      },
-      "3": {
-        id: "3",
-        projectNumber: "PROJ-2024-003",
-        projectName: "Bridge Restoration",
-        projectType: "bridge",
-        status: "active",
-        generalContractor: "Infrastructure Co",
-        estimator: "Mike Johnson",
-        location: "Highway 101, Bridge #5",
-        bidDueDate: "2024-12-10",
-        decisionDate: "2024-12-15",
-        deliveryDate: "2025-06-30",
-        estimatedValue: "3500000",
-        competitionLevel: "low",
-        probabilityOfWin: 80,
-        notes: "Bridge restoration project requiring structural steel repairs.",
-      },
-    };
-    
-    return sampleProjects[id] || null;
   };
 
   const getStatusConfig = (status?: string) => {
@@ -337,7 +276,7 @@ export default function ProjectDashboard() {
           <Link href="/">
             <Button variant="outline">
               <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Dashboard
+              Back to Company Dashboard
             </Button>
           </Link>
         </div>
@@ -359,25 +298,27 @@ export default function ProjectDashboard() {
       color: "bg-blue-500 hover:bg-blue-600",
     },
     {
-      name: "Spec Review",
+      name: "Project Reports",
+      href: `/projects/${projectId}/reports`,
+      icon: FileText,
+      description: "Financial reports & review",
+      color: "bg-amber-500 hover:bg-amber-600",
+    },
+    {
+      name: "AI Spec Review",
       href: `/spec-review?projectId=${projectId}`,
       icon: FileCheck,
+      aiIcon: Sparkles,
       description: "AI compliance check",
       color: "bg-purple-500 hover:bg-purple-600",
     },
     {
-      name: "Proposal",
+      name: "AI Generated Proposal",
       href: `/proposal?projectId=${projectId}`,
       icon: FileEdit,
-      description: "Generate proposal",
+      aiIcon: Sparkles,
+      description: "AI-generated proposal",
       color: "bg-green-500 hover:bg-green-600",
-    },
-    {
-      name: "Reports",
-      href: `/reports?projectId=${projectId}`,
-      icon: BarChart3,
-      description: "View analytics",
-      color: "bg-amber-500 hover:bg-amber-600",
     },
   ];
 
@@ -416,9 +357,15 @@ export default function ProjectDashboard() {
                 {project.projectNumber && (
                   <span className="font-mono">{project.projectNumber}</span>
                 )}
-                {project.generalContractor && (
+                {project.owner && (
                   <span className="flex items-center gap-1.5">
                     <Users className="w-4 h-4" />
+                    {project.owner}
+                  </span>
+                )}
+                {project.generalContractor && (
+                  <span className="flex items-center gap-1.5">
+                    <Building2 className="w-4 h-4" />
                     {project.generalContractor}
                   </span>
                 )}
@@ -432,9 +379,87 @@ export default function ProjectDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm">
-              <MoreVertical className="w-4 h-4" />
-            </Button>
+            {project.archived ? (
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={async () => {
+                  if (confirm("Restore this project? It will appear in your active projects list.")) {
+                    try {
+                      // Get current project data to preserve all fields
+                      const projectPath = getProjectPath(companyId, projectId);
+                      const currentProject = await getDocument<Project>(projectPath);
+                      
+                      // Update with archived: false, preserving all other fields
+                      await updateDocument(`companies/${companyId}/projects`, projectId, {
+                        ...currentProject,
+                        archived: false,
+                      });
+                      alert("Project restored successfully!");
+                    } catch (error: any) {
+                      console.error("Failed to restore project:", error);
+                      alert(`Failed to restore project: ${error?.message || "Please try again."}`);
+                    }
+                  }
+                }}
+                className="border-green-300 text-green-700 hover:bg-green-50"
+              >
+                <Archive className="w-4 h-4 mr-2" />
+                Restore
+              </Button>
+            ) : (
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={async () => {
+                  if (confirm("Archive this project? It will be hidden from your active projects but can be restored later.")) {
+                    try {
+                      // First, get the current project data to preserve all fields
+                      const projectPath = getProjectPath(companyId, projectId);
+                      const currentProject = await getDocument<Project>(projectPath);
+                      
+                      if (!currentProject) {
+                        // If project doesn't exist in Firestore, try to create it from current state
+                        if (project) {
+                          const { setDocument } = await import("@/lib/firebase/firestore");
+                          const dataToSave = {
+                            ...project,
+                            archived: true, // Explicitly set to boolean true
+                          };
+                          console.log("Creating archived project:", dataToSave);
+                          await setDocument(projectPath, dataToSave, true);
+                        } else {
+                          alert("Project document not found in Firestore and no local project data available. Cannot archive.");
+                          return;
+                        }
+                      } else {
+                        // Use setDocument with merge to ensure the document exists
+                        const { setDocument } = await import("@/lib/firebase/firestore");
+                        const dataToSave = {
+                          ...currentProject,
+                          archived: true, // Explicitly set to boolean true
+                        };
+                        console.log("Archiving project:", projectId, "Data:", dataToSave);
+                        await setDocument(projectPath, dataToSave, true);
+                      }
+                      
+                      console.log("Archive operation completed, waiting for Firestore to propagate...");
+                      // Wait a moment for Firestore to propagate the update
+                      await new Promise(resolve => setTimeout(resolve, 1000));
+                      console.log("Redirecting to company dashboard...");
+                      router.push("/");
+                    } catch (error: any) {
+                      console.error("Failed to archive project:", error);
+                      alert(`Failed to archive project: ${error?.message || "Please try again."}`);
+                    }
+                  }
+                }}
+                className="border-gray-300 text-gray-700 hover:bg-gray-50"
+              >
+                <Archive className="w-4 h-4 mr-2" />
+                Archive
+              </Button>
+            )}
           </div>
         </div>
 
@@ -551,12 +576,16 @@ export default function ProjectDashboard() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {quickActions.map((action) => {
               const Icon = action.icon;
+              const AiIcon = (action as any).aiIcon;
               return (
                 <Link key={action.name} href={action.href}>
                   <Card className="hover:shadow-lg transition-all cursor-pointer group border-2 hover:border-blue-300">
                     <CardContent className="p-6">
-                      <div className={`w-12 h-12 ${action.color} rounded-lg flex items-center justify-center mb-4 group-hover:scale-110 transition-transform`}>
+                      <div className={`w-12 h-12 ${action.color} rounded-lg flex items-center justify-center mb-4 group-hover:scale-110 transition-transform relative`}>
                         <Icon className="w-6 h-6 text-white" />
+                        {AiIcon && (
+                          <AiIcon className="w-4 h-4 text-yellow-300 absolute -top-1 -right-1 drop-shadow-lg" />
+                        )}
                       </div>
                       <h3 className="text-lg font-semibold text-gray-900 mb-1">
                         {action.name}

@@ -171,7 +171,7 @@ export default function BidCalendarModal({ companyId, isOpen, onClose }: BidCale
 
       if (editingEvent?.id) {
         // Update existing
-        await updateDocument(`${eventsPath}/${editingEvent.id}`, eventData);
+        await updateDocument(eventsPath, editingEvent.id, eventData);
       } else {
         // Create new
         eventData.createdAt = new Date();
@@ -207,7 +207,7 @@ export default function BidCalendarModal({ companyId, isOpen, onClose }: BidCale
 
     try {
       const eventsPath = `companies/${companyId}/bidEvents`;
-      await deleteDocument(`${eventsPath}/${editingEvent.id}`);
+      await deleteDocument(eventsPath, editingEvent.id);
       setIsFormModalOpen(false);
       setEditingEvent(null);
     } catch (error: any) {

@@ -28,19 +28,19 @@ export function exportToPDF(
   const tableData = lines.map((line) => [
     line.lineId || "-",
     line.itemDescription || "-",
-    line.materialType === "Rolled"
+    line.materialType === "Material"
       ? `${line.shapeType || ""} ${line.sizeDesignation || ""}`.trim() || "-"
       : line.thickness && line.width && line.plateLength
       ? `${line.thickness}" × ${line.width}" × ${line.plateLength}"`
       : "-",
-    line.materialType === "Rolled" ? (line.grade || "-") : (line.plateGrade || "-"),
-    line.materialType === "Rolled" ? (line.qty || 0).toString() : (line.plateQty || 0).toString(),
-    line.materialType === "Rolled"
+    line.materialType === "Material" ? (line.grade || "-") : (line.plateGrade || "-"),
+    line.materialType === "Material" ? (line.qty || 0).toString() : (line.plateQty || 0).toString(),
+    line.materialType === "Material"
       ? `${line.lengthFt || 0}'${line.lengthIn ? ` ${line.lengthIn}"` : ""}`
       : line.plateLength
       ? `${line.plateLength}"`
       : "-",
-    line.materialType === "Rolled"
+    line.materialType === "Material"
       ? (line.totalWeight || 0).toFixed(0)
       : (line.plateTotalWeight || 0).toFixed(0),
     (line.totalLabor || 0).toFixed(2),
@@ -122,20 +122,20 @@ export function exportToExcel(
     ...lines.map((line) => [
       line.lineId || "",
       line.itemDescription || "",
-      line.materialType === "Rolled" ? "Material" : "Plate",
-      line.materialType === "Rolled"
+      line.materialType === "Material" ? "Material" : "Plate",
+      line.materialType === "Material"
         ? `${line.shapeType || ""} ${line.sizeDesignation || ""}`.trim() || ""
         : line.thickness && line.width && line.plateLength
         ? `${line.thickness}" × ${line.width}" × ${line.plateLength}"`
         : "",
-      line.materialType === "Rolled" ? line.grade || "" : line.plateGrade || "",
-      line.materialType === "Rolled" ? line.qty || 0 : line.plateQty || 0,
-      line.materialType === "Rolled"
+      line.materialType === "Material" ? line.grade || "" : line.plateGrade || "",
+      line.materialType === "Material" ? line.qty || 0 : line.plateQty || 0,
+      line.materialType === "Material"
         ? `${line.lengthFt || 0}'${line.lengthIn ? ` ${line.lengthIn}"` : ""}`
         : line.plateLength
         ? `${line.plateLength}"`
         : "",
-      line.materialType === "Rolled"
+      line.materialType === "Material"
         ? line.totalWeight || 0
         : line.plateTotalWeight || 0,
       line.totalLabor || 0,

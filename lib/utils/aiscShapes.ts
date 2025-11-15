@@ -60,23 +60,32 @@ export function getSurfaceAreaPerFoot(designation: string): number {
 }
 
 /**
- * Get valid grades for a shape type (simplified - in reality, this would come from AISC specs)
+ * Get all available Material (structural steel) grades
  */
-export function getValidGrades(shapeType: ShapeType): string[] {
-  // Common grades by shape type
-  const gradeMap: Record<string, string[]> = {
-    W: ["A992", "A572 Gr50", "A36", "A572 Gr65"],
-    HSS: ["A500 GrB", "A500 GrC", "A53"],
-    C: ["A36", "A572 Gr50"],
-    L: ["A36", "A572 Gr50"],
-    T: ["A36", "A572 Gr50"],
-    WT: ["A992", "A572 Gr50"],
-    S: ["A36", "A572 Gr50"],
-    M: ["A36"],
-    MT: ["A36"],
-    ST: ["A36"],
-    PIPE: ["A53", "A500"],
-  };
-  return gradeMap[shapeType] || ["A36"];
+export function getAllMaterialGrades(): string[] {
+  return [
+    "A992",
+    "A913 Grade 65",
+    "A913 Grade 70",
+    "A500 Grade B",
+    "A500 Grade C",
+    "A1085",
+    "A53 Type E",
+    "A53 Type S",
+    "A252 Grade 1",
+    "A252 Grade 2",
+    "A252 Grade 3",
+    "Stainless 304",
+    "Stainless 316",
+  ];
+}
+
+/**
+ * Get valid grades for a shape type (simplified - in reality, this would come from AISC specs)
+ * Returns all Material grades by default, can be filtered by shape type if needed
+ */
+export function getValidGrades(shapeType?: ShapeType): string[] {
+  // Return all Material grades - shape-specific filtering can be added later if needed
+  return getAllMaterialGrades();
 }
 

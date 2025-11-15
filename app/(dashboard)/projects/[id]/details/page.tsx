@@ -7,6 +7,9 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
 import { ArrowLeft, Save, Plus, Trash2 } from "lucide-react";
+import { getDocument, createDocument, updateDocument, setDocument, getProjectPath } from "@/lib/firebase/firestore";
+import { isFirebaseConfigured } from "@/lib/firebase/config";
+import { Users, Building2 } from "lucide-react";
 
 interface SpecDivision {
   id: string;
@@ -14,10 +17,27 @@ interface SpecDivision {
   value: string;
 }
 
+interface Contact {
+  id: string;
+  name: string;
+  company?: string;
+  type: "customer" | "contractor" | "vendor" | "other";
+  contactPerson?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  notes?: string;
+}
+
 export default function ProjectDetailsPage() {
   const params = useParams();
   const router = useRouter();
   const projectId = params.id as string;
+  const companyId = "default"; // TODO: Get from auth context
+  const isNewProject = projectId === "new";
   
   const [project, setProject] = useState({
     projectNumber: "",
@@ -38,6 +58,7 @@ export default function ProjectDetailsPage() {
     competitionLevel: "medium",
     probabilityOfWin: 50,
     notes: "",
+    archived: false,
     specDivisions: [
       { id: "1", division: "05", value: "" },
       { id: "2", division: "09", value: "" },
@@ -45,30 +66,258 @@ export default function ProjectDetailsPage() {
   });
 
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(!isNewProject);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved">("unsaved");
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [selectedOwnerContact, setSelectedOwnerContact] = useState<string>("");
+  const [selectedGCContact, setSelectedGCContact] = useState<string>("");
+  const [originalProjectNumber, setOriginalProjectNumber] = useState<string>("");
+
+  // Load company contacts
+  useEffect(() => {
+    const loadContacts = async () => {
+      if (!isFirebaseConfigured()) return;
+
+      try {
+        const companyPath = `companies/${companyId}`;
+        const companyDoc = await getDocument(companyPath);
+        if (companyDoc && companyDoc.contacts) {
+          setContacts(companyDoc.contacts as Contact[]);
+        }
+      } catch (error) {
+        console.error("Error loading contacts:", error);
+      }
+    };
+
+    loadContacts();
+  }, [companyId]);
 
   useEffect(() => {
-    // TODO: Load project from Firestore
-    // For now, set default values
-    if (projectId && projectId !== "new") {
-      // Load existing project
+    if (isNewProject) {
+      setIsLoading(false);
+      return;
     }
-  }, [projectId]);
+
+    // Load existing project from Firestore
+    const loadProject = async () => {
+      if (!isFirebaseConfigured()) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const projectPath = getProjectPath(companyId, projectId);
+        const projectData = await getDocument(projectPath);
+        
+        if (projectData) {
+          setProject({
+            projectNumber: projectData.projectNumber || "",
+            projectName: projectData.projectName || "",
+            projectType: projectData.projectType || "",
+            status: projectData.status || "draft",
+            owner: projectData.owner || "",
+            generalContractor: projectData.generalContractor || "",
+            gcContact: projectData.gcContact || "",
+            gcPhone: projectData.gcPhone || "",
+            gcEmail: projectData.gcEmail || "",
+            estimator: projectData.estimator || "",
+            location: projectData.location || "",
+            bidDueDate: projectData.bidDueDate || "",
+            decisionDate: projectData.decisionDate || "",
+            deliveryDate: projectData.deliveryDate || "",
+            estimatedValue: projectData.estimatedValue || "",
+            competitionLevel: projectData.competitionLevel || "medium",
+            probabilityOfWin: projectData.probabilityOfWin || 50,
+            notes: projectData.notes || "",
+            archived: projectData.archived || false,
+            specDivisions: projectData.specDivisions || [
+              { id: "1", division: "05", value: "" },
+              { id: "2", division: "09", value: "" },
+            ],
+          });
+          setOriginalProjectNumber(projectData.projectNumber || "");
+        }
+      } catch (error) {
+        console.error("Error loading project:", error);
+        alert("Failed to load project. Please try again.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadProject();
+  }, [projectId, companyId, isNewProject]);
+
+  // Handle contact selection for Owner/Client
+  const handleOwnerContactSelect = (contactId: string) => {
+    setSelectedOwnerContact(contactId);
+    if (contactId) {
+      const contact = contacts.find(c => c.id === contactId);
+      if (contact) {
+        setProject({
+          ...project,
+          owner: contact.name,
+        });
+      }
+    }
+  };
+
+  // Handle contact selection for General Contractor
+  const handleGCContactSelect = (contactId: string) => {
+    setSelectedGCContact(contactId);
+    if (contactId) {
+      const contact = contacts.find(c => c.id === contactId);
+      if (contact) {
+        setProject({
+          ...project,
+          generalContractor: contact.name,
+          gcContact: contact.contactPerson || "",
+          gcPhone: contact.phone || "",
+          gcEmail: contact.email || "",
+        });
+      }
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validation
+    if (!project.projectName || !project.projectNumber) {
+      alert("Please fill in required fields: Project Name and Project Number");
+      return;
+    }
+
+    // Validate project number format (alphanumeric, dashes, underscores allowed)
+    const projectNumberRegex = /^[A-Za-z0-9\-_]+$/;
+    if (!projectNumberRegex.test(project.projectNumber)) {
+      alert("Project Number can only contain letters, numbers, dashes, and underscores.");
+      return;
+    }
+
     setIsSaving(true);
     setSaveStatus("saving");
     
     try {
-      // TODO: Save to Firestore
-      await new Promise(resolve => setTimeout(resolve, 500)); // Simulate API call
-      console.log("Saving project:", project);
-      setSaveStatus("saved");
-      setTimeout(() => setSaveStatus("unsaved"), 3000);
+      if (!isFirebaseConfigured()) {
+        throw new Error("Firebase is not configured. Please set up your Firebase credentials.");
+      }
+
+      // Check for duplicate project number (only for new projects or if number changed)
+      if (isNewProject || (project.projectNumber && project.projectNumber !== originalProjectNumber)) {
+        const { queryDocuments } = await import("@/lib/firebase/firestore");
+        const { where } = await import("firebase/firestore");
+        const projectsPath = `companies/${companyId}/projects`;
+        const existingProjects = await queryDocuments<{ id: string; projectNumber?: string }>(
+          projectsPath,
+          [where("projectNumber", "==", project.projectNumber)]
+        );
+        
+        // For updates, exclude current project from duplicate check
+        const duplicates = isNewProject 
+          ? existingProjects 
+          : existingProjects.filter(p => p.id !== projectId);
+        
+        if (duplicates.length > 0) {
+          alert(`Project Number "${project.projectNumber}" is already in use. Please choose a different number.`);
+          setIsSaving(false);
+          setSaveStatus("unsaved");
+          return;
+        }
+      }
+
+      const projectData = {
+        ...project,
+        estimatedValue: project.estimatedValue ? parseFloat(project.estimatedValue.toString()) : undefined,
+        archived: isNewProject ? false : (project.archived === true ? true : false), // Explicitly set to boolean false for new projects, preserve for updates
+      };
+
+      // Check if we should save contacts to address book
+      let shouldSaveOwner = false;
+      let shouldSaveGC = false;
+      
+      if (project.owner && !selectedOwnerContact) {
+        // Owner was manually entered, check if it exists in contacts
+        const ownerExists = contacts.some(c => c.name.toLowerCase() === project.owner.toLowerCase());
+        if (!ownerExists) {
+          shouldSaveOwner = confirm(`Would you like to save "${project.owner}" to your company address book?`);
+        }
+      }
+      
+      if (project.generalContractor && !selectedGCContact) {
+        // GC was manually entered, check if it exists in contacts
+        const gcExists = contacts.some(c => c.name.toLowerCase() === project.generalContractor.toLowerCase());
+        if (!gcExists) {
+          shouldSaveGC = confirm(`Would you like to save "${project.generalContractor}" to your company address book?`);
+        }
+      }
+
+      // Save contacts to address book if requested
+      if (shouldSaveOwner || shouldSaveGC) {
+        try {
+          const companyPath = `companies/${companyId}`;
+          const companyDoc = await getDocument(companyPath);
+          const existingContacts = (companyDoc?.contacts as Contact[]) || [];
+          const updatedContacts = [...existingContacts];
+
+          if (shouldSaveOwner) {
+            const newOwnerContact: Contact = {
+              id: `contact-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              name: project.owner,
+              type: "customer",
+            };
+            updatedContacts.push(newOwnerContact);
+          }
+
+          if (shouldSaveGC) {
+            const newGCContact: Contact = {
+              id: `contact-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              name: project.generalContractor,
+              type: "contractor",
+              contactPerson: project.gcContact || "",
+              phone: project.gcPhone || "",
+              email: project.gcEmail || "",
+            };
+            updatedContacts.push(newGCContact);
+          }
+
+          if (companyDoc) {
+            await updateDocument("companies", companyId, {
+              contacts: updatedContacts,
+            });
+          } else {
+            await setDocument(companyPath, {
+              contacts: updatedContacts,
+            }, true);
+          }
+          
+          // Update local contacts state
+          setContacts(updatedContacts);
+        } catch (error) {
+          console.error("Error saving contacts:", error);
+          // Don't block project save if contact save fails
+        }
+      }
+
+      if (isNewProject) {
+        // Create new project
+        const projectsPath = `companies/${companyId}/projects`;
+        const newProjectId = await createDocument(projectsPath, projectData);
+        
+        // Redirect to the new project dashboard
+        router.push(`/projects/${newProjectId}`);
+      } else {
+        // Update existing project
+        const projectPath = getProjectPath(companyId, projectId);
+        await updateDocument(`companies/${companyId}/projects`, projectId, projectData);
+        
+        setSaveStatus("saved");
+        setTimeout(() => setSaveStatus("unsaved"), 3000);
+      }
     } catch (error) {
       console.error("Failed to save project:", error);
-      alert("Failed to save project. Please try again.");
+      alert(`Failed to save project: ${error instanceof Error ? error.message : "Please try again."}`);
+      setSaveStatus("unsaved");
     } finally {
       setIsSaving(false);
     }
@@ -115,20 +364,32 @@ export default function ProjectDetailsPage() {
     }
   };
 
+  if (isLoading) {
+    return (
+      <div className="max-w-7xl mx-auto space-y-6">
+        <div className="text-center py-12">
+          <p className="text-gray-500">Loading project...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Link href={`/projects/${projectId}`}>
+          <Link href={isNewProject ? "/" : `/projects/${projectId}`}>
             <Button variant="outline" size="sm">
               <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Dashboard
+              {isNewProject ? "Cancel" : "Back to Project Dashboard"}
             </Button>
           </Link>
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Project Details</h1>
-            {projectId && projectId !== "new" && (
+            <h1 className="text-3xl font-bold text-gray-900">
+              {isNewProject ? "New Project" : "Project Details"}
+            </h1>
+            {!isNewProject && (
               <p className="text-sm text-gray-500 mt-1">Project ID: {projectId}</p>
             )}
           </div>
@@ -140,9 +401,6 @@ export default function ProjectDetailsPage() {
           {saveStatus === "saving" && (
             <span className="text-sm text-blue-600">Saving...</span>
           )}
-          <Button variant="outline" onClick={() => router.back()}>
-            Cancel
-          </Button>
           <Button variant="primary" onClick={handleSubmit} disabled={isSaving}>
             <Save className="w-4 h-4 mr-2" />
             {isSaving ? "Saving..." : "Save Project"}
@@ -165,12 +423,15 @@ export default function ProjectDetailsPage() {
                 <Input
                   value={project.projectNumber}
                   onChange={(e) =>
-                    setProject({ ...project, projectNumber: e.target.value })
+                    setProject({ ...project, projectNumber: e.target.value.toUpperCase() })
                   }
                   placeholder="PROJ-2024-001"
                   required
+                  className="font-mono"
                 />
-                <p className="text-xs text-gray-500 mt-1">Unique project identifier</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Unique project identifier (letters, numbers, dashes, underscores only)
+                </p>
               </div>
 
               <div>
@@ -260,7 +521,10 @@ export default function ProjectDetailsPage() {
         {/* Client & Contractor Information */}
         <Card>
           <CardHeader>
-            <CardTitle>Client & Contractor Information</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="w-5 h-5" />
+              Client & Contractor Information
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -268,13 +532,30 @@ export default function ProjectDetailsPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Owner/Client
                 </label>
-                <Input
-                  value={project.owner}
-                  onChange={(e) =>
-                    setProject({ ...project, owner: e.target.value })
-                  }
-                  placeholder="End customer or owner"
-                />
+                <div className="space-y-2">
+                  <select
+                    value={selectedOwnerContact}
+                    onChange={(e) => handleOwnerContactSelect(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    <option value="">Select from address book...</option>
+                    {contacts
+                      .filter(c => c.type === "customer" || c.type === "other")
+                      .map(contact => (
+                        <option key={contact.id} value={contact.id}>
+                          {contact.name}
+                        </option>
+                      ))}
+                  </select>
+                  <Input
+                    value={project.owner}
+                    onChange={(e) => {
+                      setProject({ ...project, owner: e.target.value });
+                      setSelectedOwnerContact(""); // Clear selection when manually typing
+                    }}
+                    placeholder="Or enter owner/client name"
+                  />
+                </div>
                 <p className="text-xs text-gray-500 mt-1">End customer (separate from GC)</p>
               </div>
 
@@ -282,14 +563,31 @@ export default function ProjectDetailsPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   General Contractor <span className="text-red-500">*</span>
                 </label>
-                <Input
-                  value={project.generalContractor}
-                  onChange={(e) =>
-                    setProject({ ...project, generalContractor: e.target.value })
-                  }
-                  placeholder="Enter GC name"
-                  required
-                />
+                <div className="space-y-2">
+                  <select
+                    value={selectedGCContact}
+                    onChange={(e) => handleGCContactSelect(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    <option value="">Select from address book...</option>
+                    {contacts
+                      .filter(c => c.type === "contractor" || c.type === "other")
+                      .map(contact => (
+                        <option key={contact.id} value={contact.id}>
+                          {contact.name}
+                        </option>
+                      ))}
+                  </select>
+                  <Input
+                    value={project.generalContractor}
+                    onChange={(e) => {
+                      setProject({ ...project, generalContractor: e.target.value });
+                      setSelectedGCContact(""); // Clear selection when manually typing
+                    }}
+                    placeholder="Or enter GC name"
+                    required
+                  />
+                </div>
               </div>
 
               <div>

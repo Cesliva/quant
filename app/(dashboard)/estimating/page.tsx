@@ -8,7 +8,6 @@ import Button from "@/components/ui/Button";
 import EstimatingGrid from "@/components/estimating/EstimatingGrid";
 import KPISummary from "@/components/estimating/KPISummary";
 import { EstimatingLine } from "@/components/estimating/EstimatingGrid";
-import { getSampleProjectData } from "@/lib/mock-data/sampleProjectData";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
 import { subscribeToCollection, createDocument, updateDocument, deleteDocument } from "@/lib/firebase/firestore";
 import { getProjectPath } from "@/lib/firebase/firestore";
@@ -18,39 +17,60 @@ import { createLineFromStructuredData } from "@/lib/utils/structuredVoiceParser"
 import { FileText, ArrowRight, Save, Upload } from "lucide-react";
 import { exportToQuant, importFromQuant } from "@/lib/utils/quantExport";
 
-// TODO: REMOVE - This flag enables sample data for testing
-const USE_SAMPLE_DATA = false;
-
 function EstimatingContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const companyId = "default"; // TODO: Get from auth context
   
-  const projectIdFromQuery = searchParams?.get("projectId");
-  const [selectedProject, setSelectedProject] = useState<string>(
-    projectIdFromQuery || "1"
-  );
+  const projectIdFromQuery = searchParams?.get("projectId") || "";
+  const [selectedProject, setSelectedProject] = useState<string>(projectIdFromQuery);
+  const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
   const [lines, setLines] = useState<EstimatingLine[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Mock projects list - replace with real Firestore query
-  const projects = [
-    { id: "1", name: "Downtown Office Building" },
-    { id: "2", name: "Industrial Warehouse" },
-    { id: "3", name: "Bridge Restoration" },
-  ];
+  const firebaseReady = isFirebaseConfigured();
 
   useEffect(() => {
-    if (!selectedProject) return;
-
-    // Use sample data if Firebase is not configured or USE_SAMPLE_DATA is true
-    if (USE_SAMPLE_DATA || !isFirebaseConfigured()) {
-      const sampleData = getSampleProjectData(selectedProject);
-      setLines(sampleData.lines);
-      return;
+    if (!firebaseReady) {
+      setProjects([]);
+      return () => {};
     }
 
-    // Use Firebase if configured
+    const projectsPath = `companies/${companyId}/projects`;
+    const unsubscribe = subscribeToCollection<{ id: string; projectName?: string }>(
+      projectsPath,
+      (data) => {
+        const mapped = data.map((p) => ({
+          id: p.id,
+          name: p.projectName || "Untitled Project",
+        }));
+        setProjects(mapped);
+        setSelectedProject((prev) => {
+          if (prev) {
+            return prev;
+          }
+          if (projectIdFromQuery && mapped.some((p) => p.id === projectIdFromQuery)) {
+            return projectIdFromQuery;
+          }
+          return mapped[0]?.id || "";
+        });
+      }
+    );
+
+    return () => unsubscribe();
+  }, [companyId, projectIdFromQuery, firebaseReady]);
+
+  useEffect(() => {
+    if (!selectedProject) {
+      setLines([]);
+      return () => {};
+    }
+
+    if (!firebaseReady) {
+      setLines([]);
+      return () => {};
+    }
+
     const linesPath = getProjectPath(companyId, selectedProject, "lines");
     const unsubscribe = subscribeToCollection<EstimatingLine>(
       linesPath,
@@ -643,15 +663,16 @@ function EstimatingContent() {
             onChange={(e) => handleProjectChange(e.target.value)}
             className="px-4 py-2 rounded-lg border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
+            <option value="">Select Project...</option>
             {projects.map((project) => (
               <option key={project.id} value={project.id}>
                 {project.name}
               </option>
             ))}
           </select>
-          {(USE_SAMPLE_DATA || !isFirebaseConfigured()) && (
+          {!firebaseReady && (
             <span className="text-xs text-orange-600 bg-orange-50 px-3 py-1 rounded-full font-medium">
-              Sample Data
+              Firebase Not Configured
             </span>
           )}
           {/* Import Estimate Button */}

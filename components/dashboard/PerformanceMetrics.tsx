@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { TrendingUp, DollarSign, BarChart3, Zap } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { TrendingUp, DollarSign, FileText, Target, Percent, Calendar } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import { subscribeToCollection } from "@/lib/firebase/firestore";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
@@ -10,77 +10,194 @@ interface PerformanceMetricsProps {
   companyId: string;
 }
 
+interface ProjectDocument {
+  id: string;
+  projectName?: string;
+  status?: string;
+  estimatedValue?: number | string;
+  archived?: boolean;
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+interface WinLossRecord {
+  id?: string;
+  status: "won" | "lost";
+}
+
 export default function PerformanceMetrics({ companyId }: PerformanceMetricsProps) {
-  const [revenueData, setRevenueData] = useState<number[]>([]);
-  const [projectCounts, setProjectCounts] = useState<number[]>([]);
+  const [projects, setProjects] = useState<ProjectDocument[]>([]);
+  const [winLossRecords, setWinLossRecords] = useState<WinLossRecord[]>([]);
 
-  // Mock data for now - replace with real Firestore queries
+  // Load projects
   useEffect(() => {
-    // Simulate data - in production, query from Firestore
-    const mockRevenue = [45000, 52000, 48000, 61000, 55000, 67000];
-    const mockProjects = [3, 4, 3, 5, 4, 6];
-    setRevenueData(mockRevenue);
-    setProjectCounts(mockProjects);
-  }, []);
-
-  // Calculate metrics
-  const currentMonthRevenue = revenueData[revenueData.length - 1] || 0;
-  const previousMonthRevenue = revenueData[revenueData.length - 2] || 0;
-  const revenueChange = previousMonthRevenue > 0 
-    ? ((currentMonthRevenue - previousMonthRevenue) / previousMonthRevenue) * 100 
-    : 0;
-
-  const totalRevenue = revenueData.reduce((sum, val) => sum + val, 0);
-  const avgMonthlyRevenue = revenueData.length > 0 ? totalRevenue / revenueData.length : 0;
-  const maxRevenue = Math.max(...revenueData, 0);
-
-  // Get last 6 months labels
-  const getMonthLabels = () => {
-    const labels: string[] = [];
-    for (let i = 5; i >= 0; i--) {
-      const date = new Date();
-      date.setMonth(date.getMonth() - i);
-      labels.push(date.toLocaleDateString("en-US", { month: "short" }));
+    if (!isFirebaseConfigured()) {
+      setProjects([]);
+      return () => {};
     }
-    return labels;
-  };
 
-  const monthLabels = getMonthLabels();
+    const projectsPath = `companies/${companyId}/projects`;
+    const unsubscribe = subscribeToCollection<ProjectDocument>(projectsPath, (docs) => {
+      setProjects(docs || []);
+    });
+
+    return () => unsubscribe();
+  }, [companyId]);
+
+  // Load win/loss records for conversion rate
+  useEffect(() => {
+    if (!isFirebaseConfigured()) return;
+
+    const recordsPath = `companies/${companyId}/winLossRecords`;
+    const unsubscribe = subscribeToCollection<WinLossRecord>(
+      recordsPath,
+      (data) => {
+        setWinLossRecords(data || []);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [companyId]);
+
+  const metrics = useMemo(() => {
+    // Filter out archived projects
+    const activeProjects = projects.filter(p => p.archived !== true);
+
+    // Total Bid Pipeline Value - sum of estimated values for active/submitted bids
+    const pipelineProjects = activeProjects.filter(
+      p => p.status === "active" || p.status === "submitted" || p.status === "draft"
+    );
+    const totalPipelineValue = pipelineProjects.reduce((sum, project) => {
+      const value = typeof project.estimatedValue === 'string' 
+        ? parseFloat(project.estimatedValue) 
+        : (project.estimatedValue || 0);
+      return sum + value;
+    }, 0);
+
+    // Estimates in Progress - count of projects being estimated (draft/active)
+    const estimatesInProgress = activeProjects.filter(
+      p => p.status === "draft" || p.status === "active"
+    ).length;
+
+    // Average Estimate Value - average of all projects with estimated values
+    const projectsWithValues = activeProjects.filter(p => {
+      const value = typeof p.estimatedValue === 'string' 
+        ? parseFloat(p.estimatedValue) 
+        : (p.estimatedValue || 0);
+      return value > 0;
+    });
+    const averageEstimateValue = projectsWithValues.length > 0
+      ? projectsWithValues.reduce((sum, project) => {
+          const value = typeof project.estimatedValue === 'string' 
+            ? parseFloat(project.estimatedValue) 
+            : (project.estimatedValue || 0);
+          return sum + value;
+        }, 0) / projectsWithValues.length
+      : 0;
+
+    // Estimates This Month - count of projects created this month
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const getDateFromField = (value: any): Date | null => {
+      if (!value) return null;
+      if (typeof value.toDate === "function") {
+        return value.toDate();
+      }
+      if (value instanceof Date) {
+        return value;
+      }
+      const date = new Date(value);
+      return isNaN(date.getTime()) ? null : date;
+    };
+
+    const estimatesThisMonth = activeProjects.filter(project => {
+      const createdAt = getDateFromField(project.createdAt);
+      return createdAt && createdAt >= monthStart;
+    }).length;
+
+    // Bid Conversion Rate - won / total bids (from win/loss records)
+    const totalBids = winLossRecords.length;
+    const wonBids = winLossRecords.filter(r => r.status === "won").length;
+    const conversionRate = totalBids > 0 ? (wonBids / totalBids) * 100 : 0;
+
+    // Pipeline trend - last 6 months of estimates created
+    const monthStarts: Date[] = [];
+    for (let i = 5; i >= 0; i--) {
+      monthStarts.push(new Date(now.getFullYear(), now.getMonth() - i, 1));
+    }
+
+    const estimatesPerMonth: number[] = [];
+    const monthLabels: string[] = [];
+
+    monthStarts.forEach((startDate) => {
+      const endDate = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 1);
+      const label = startDate.toLocaleDateString("en-US", { month: "short" });
+      monthLabels.push(label);
+
+      const monthCount = activeProjects.filter(project => {
+        const createdAt = getDateFromField(project.createdAt);
+        return createdAt && createdAt >= startDate && createdAt < endDate;
+      }).length;
+
+      estimatesPerMonth.push(monthCount);
+    });
+
+    const currentMonthEstimates = estimatesPerMonth[estimatesPerMonth.length - 1] || 0;
+    const previousMonthEstimates = estimatesPerMonth[estimatesPerMonth.length - 2] || 0;
+    const estimatesChange = previousMonthEstimates > 0
+      ? ((currentMonthEstimates - previousMonthEstimates) / previousMonthEstimates) * 100
+      : 0;
+
+    const maxEstimates = Math.max(...estimatesPerMonth, 1);
+
+    return {
+      totalPipelineValue,
+      estimatesInProgress,
+      averageEstimateValue,
+      estimatesThisMonth,
+      conversionRate,
+      estimatesPerMonth,
+      monthLabels,
+      currentMonthEstimates,
+      estimatesChange,
+      maxEstimates,
+    };
+  }, [projects, winLossRecords]);
 
   return (
     <Card className="border-0 shadow-sm bg-white/80 backdrop-blur-sm">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
-          <BarChart3 className="w-5 h-5 text-blue-600" />
-          Performance Metrics
+          <Target className="w-5 h-5 text-blue-600" />
+          Bid Pipeline & Activity
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Revenue Trend Chart */}
+        {/* Estimates Created Trend Chart */}
         <div>
           <div className="flex items-center justify-between mb-2">
-            <h4 className="text-sm font-semibold text-gray-700">Monthly Revenue</h4>
+            <h4 className="text-sm font-semibold text-gray-700">Estimates Created (6 Months)</h4>
             <div className="flex items-center gap-2">
-              <span className={`text-xs font-medium ${revenueChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {revenueChange >= 0 ? '+' : ''}{revenueChange.toFixed(1)}%
+              <span className={`text-xs font-medium ${metrics.estimatesChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {metrics.estimatesChange >= 0 ? '+' : ''}{metrics.estimatesChange.toFixed(1)}%
               </span>
-              <TrendingUp className={`w-4 h-4 ${revenueChange >= 0 ? 'text-green-600' : 'text-red-600 rotate-180'}`} />
+              <TrendingUp className={`w-4 h-4 ${metrics.estimatesChange >= 0 ? 'text-green-600' : 'text-red-600 rotate-180'}`} />
             </div>
           </div>
           <div className="relative h-32 bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-3">
             <div className="flex items-end justify-between h-full gap-1">
-              {revenueData.map((value, index) => {
-                const height = maxRevenue > 0 ? (value / maxRevenue) * 100 : 0;
+              {metrics.estimatesPerMonth.map((value, index) => {
+                const height = metrics.maxEstimates > 0 ? (value / metrics.maxEstimates) * 100 : 0;
                 return (
                   <div key={index} className="flex-1 flex flex-col items-center gap-1 h-full">
                     <div className="w-full flex items-end justify-center">
                       <div
                         className="w-full bg-gradient-to-t from-blue-500 to-purple-500 rounded-t transition-all hover:from-blue-600 hover:to-purple-600"
                         style={{ height: `${height}%`, minHeight: height > 0 ? '4px' : '0' }}
-                        title={`${monthLabels[index]}: $${value.toLocaleString()}`}
+                        title={`${metrics.monthLabels[index]}: ${value} estimates`}
                       />
                     </div>
-                    <div className="text-[10px] text-gray-600 mt-1">{monthLabels[index]}</div>
+                    <div className="text-[10px] text-gray-600 mt-1">{metrics.monthLabels[index]}</div>
                   </div>
                 );
               })}
@@ -88,42 +205,64 @@ export default function PerformanceMetrics({ companyId }: PerformanceMetricsProp
           </div>
         </div>
 
-        {/* Key Stats */}
+        {/* Key Metrics */}
         <div className="grid grid-cols-2 gap-3">
           <div className="p-3 bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg border border-green-200">
             <div className="flex items-center gap-2 mb-1">
               <DollarSign className="w-4 h-4 text-green-600" />
-              <span className="text-xs text-gray-600">This Month</span>
+              <span className="text-xs text-gray-600">Pipeline Value</span>
             </div>
             <div className="text-lg font-bold text-green-700">
-              ${currentMonthRevenue.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+              ${metrics.totalPipelineValue.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+            </div>
+            <div className="text-[10px] text-gray-500 mt-0.5">
+              Active bids
             </div>
           </div>
           <div className="p-3 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
             <div className="flex items-center gap-2 mb-1">
-              <TrendingUp className="w-4 h-4 text-blue-600" />
-              <span className="text-xs text-gray-600">Avg Monthly</span>
+              <FileText className="w-4 h-4 text-blue-600" />
+              <span className="text-xs text-gray-600">In Progress</span>
             </div>
             <div className="text-lg font-bold text-blue-700">
-              ${avgMonthlyRevenue.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+              {metrics.estimatesInProgress}
+            </div>
+            <div className="text-[10px] text-gray-500 mt-0.5">
+              Being estimated
             </div>
           </div>
         </div>
 
-        {/* Project Count Trend */}
-        <div>
-          <h4 className="text-xs font-semibold text-gray-700 mb-2">Active Projects</h4>
-          <div className="flex items-center gap-2">
-            {projectCounts.map((count, index) => (
-              <div key={index} className="flex-1 text-center">
-                <div className="text-sm font-bold text-gray-900">{count}</div>
-                <div className="text-[10px] text-gray-500">{monthLabels[index]}</div>
-              </div>
-            ))}
+        {/* Secondary Metrics */}
+        <div className="grid grid-cols-3 gap-2">
+          <div className="p-2 bg-gray-50 rounded-lg border border-gray-200 text-center">
+            <div className="text-xs text-gray-600 mb-0.5">Avg Estimate</div>
+            <div className="text-sm font-bold text-gray-900">
+              ${metrics.averageEstimateValue > 0 
+                ? metrics.averageEstimateValue.toLocaleString("en-US", { maximumFractionDigits: 0 })
+                : "-"}
+            </div>
+          </div>
+          <div className="p-2 bg-gray-50 rounded-lg border border-gray-200 text-center">
+            <div className="flex items-center justify-center gap-1 mb-0.5">
+              <Calendar className="w-3 h-3 text-gray-500" />
+              <span className="text-xs text-gray-600">This Month</span>
+            </div>
+            <div className="text-sm font-bold text-gray-900">
+              {metrics.estimatesThisMonth}
+            </div>
+          </div>
+          <div className="p-2 bg-gray-50 rounded-lg border border-gray-200 text-center">
+            <div className="flex items-center justify-center gap-1 mb-0.5">
+              <Percent className="w-3 h-3 text-gray-500" />
+              <span className="text-xs text-gray-600">Win Rate</span>
+            </div>
+            <div className="text-sm font-bold text-gray-900">
+              {metrics.conversionRate > 0 ? `${metrics.conversionRate.toFixed(1)}%` : "-"}
+            </div>
           </div>
         </div>
       </CardContent>
     </Card>
   );
 }
-

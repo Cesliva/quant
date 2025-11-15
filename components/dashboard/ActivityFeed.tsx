@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Clock, FileText, CheckCircle, XCircle, Mic, Sparkles } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { Clock, FileText, CheckCircle, XCircle, Sparkles } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
+import { subscribeToCollection } from "@/lib/firebase/firestore";
+import { isFirebaseConfigured } from "@/lib/firebase/config";
 
 interface ActivityItem {
   id: string;
@@ -18,49 +20,76 @@ interface ActivityFeedProps {
 
 export default function ActivityFeed({ companyId }: ActivityFeedProps) {
   const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
 
   useEffect(() => {
-    // Mock activities - replace with real Firestore queries
-    const mockActivities: ActivityItem[] = [
-      {
-        id: "1",
-        type: "estimate",
-        message: "New estimate created",
-        timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
-        projectName: "Downtown Office Building",
-      },
-      {
-        id: "2",
-        type: "win",
-        message: "Project won",
-        timestamp: new Date(Date.now() - 5 * 60 * 60 * 1000), // 5 hours ago
-        projectName: "Industrial Warehouse",
-      },
-      {
-        id: "3",
-        type: "voice",
-        message: "Voice input processed",
-        timestamp: new Date(Date.now() - 8 * 60 * 60 * 1000), // 8 hours ago
-        projectName: "Bridge Restoration",
-      },
-      {
-        id: "4",
-        type: "ai",
-        message: "Spec review completed",
-        timestamp: new Date(Date.now() - 12 * 60 * 60 * 1000), // 12 hours ago
-        projectName: "Downtown Office Building",
-      },
-      {
-        id: "5",
-        type: "estimate",
-        message: "Estimate updated",
-        timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000), // 1 day ago
-        projectName: "Industrial Warehouse",
-      },
-    ];
+    if (!isFirebaseConfigured()) {
+      setProjects([]);
+      return () => {};
+    }
 
-    setActivities(mockActivities);
+    const projectsPath = `companies/${companyId}/projects`;
+    const unsubscribe = subscribeToCollection<any>(projectsPath, (docs) => {
+      setProjects(docs || []);
+    });
+
+    return () => unsubscribe();
   }, [companyId]);
+
+  useEffect(() => {
+    const getDateFromField = (value: any): Date | null => {
+      if (!value) return null;
+      if (typeof value.toDate === "function") {
+        return value.toDate();
+      }
+      if (value instanceof Date) {
+        return value;
+      }
+      const date = new Date(value);
+      return isNaN(date.getTime()) ? null : date;
+    };
+
+    const calculatedActivities: ActivityItem[] = [];
+
+    projects.forEach((project) => {
+      const createdAt = getDateFromField(project.createdAt) || new Date();
+      const updatedAt = getDateFromField(project.updatedAt) || createdAt;
+      const hasUpdated =
+        updatedAt.getTime() - createdAt.getTime() > 60 * 1000; // more than 1 minute difference
+
+      let type: ActivityItem["type"] = "estimate";
+      let message = "New project created";
+      let timestamp = createdAt;
+
+      if (project.status === "won") {
+        type = "win";
+        message = "Project won";
+        timestamp = updatedAt;
+      } else if (project.status === "lost") {
+        type = "loss";
+        message = "Project lost";
+        timestamp = updatedAt;
+      } else if (hasUpdated) {
+        type = "estimate";
+        message = "Project updated";
+        timestamp = updatedAt;
+      }
+
+      calculatedActivities.push({
+        id: `${project.id}-${timestamp.getTime()}`,
+        type,
+        message,
+        timestamp,
+        projectName: project.projectName || "Untitled Project",
+      });
+    });
+
+    calculatedActivities.sort(
+      (a, b) => b.timestamp.getTime() - a.timestamp.getTime()
+    );
+
+    setActivities(calculatedActivities.slice(0, 8));
+  }, [projects]);
 
   const getActivityIcon = (type: ActivityItem["type"]) => {
     switch (type) {
@@ -70,8 +99,6 @@ export default function ActivityFeed({ companyId }: ActivityFeedProps) {
         return <CheckCircle className="w-4 h-4 text-green-600" />;
       case "loss":
         return <XCircle className="w-4 h-4 text-red-600" />;
-      case "voice":
-        return <Mic className="w-4 h-4 text-purple-600" />;
       case "ai":
         return <Sparkles className="w-4 h-4 text-orange-600" />;
       default:
@@ -87,8 +114,6 @@ export default function ActivityFeed({ companyId }: ActivityFeedProps) {
         return "bg-green-50 border-green-200";
       case "loss":
         return "bg-red-50 border-red-200";
-      case "voice":
-        return "bg-purple-50 border-purple-200";
       case "ai":
         return "bg-orange-50 border-orange-200";
       default:

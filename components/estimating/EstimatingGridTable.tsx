@@ -76,7 +76,7 @@ export default function EstimatingGridTable({
               onChange={(e) => onChange(field, e.target.value)}
               className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
             >
-              <option value="Rolled">Material</option>
+              <option value="Material">Material</option>
               <option value="Plate">Plate</option>
             </select>
           );
@@ -260,7 +260,7 @@ export default function EstimatingGridTable({
               A) Identification
             </th>
             <th colSpan={9} className="bg-blue-50 px-3 py-2 text-center font-semibold text-xs uppercase border-b border-gray-300">
-              B) Material - Rolled
+              B) Material - Structural Members
             </th>
             <th colSpan={10} className="bg-blue-50 px-3 py-2 text-center font-semibold text-xs uppercase border-b border-gray-300">
               C) Material - Plate
@@ -288,7 +288,7 @@ export default function EstimatingGridTable({
             <th className="px-2 py-2 text-left text-xs font-medium text-gray-700">Sub-Cat</th>
             <th className="px-2 py-2 text-left text-xs font-medium text-gray-700">Type</th>
             
-            {/* Rolled Material Columns - Always visible in header */}
+            {/* Material Columns - Always visible in header */}
             <th className="px-2 py-2 text-left text-xs font-medium text-gray-700 bg-blue-50">Shape</th>
             <th className="px-2 py-2 text-left text-xs font-medium text-gray-700 bg-blue-50">Size</th>
             <th className="px-2 py-2 text-left text-xs font-medium text-gray-700 bg-blue-50">Grade</th>
@@ -356,7 +356,7 @@ export default function EstimatingGridTable({
               const isEditing = editingId === line.id;
               // When editing, use editingLine materialType; otherwise use line materialType
               const currentMaterialType = isEditing ? (editingLine.materialType || line.materialType) : line.materialType;
-              const isRolled = currentMaterialType === "Rolled";
+              const isRolled = currentMaterialType === "Material";
               const isPlate = currentMaterialType === "Plate";
               
               return (
@@ -374,7 +374,7 @@ export default function EstimatingGridTable({
                   <td className="px-2 py-2">{renderCell(line, "subCategory")}</td>
                   <td className="px-2 py-2">{renderCell(line, "materialType")}</td>
                   
-                  {/* Rolled Material - Show when type is Rolled, hide when Plate */}
+                  {/* Material - Show when type is Material, hide when Plate */}
                   {isRolled ? (
                     <>
                       <td className="px-2 py-2 bg-blue-50">{renderCell(line, "shapeType")}</td>
@@ -389,7 +389,7 @@ export default function EstimatingGridTable({
                       <td className="px-2 py-2 bg-blue-50">{renderCell(line, "totalSurfaceArea", true)}</td>
                     </>
                   ) : (
-                    // Empty cells for Rolled columns when Plate is selected
+                    // Empty cells for Material columns when Plate is selected
                     Array(9).fill(null).map((_, i) => (
                       <td key={`rolled-empty-${i}`} className="px-2 py-2 bg-gray-100"></td>
                     ))
@@ -410,7 +410,7 @@ export default function EstimatingGridTable({
                       <td className="px-2 py-2 bg-blue-50">{renderCell(line, "plateTotalWeight", true)}</td>
                     </>
                   ) : (
-                    // Empty cells for Plate columns when Rolled is selected
+                    // Empty cells for Plate columns when Material is selected
                     Array(10).fill(null).map((_, i) => (
                       <td key={`plate-empty-${i}`} className="px-2 py-2 bg-gray-100"></td>
                     ))

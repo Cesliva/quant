@@ -12,8 +12,9 @@ import {
   type ProjectSettings,
   type CompanySettings
 } from "@/lib/utils/settingsLoader";
-import { getDocument, updateDocument } from "@/lib/firebase/firestore";
+import { getDocument, updateDocument, setDocument, createDocument, queryDocuments } from "@/lib/firebase/firestore";
 import { getProjectPath } from "@/lib/firebase/firestore";
+import { isFirebaseConfigured } from "@/lib/firebase/config";
 
 interface ProjectSettingsPanelProps {
   companyId: string;
@@ -47,6 +48,34 @@ interface LaborRate {
   id: string;
   trade: string;
   rate: number;
+}
+
+interface Contact {
+  id: string;
+  name: string;
+  company?: string;
+  type: "customer" | "contractor" | "vendor" | "other";
+  contactPerson?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  notes?: string;
+}
+
+interface BidEvent {
+  id?: string;
+  date: string;
+  projectName: string;
+  projectId?: string;
+  generalContractor: string;
+  notes?: string;
+  status: "draft" | "active" | "submitted" | "won" | "lost";
+  estimatedValue?: number;
+  createdAt?: any;
+  updatedAt?: any;
 }
 
 export default function ProjectSettingsPanel({ companyId, projectId, compact = false }: ProjectSettingsPanelProps) {
@@ -87,12 +116,71 @@ export default function ProjectSettingsPanel({ companyId, projectId, compact = f
     profitPercentage: undefined,
   });
 
+  // Local state for rate inputs (to allow typing decimals like .001)
+  const [materialRateInput, setMaterialRateInput] = useState<string>("");
+  const [laborRateInput, setLaborRateInput] = useState<string>("");
+  const [coatingRateInput, setCoatingRateInput] = useState<string>("");
+  
+  // Track which inputs are currently focused to avoid syncing while typing
+  const [focusedInput, setFocusedInput] = useState<string | null>(null);
+
   // Project-specific labor rates (can override company defaults)
   const [projectLaborRates, setProjectLaborRates] = useState<LaborRate[]>([]);
+
+  // Company contacts for dropdown
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [selectedOwnerContact, setSelectedOwnerContact] = useState<string>("");
+  const [selectedGCContact, setSelectedGCContact] = useState<string>("");
 
   useEffect(() => {
     loadData();
   }, [companyId, projectId]);
+
+  // Sync input values when projectSettings loads (but not while user is typing)
+  useEffect(() => {
+    if (focusedInput !== "materialRate") {
+      setMaterialRateInput(projectSettings.materialRate !== undefined && projectSettings.materialRate !== 0 ? projectSettings.materialRate.toString() : "");
+    }
+    if (focusedInput !== "laborRate") {
+      setLaborRateInput(projectSettings.laborRate !== undefined && projectSettings.laborRate !== 0 ? projectSettings.laborRate.toString() : "");
+    }
+    if (focusedInput !== "coatingRate") {
+      setCoatingRateInput(projectSettings.coatingRate !== undefined && projectSettings.coatingRate !== 0 ? projectSettings.coatingRate.toString() : "");
+    }
+  }, [projectSettings.materialRate, projectSettings.laborRate, projectSettings.coatingRate, focusedInput]);
+
+  const loadContacts = async (currentProject: Project) => {
+    if (!isFirebaseConfigured()) return;
+
+    try {
+      const companyPath = `companies/${companyId}`;
+      const companyDoc = await getDocument(companyPath);
+      if (companyDoc && companyDoc.contacts) {
+        const loadedContacts = companyDoc.contacts as Contact[];
+        setContacts(loadedContacts);
+        
+        // Set selected contacts if they match existing project data
+        if (currentProject.owner) {
+          const ownerMatch = loadedContacts.find(
+            c => c.name.toLowerCase() === currentProject.owner.toLowerCase()
+          );
+          if (ownerMatch) {
+            setSelectedOwnerContact(ownerMatch.id);
+          }
+        }
+        if (currentProject.generalContractor) {
+          const gcMatch = loadedContacts.find(
+            c => c.name.toLowerCase() === currentProject.generalContractor.toLowerCase()
+          );
+          if (gcMatch) {
+            setSelectedGCContact(gcMatch.id);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error loading contacts:", error);
+    }
+  };
 
   const loadData = async () => {
     setIsLoading(true);
@@ -131,6 +219,11 @@ export default function ProjectSettingsPanel({ companyId, projectId, compact = f
       const projectData = await getDocument<Project>(projectPath);
       if (projectData) {
         setProject(projectData);
+        // Load contacts after project data is loaded so we can match them
+        await loadContacts(projectData);
+      } else {
+        // Even if no project data, still load contacts for dropdown
+        await loadContacts(project);
       }
     } catch (error) {
       console.error("Failed to load data:", error);
@@ -144,24 +237,196 @@ export default function ProjectSettingsPanel({ companyId, projectId, compact = f
     setSaveStatus("saving");
     
     try {
-      // Save project data
+      // Check if we should save contacts to address book
+      let shouldSaveOwner = false;
+      let shouldSaveGC = false;
+      
+      if (project.owner && !selectedOwnerContact) {
+        // Owner was manually entered, check if it exists in contacts
+        const ownerExists = contacts.some(c => c.name.toLowerCase() === project.owner.toLowerCase());
+        if (!ownerExists) {
+          shouldSaveOwner = confirm(`Would you like to save "${project.owner}" to your company address book?`);
+        }
+      }
+      
+      if (project.generalContractor && !selectedGCContact) {
+        // GC was manually entered, check if it exists in contacts
+        const gcExists = contacts.some(c => c.name.toLowerCase() === project.generalContractor.toLowerCase());
+        if (!gcExists) {
+          shouldSaveGC = confirm(`Would you like to save "${project.generalContractor}" to your company address book?`);
+        }
+      }
+
+      // Save contacts to address book if requested
+      if (shouldSaveOwner || shouldSaveGC) {
+        try {
+          const companyPath = `companies/${companyId}`;
+          const companyDoc = await getDocument(companyPath);
+          const existingContacts = (companyDoc?.contacts as Contact[]) || [];
+          
+          // Check for duplicates
+          if (shouldSaveOwner) {
+            const duplicate = existingContacts.find(
+              c => c.name.toLowerCase() === project.owner.toLowerCase()
+            );
+            if (duplicate) {
+              alert(`Contact "${project.owner}" already exists in your company address book.`);
+              setIsSaving(false);
+              setSaveStatus("unsaved");
+              return;
+            }
+          }
+          
+          if (shouldSaveGC) {
+            const duplicate = existingContacts.find(
+              c => c.name.toLowerCase() === project.generalContractor.toLowerCase()
+            );
+            if (duplicate) {
+              alert(`Contact "${project.generalContractor}" already exists in your company address book.`);
+              setIsSaving(false);
+              setSaveStatus("unsaved");
+              return;
+            }
+          }
+          
+          const updatedContacts = [...existingContacts];
+
+          if (shouldSaveOwner) {
+            const newOwnerContact: Contact = {
+              id: `contact-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              name: project.owner,
+              type: "customer",
+            };
+            updatedContacts.push(newOwnerContact);
+          }
+
+          if (shouldSaveGC) {
+            const newGCContact: Contact = {
+              id: `contact-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              name: project.generalContractor,
+              type: "contractor",
+              contactPerson: project.gcContact || "",
+              phone: project.gcPhone || "",
+              email: project.gcEmail || "",
+            };
+            updatedContacts.push(newGCContact);
+          }
+
+          if (companyDoc) {
+            await updateDocument("companies", companyId, {
+              contacts: updatedContacts,
+            });
+          } else {
+            await setDocument(companyPath, {
+              contacts: updatedContacts,
+            }, true);
+          }
+          
+          // Update local contacts state
+          setContacts(updatedContacts);
+        } catch (error) {
+          console.error("Error saving contacts:", error);
+          // Don't block project save if contact save fails
+        }
+      }
+
+      // Clean project data - remove undefined values and ensure proper types
+      // IMPORTANT: Load existing project to preserve fields like 'archived' that might not be in local state
       const projectPath = `companies/${companyId}/projects`;
-      await updateDocument(projectPath, projectId, project);
+      const fullProjectPath = `${projectPath}/${projectId}`;
+      const existingProjectData = await getDocument(fullProjectPath);
+      
+      const projectDataToSave: any = {
+        ...(existingProjectData || {}), // Start with existing data to preserve all fields
+        ...project, // Override with current form data
+        estimatedValue: project.estimatedValue ? (typeof project.estimatedValue === 'string' ? parseFloat(project.estimatedValue) : project.estimatedValue) : undefined,
+        probabilityOfWin: project.probabilityOfWin ?? 50,
+        competitionLevel: project.competitionLevel || "medium",
+        status: project.status || "draft",
+        // Explicitly set archived: preserve if exists, otherwise default to false
+        archived: existingProjectData?.archived === true ? true : false,
+      };
+      
+      // Remove only undefined values (keep empty strings for text fields)
+      Object.keys(projectDataToSave).forEach(key => {
+        if (projectDataToSave[key] === undefined) {
+          delete projectDataToSave[key];
+        }
+      });
+
+      // Save project data - check if document exists first
+      if (existingProjectData) {
+        // Document exists, update it
+        await updateDocument(projectPath, projectId, projectDataToSave);
+      } else {
+        // Document doesn't exist, create it
+        await createDocument(projectPath, {
+          ...projectDataToSave,
+          id: projectId,
+        });
+      }
 
       // Save project settings (rate overrides and project labor rates)
+      // Filter out labor rates with empty trade names
+      const validLaborRates = projectLaborRates
+        .filter(rate => rate.trade && rate.trade.trim() !== "")
+        .map(({ id, ...rest }) => rest);
+      
       const settingsToSave: ProjectSettings = {
         ...projectSettings,
-        laborRates: projectLaborRates.length > 0 
-          ? projectLaborRates.map(({ id, ...rest }) => rest)
-          : undefined,
+        laborRates: validLaborRates.length > 0 ? validLaborRates : undefined,
       };
+      
+      // Remove undefined values from settings
+      Object.keys(settingsToSave).forEach(key => {
+        if (settingsToSave[key as keyof ProjectSettings] === undefined) {
+          delete settingsToSave[key as keyof ProjectSettings];
+        }
+      });
+      
       await saveProjectSettings(companyId, projectId, settingsToSave);
+
+      // Auto-create/update bid event if bidDueDate is set
+      if (project.bidDueDate && project.bidDueDate.trim() !== "") {
+        try {
+          const bidEventsPath = `companies/${companyId}/bidEvents`;
+          
+          // Check if a bid event already exists for this project
+          const existingBidEvents = await queryDocuments<BidEvent>(bidEventsPath);
+          const existingEvent = existingBidEvents.find(e => e.projectId === projectId);
+          
+          const bidEventData: Omit<BidEvent, "id"> = {
+            date: project.bidDueDate,
+            projectName: project.projectName || "Untitled Project",
+            projectId: projectId,
+            generalContractor: project.generalContractor || "",
+            notes: project.notes || "",
+            status: (project.status || "draft") as "draft" | "active" | "submitted" | "won" | "lost",
+            estimatedValue: project.estimatedValue ? (typeof project.estimatedValue === 'string' ? parseFloat(project.estimatedValue) : project.estimatedValue) : undefined,
+            updatedAt: new Date(),
+          };
+          
+          if (existingEvent?.id) {
+            // Update existing bid event
+            await updateDocument(bidEventsPath, existingEvent.id, bidEventData);
+          } else {
+            // Create new bid event
+            bidEventData.createdAt = new Date();
+            await createDocument(bidEventsPath, bidEventData);
+          }
+        } catch (error) {
+          console.error("Failed to create/update bid event:", error);
+          // Don't block project save if bid event creation fails
+        }
+      }
 
       setSaveStatus("saved");
       setTimeout(() => setSaveStatus("unsaved"), 3000);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to save project settings:", error);
-      alert("Failed to save settings. Please try again.");
+      const errorMessage = error?.message || error?.toString() || "Unknown error occurred";
+      alert(`Failed to save settings: ${errorMessage}. Please check the console for more details.`);
+      setSaveStatus("unsaved");
     } finally {
       setIsSaving(false);
     }
@@ -313,22 +578,123 @@ export default function ProjectSettingsPanel({ companyId, projectId, compact = f
                 <label className="block text-xs font-medium text-gray-700 mb-1">
                   Owner/Client
                 </label>
-                <Input
-                  value={project.owner || ""}
-                  onChange={(e) => setProject({ ...project, owner: e.target.value })}
-                  placeholder="End customer or owner"
-                />
+                <div className="space-y-2">
+                  <select
+                    value={selectedOwnerContact}
+                    onChange={(e) => {
+                      const contactId = e.target.value;
+                      setSelectedOwnerContact(contactId);
+                      if (contactId) {
+                        const contact = contacts.find(c => c.id === contactId);
+                        if (contact) {
+                          // Build address string from contact
+                          const addressParts = [
+                            contact.address,
+                            contact.city,
+                            contact.state,
+                            contact.zip
+                          ].filter(Boolean);
+                          const fullAddress = addressParts.length > 0 
+                            ? addressParts.join(", ")
+                            : "";
+                          
+                          setProject({
+                            ...project,
+                            owner: contact.name,
+                            // Update location if contact has address and project location is empty
+                            location: project.location || fullAddress,
+                          });
+                        }
+                      } else {
+                        setProject({ ...project, owner: "" });
+                      }
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select from address book...</option>
+                    {contacts
+                      .filter(c => c.type === "customer" || c.type === "other")
+                      .map(contact => (
+                        <option key={contact.id} value={contact.id}>
+                          {contact.name}
+                        </option>
+                      ))}
+                  </select>
+                  <Input
+                    value={project.owner || ""}
+                    onChange={(e) => {
+                      setProject({ ...project, owner: e.target.value });
+                      setSelectedOwnerContact(""); // Clear selection when manually typing
+                    }}
+                    placeholder="Or enter manually"
+                  />
+                </div>
                 <p className="text-xs text-gray-500 mt-1">End customer (separate from GC)</p>
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
                   General Contractor
                 </label>
-                <Input
-                  value={project.generalContractor || ""}
-                  onChange={(e) => setProject({ ...project, generalContractor: e.target.value })}
-                  placeholder="Enter GC name"
-                />
+                <div className="space-y-2">
+                  <select
+                    value={selectedGCContact}
+                    onChange={(e) => {
+                      const contactId = e.target.value;
+                      setSelectedGCContact(contactId);
+                      if (contactId) {
+                        const contact = contacts.find(c => c.id === contactId);
+                        if (contact) {
+                          // Build address string from contact
+                          const addressParts = [
+                            contact.address,
+                            contact.city,
+                            contact.state,
+                            contact.zip
+                          ].filter(Boolean);
+                          const fullAddress = addressParts.length > 0 
+                            ? addressParts.join(", ")
+                            : "";
+                          
+                          setProject({
+                            ...project,
+                            generalContractor: contact.name,
+                            gcContact: contact.contactPerson || "",
+                            gcPhone: contact.phone || "",
+                            gcEmail: contact.email || "",
+                            // Update location if contact has address and project location is empty
+                            location: project.location || fullAddress,
+                          });
+                        }
+                      } else {
+                        setProject({
+                          ...project,
+                          generalContractor: "",
+                          gcContact: "",
+                          gcPhone: "",
+                          gcEmail: "",
+                        });
+                      }
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select from address book...</option>
+                    {contacts
+                      .filter(c => c.type === "contractor" || c.type === "other")
+                      .map(contact => (
+                        <option key={contact.id} value={contact.id}>
+                          {contact.name}
+                        </option>
+                      ))}
+                  </select>
+                  <Input
+                    value={project.generalContractor || ""}
+                    onChange={(e) => {
+                      setProject({ ...project, generalContractor: e.target.value });
+                      setSelectedGCContact(""); // Clear selection when manually typing
+                    }}
+                    placeholder="Or enter manually"
+                  />
+                </div>
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1 flex items-center gap-1">
@@ -478,13 +844,58 @@ export default function ProjectSettingsPanel({ companyId, projectId, compact = f
                   Material Rate ($/lb)
                 </label>
                 <Input
-                  type="number"
-                  step="0.01"
-                  value={projectSettings.materialRate || ""}
-                  onChange={(e) => setProjectSettings({ 
-                    ...projectSettings, 
-                    materialRate: e.target.value ? parseFloat(e.target.value) : undefined 
-                  })}
+                  type="text"
+                  inputMode="decimal"
+                  value={projectSettings.materialRate !== undefined && projectSettings.materialRate !== 0 
+                    ? projectSettings.materialRate.toString() 
+                    : ""}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    // Allow empty, numbers, decimal points, and very small decimals like .001
+                    // Pattern: optional negative, optional leading digits, decimal point, and trailing digits
+                    // Also allow partial input like "0." or ".0" or ".001"
+                    if (value === "" || value === "." || /^-?(\d+\.?\d*|\.\d*)$/.test(value)) {
+                      if (value === "" || value === ".") {
+                        setProjectSettings({ 
+                          ...projectSettings, 
+                          materialRate: undefined 
+                        });
+                      } else {
+                        const numValue = parseFloat(value);
+                        // Only update if it's a valid number or still being typed (like "0." or ".001")
+                        if (!isNaN(numValue) || value.endsWith(".") || /^\.\d*$/.test(value)) {
+                          setProjectSettings({ 
+                            ...projectSettings, 
+                            materialRate: isNaN(numValue) ? undefined : numValue
+                          });
+                        }
+                      }
+                    }
+                  }}
+                  onBlur={(e) => {
+                    // Ensure valid number on blur
+                    const value = e.target.value.trim();
+                    if (value === "" || value === ".") {
+                      setProjectSettings({ 
+                        ...projectSettings, 
+                        materialRate: undefined 
+                      });
+                    } else {
+                      const numValue = parseFloat(value);
+                      if (!isNaN(numValue)) {
+                        setProjectSettings({ 
+                          ...projectSettings, 
+                          materialRate: numValue 
+                        });
+                      } else {
+                        // Invalid input, clear it
+                        setProjectSettings({ 
+                          ...projectSettings, 
+                          materialRate: undefined 
+                        });
+                      }
+                    }
+                  }}
                   placeholder={companySettings?.materialGrades?.[0] ? `Default: $${companySettings.materialGrades[0].costPerPound}/lb` : "Company default"}
                 />
               </div>
@@ -493,13 +904,58 @@ export default function ProjectSettingsPanel({ companyId, projectId, compact = f
                   Labor Rate ($/hr)
                 </label>
                 <Input
-                  type="number"
-                  step="0.01"
-                  value={projectSettings.laborRate || ""}
-                  onChange={(e) => setProjectSettings({ 
-                    ...projectSettings, 
-                    laborRate: e.target.value ? parseFloat(e.target.value) : undefined 
-                  })}
+                  type="text"
+                  inputMode="decimal"
+                  value={projectSettings.laborRate !== undefined && projectSettings.laborRate !== 0 
+                    ? projectSettings.laborRate.toString() 
+                    : ""}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    // Allow empty, numbers, decimal points, and very small decimals like .001
+                    // Pattern: optional negative, optional leading digits, decimal point, and trailing digits
+                    // Also allow partial input like "0." or ".0" or ".001"
+                    if (value === "" || value === "." || /^-?(\d+\.?\d*|\.\d*)$/.test(value)) {
+                      if (value === "" || value === ".") {
+                        setProjectSettings({ 
+                          ...projectSettings, 
+                          laborRate: undefined 
+                        });
+                      } else {
+                        const numValue = parseFloat(value);
+                        // Only update if it's a valid number or still being typed (like "0." or ".001")
+                        if (!isNaN(numValue) || value.endsWith(".") || /^\.\d*$/.test(value)) {
+                          setProjectSettings({ 
+                            ...projectSettings, 
+                            laborRate: isNaN(numValue) ? undefined : numValue
+                          });
+                        }
+                      }
+                    }
+                  }}
+                  onBlur={(e) => {
+                    // Ensure valid number on blur
+                    const value = e.target.value.trim();
+                    if (value === "" || value === ".") {
+                      setProjectSettings({ 
+                        ...projectSettings, 
+                        laborRate: undefined 
+                      });
+                    } else {
+                      const numValue = parseFloat(value);
+                      if (!isNaN(numValue)) {
+                        setProjectSettings({ 
+                          ...projectSettings, 
+                          laborRate: numValue 
+                        });
+                      } else {
+                        // Invalid input, clear it
+                        setProjectSettings({ 
+                          ...projectSettings, 
+                          laborRate: undefined 
+                        });
+                      }
+                    }
+                  }}
                   placeholder={companySettings?.laborRates?.[0] ? `Default: $${companySettings.laborRates[0].rate}/hr` : "Company default"}
                 />
               </div>
@@ -508,13 +964,43 @@ export default function ProjectSettingsPanel({ companyId, projectId, compact = f
                   Coating Rate ($/SF)
                 </label>
                 <Input
-                  type="number"
-                  step="0.01"
-                  value={projectSettings.coatingRate || ""}
-                  onChange={(e) => setProjectSettings({ 
-                    ...projectSettings, 
-                    coatingRate: e.target.value ? parseFloat(e.target.value) : undefined 
-                  })}
+                  type="text"
+                  inputMode="decimal"
+                  value={coatingRateInput}
+                  onFocus={() => setFocusedInput("coatingRate")}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    // Allow any input while typing - validate on blur
+                    // Only allow numbers, decimal point, and minus sign
+                    if (value === "" || /^-?\d*\.?\d*$/.test(value)) {
+                      setCoatingRateInput(value);
+                    }
+                  }}
+                  onBlur={(e) => {
+                    setFocusedInput(null);
+                    // Convert to number on blur
+                    const value = e.target.value.trim();
+                    if (value === "" || value === "." || value === "-" || value === "-.") {
+                      setCoatingRateInput("");
+                      setProjectSettings({ 
+                        ...projectSettings, 
+                        coatingRate: undefined 
+                      });
+                    } else {
+                      const numValue = parseFloat(value);
+                      if (!isNaN(numValue)) {
+                        setProjectSettings({ 
+                          ...projectSettings, 
+                          coatingRate: numValue 
+                        });
+                        // Update input to show formatted value
+                        setCoatingRateInput(numValue.toString());
+                      } else {
+                        // Invalid input, reset to last valid value
+                        setCoatingRateInput(projectSettings.coatingRate !== undefined ? projectSettings.coatingRate.toString() : "");
+                      }
+                    }
+                  }}
                   placeholder={companySettings?.coatingTypes?.[0] ? `Default: $${companySettings.coatingTypes[0].costPerSF}/SF` : "Company default"}
                 />
               </div>

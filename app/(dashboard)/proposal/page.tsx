@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
-import { FileDown } from "lucide-react";
+import { FileDown, Sparkles } from "lucide-react";
 import { generateProposal } from "@/lib/openai/gpt4";
 
 export default function ProposalPage() {
@@ -38,7 +38,10 @@ export default function ProposalPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <h1 className="text-3xl font-bold text-gray-900">Proposal Generator</h1>
+      <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
+        <Sparkles className="w-8 h-8 text-purple-500" />
+        <span>AI Generated Proposal</span>
+      </h1>
       
       <Card>
         <CardHeader>

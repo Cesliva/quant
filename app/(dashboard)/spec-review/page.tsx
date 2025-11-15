@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
-import { CheckCircle, AlertTriangle, XCircle } from "lucide-react";
+import { CheckCircle, AlertTriangle, XCircle, Sparkles } from "lucide-react";
 import { reviewSpecifications } from "@/lib/openai/gpt4";
 
 export default function SpecReviewPage() {
@@ -63,7 +63,10 @@ export default function SpecReviewPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      <h1 className="text-3xl font-bold text-gray-900">AI Spec Review</h1>
+      <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
+        <Sparkles className="w-8 h-8 text-purple-500" />
+        <span>AI Spec Review</span>
+      </h1>
       
       <div className="grid grid-cols-2 gap-6">
         <Card>

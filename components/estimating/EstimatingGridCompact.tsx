@@ -1,18 +1,31 @@
 "use client";
 
-import { ChevronDown, ChevronRight, Edit, Trash2, Copy, X, Check } from "lucide-react";
+import { ChevronDown, ChevronRight, Edit, Trash2, Copy, X, Check, Info } from "lucide-react";
 import { EstimatingLine } from "./EstimatingGrid";
 import EstimatingRowDetail from "./EstimatingRowDetail";
 import { getShapesByType } from "@/lib/utils/aiscShapes";
+import { useState, useRef, useEffect } from "react";
+import { getMaterialGradeInfo, getPlateGradeInfo } from "@/lib/utils/steelGradeInfo";
+import {
+  getAvailableThicknesses,
+  getThicknessLabelFromInches,
+  convertThicknessInputToInches,
+} from "@/lib/utils/plateDatabase";
+
+const plateThicknesses = getAvailableThicknesses();
+const plateThicknessOptions = plateThicknesses.map((spec) => spec.thickness);
 
 interface EstimatingGridCompactProps {
   lines: EstimatingLine[];
+  allLines?: EstimatingLine[]; // All lines (ungrouped) for parent dropdown
   editingId: string | null;
   editingLine: Partial<EstimatingLine>;
   isManualMode: boolean;
   defaultMaterialRate: number;
   defaultLaborRate: number;
   defaultCoatingRate: number;
+  companySettings?: import("@/lib/utils/settingsLoader").CompanySettings | null;
+  projectSettings?: import("@/lib/utils/settingsLoader").ProjectSettings | null;
   onEdit: (line: EstimatingLine) => void;
   onSave: () => void;
   onCancel: () => void;
@@ -32,14 +45,113 @@ interface EstimatingGridCompactProps {
   onExpandedRowChange: (rowId: string | null) => void;
 }
 
+// Grade Info Tooltip Component
+function GradeInfoTooltip({ materialType }: { materialType: "Material" | "Plate" | null }) {
+  const [showInfo, setShowInfo] = useState(false);
+  const infoRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showInfo && infoRef.current) {
+        const target = event.target as Node;
+        if (!infoRef.current.contains(target)) {
+          setShowInfo(false);
+        }
+      }
+    };
+
+    if (showInfo) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [showInfo]);
+
+  // Get all grades for the tooltip
+  const allMaterialGrades = [
+    "A992", "A913 Grade 65", "A913 Grade 70", "A500 Grade B", "A500 Grade C",
+    "A1085", "A53 Type E", "A53 Type S", "A252 Grade 1", "A252 Grade 2",
+    "A252 Grade 3", "Stainless 304", "Stainless 316"
+  ];
+  const allPlateGrades = [
+    "A36", "A572 Grade 50", "A572 Grade 42", "A588 (Weathering)",
+    "A514 (T-1)", "A516 Grade 70", "A529 Grade 50"
+  ];
+
+  const grades = materialType === "Material" ? allMaterialGrades : 
+                 materialType === "Plate" ? allPlateGrades :
+                 [...allMaterialGrades, ...allPlateGrades];
+
+  return (
+    <div className="relative inline-block">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          setShowInfo(!showInfo);
+        }}
+        className="text-blue-500 hover:text-blue-700 transition-colors"
+        title="View grade information"
+      >
+        <Info className="w-3.5 h-3.5" />
+      </button>
+      {showInfo && (
+        <div
+          ref={infoRef}
+          className="absolute right-0 top-6 z-50 w-80 bg-white border border-gray-300 rounded-lg shadow-xl p-4 text-xs"
+          style={{ maxHeight: "400px", overflowY: "auto" }}
+        >
+          <div className="font-semibold text-sm text-gray-900 mb-3 pb-2 border-b">
+            Steel Grade Reference
+          </div>
+          <div className="space-y-4">
+            {grades.map((grade) => {
+              const gradeInfo = materialType === "Material" || (!materialType && allMaterialGrades.includes(grade))
+                ? getMaterialGradeInfo(grade)
+                : getPlateGradeInfo(grade);
+              if (!gradeInfo) return null;
+              return (
+                <div key={grade} className="border-b border-gray-100 pb-3 last:border-0">
+                  <div className="font-semibold text-gray-900 mb-1">{gradeInfo.grade}</div>
+                  <div className="text-gray-600 mb-2">{gradeInfo.description}</div>
+                  {gradeInfo.yieldStrength && (
+                    <div className="text-gray-500 mb-2">
+                      <span className="font-medium">Yield Strength:</span> {gradeInfo.yieldStrength}
+                    </div>
+                  )}
+                  <div className="mb-2">
+                    <div className="font-medium text-gray-700 mb-1">Typical Uses:</div>
+                    <ul className="list-disc list-inside text-gray-600 space-y-0.5">
+                      {gradeInfo.typicalUses.map((use, idx) => (
+                        <li key={idx}>{use}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  {gradeInfo.notes && (
+                    <div className="text-gray-500 italic text-xs mt-2">
+                      {gradeInfo.notes}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function EstimatingGridCompact({
   lines,
+  allLines = lines,
   editingId,
   editingLine,
   isManualMode,
   defaultMaterialRate,
   defaultLaborRate,
   defaultCoatingRate,
+  companySettings,
+  projectSettings,
   onEdit,
   onSave,
   onCancel,
@@ -50,6 +162,32 @@ export default function EstimatingGridCompact({
   expandedRowId,
   onExpandedRowChange,
 }: EstimatingGridCompactProps) {
+  // State for filterable size dropdowns (per row)
+  const [sizeFilters, setSizeFilters] = useState<Record<string, string>>({});
+  const [sizeDropdownOpen, setSizeDropdownOpen] = useState<Record<string, boolean>>({});
+  const sizeDropdownRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      Object.keys(sizeDropdownOpen).forEach((lineId) => {
+        if (sizeDropdownOpen[lineId] && sizeDropdownRefs.current[lineId]) {
+          const dropdownElement = sizeDropdownRefs.current[lineId];
+          if (dropdownElement && !dropdownElement.contains(target)) {
+            setSizeDropdownOpen((prev) => ({ ...prev, [lineId]: false }));
+            setSizeFilters((prev) => ({ ...prev, [lineId]: "" }));
+          }
+        }
+      });
+    };
+
+    if (Object.values(sizeDropdownOpen).some(open => open)) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [sizeDropdownOpen]);
+
   const toggleRow = (lineId: string) => {
     if (expandedRowId === lineId) {
       onExpandedRowChange(null);
@@ -58,8 +196,19 @@ export default function EstimatingGridCompact({
     }
   };
 
+  const getPlateThicknessDisplay = (thickness?: number | string) => {
+    if (typeof thickness === "number") {
+      return getThicknessLabelFromInches(thickness) || thickness.toFixed(3);
+    }
+    if (typeof thickness === "string" && thickness) {
+      const numeric = convertThicknessInputToInches(thickness);
+      return getThicknessLabelFromInches(numeric) || thickness;
+    }
+    return "";
+  };
+
   const getSpecDisplay = (line: EstimatingLine) => {
-    if (line.materialType === "Rolled") {
+    if (line.materialType === "Material") {
       const shapeType = line.shapeType || "";
       const sizeDesignation = line.sizeDesignation || "";
       
@@ -77,8 +226,9 @@ export default function EstimatingGridCompact({
       // Otherwise, combine shapeType and sizeDesignation
       return `${shapeType} ${sizeDesignation}`.trim() || "-";
     } else if (line.materialType === "Plate") {
-      if (line.thickness && line.width && line.plateLength) {
-        return `${line.thickness}" × ${line.width}" × ${line.plateLength}"`;
+      const thicknessLabel = getPlateThicknessDisplay(line.thickness);
+      if (thicknessLabel && line.width && line.plateLength) {
+        return `${thicknessLabel}" × ${line.width}" × ${line.plateLength}"`;
       }
       return "-";
     }
@@ -90,7 +240,7 @@ export default function EstimatingGridCompact({
     const isEditing = editingId === line.id;
     const currentLine = isEditing ? { ...line, ...editingLine } : line;
     
-    if (currentLine.materialType === "Rolled") {
+    if (currentLine.materialType === "Material") {
       return currentLine.totalWeight || 0;
     } else {
       return currentLine.plateTotalWeight || 0;
@@ -105,7 +255,7 @@ export default function EstimatingGridCompact({
   };
 
   const getTypeBadge = (type?: string) => {
-    if (type === "Rolled") {
+    if (type === "Material") {
       return <span className="px-2 py-0.5 bg-blue-100 text-blue-800 text-xs rounded">Material</span>;
     } else if (type === "Plate") {
       return <span className="px-2 py-0.5 bg-purple-100 text-purple-800 text-xs rounded">Plate</span>;
@@ -127,12 +277,18 @@ export default function EstimatingGridCompact({
             <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700">Item</th>
             <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700">Type</th>
             <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700">Spec</th>
-            <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700">Grade</th>
+            <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700">
+              <div className="flex items-center gap-1">
+                Grade
+                <GradeInfoTooltip materialType={null} />
+              </div>
+            </th>
             <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700">Qty</th>
             <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700">Length</th>
             <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700 bg-blue-50">Material ($)</th>
             <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700 bg-blue-50">Weight (lbs)</th>
             <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700 bg-purple-50">Finishes ($)</th>
+            <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700 bg-orange-50">Hardware ($)</th>
             <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700 bg-green-50">Labor (hrs)</th>
             <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700 bg-amber-50">Cost ($)</th>
             <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700">Status</th>
@@ -150,11 +306,17 @@ export default function EstimatingGridCompact({
             </tr>
           ) : (
             lines.map((line) => {
-                    const isExpanded = expandedRowId === line.id;
+              const isExpanded = expandedRowId === line.id;
               const isEditing = editingId === line.id;
               // Merge editingLine with line for display when editing
               const displayLine = isEditing ? { ...line, ...editingLine } : line;
-              const lengthDisplay = displayLine.materialType === "Rolled"
+              const isSmallPart = !displayLine.isMainMember && displayLine.parentLineId;
+              const hardwareCostDisplay = (
+                displayLine.hardwareCost !== undefined && displayLine.hardwareCost !== null
+                  ? displayLine.hardwareCost
+                  : (displayLine.hardwareQuantity || 0) * (displayLine.hardwareCostPerSet || 0)
+              );
+              const lengthDisplay = displayLine.materialType === "Material"
                 ? `${displayLine.lengthFt || 0}'${displayLine.lengthIn ? ` ${displayLine.lengthIn}"` : ""}`
                 : displayLine.plateLength
                 ? `${displayLine.plateLength}"`
@@ -166,7 +328,9 @@ export default function EstimatingGridCompact({
                     key={line.id}
                     className={`hover:bg-gray-50 transition-colors ${
                       line.status === "Void" ? "opacity-50" : ""
-                    } ${isExpanded ? "bg-blue-50" : ""}`}
+                    } ${isExpanded ? "bg-blue-50" : ""} ${
+                      isSmallPart ? "bg-blue-50/30" : ""
+                    }`}
                   >
                     {/* Expand/Collapse Button */}
                     <td className="sticky left-0 z-10 bg-white border-r-2 border-gray-300 px-2 py-2">
@@ -185,6 +349,9 @@ export default function EstimatingGridCompact({
 
                     {/* Line ID */}
                     <td className="sticky left-12 z-10 bg-white border-r-2 border-gray-300 px-3 py-2 font-medium">
+                      {isSmallPart && (
+                        <span className="text-blue-600 mr-2">└─</span>
+                      )}
                       {line.lineId || "-"}
                     </td>
 
@@ -224,50 +391,76 @@ export default function EstimatingGridCompact({
                     {/* Type - Editable dropdown in manual mode */}
                     <td className="px-4 py-2">
                       {isManualMode ? (
-                        <select
-                          value={isEditing ? (editingLine.shapeType || "") : (line.shapeType || "")}
-                          onChange={(e) => {
-                            if (!isEditing) {
-                              onEdit(line);
-                            }
-                            onChange("shapeType", e.target.value, line);
-                            // Auto-save after selection
-                            setTimeout(() => {
-                              if (isEditing || editingId === line.id) {
-                                onSave();
+                        <div className="flex gap-1 items-center">
+                          {/* Material Type Dropdown - compact */}
+                          <select
+                            value={displayLine.materialType || "Material"}
+                            onChange={(e) => {
+                              if (!isEditing) {
+                                onEdit(line);
                               }
-                            }, 100);
-                          }}
-                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                          <option value="">Select Type...</option>
-                          <option value="W">W - Wide Flange</option>
-                          <option value="HSS">HSS - Hollow Structural Section</option>
-                          <option value="C">C - Channel</option>
-                          <option value="L">L - Angle</option>
-                          <option value="T">T - Tee</option>
-                          <option value="WT">WT - Tee (from W)</option>
-                          <option value="S">S - American Standard Beam</option>
-                          <option value="M">M - Miscellaneous</option>
-                          <option value="MT">MT - Miscellaneous Tee</option>
-                          <option value="ST">ST - Structural Tee</option>
-                          <option value="PIPE">PIPE - Pipe</option>
-                        </select>
+                              onChange("materialType", e.target.value, line);
+                              // Auto-save after selection
+                              setTimeout(() => {
+                                if (isEditing || editingId === line.id) {
+                                  onSave();
+                                }
+                              }, 100);
+                            }}
+                            className="w-20 px-1.5 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            title="Material Type"
+                          >
+                            <option value="Material">Material</option>
+                            <option value="Plate">Plate</option>
+                          </select>
+                          {/* Shape Type Dropdown - only show if Material Type is Material */}
+                          {displayLine.materialType === "Material" && (
+                            <select
+                              value={displayLine.shapeType || ""}
+                              onChange={(e) => {
+                                if (!isEditing) {
+                                  onEdit(line);
+                                }
+                                onChange("shapeType", e.target.value, line);
+                                // Auto-save after selection
+                                setTimeout(() => {
+                                  if (isEditing || editingId === line.id) {
+                                    onSave();
+                                  }
+                                }, 100);
+                              }}
+                              className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                              <option value="">Select Type...</option>
+                              <option value="W">W - Wide Flange</option>
+                              <option value="HSS">HSS - Hollow Structural Section</option>
+                              <option value="C">C - Channel</option>
+                              <option value="L">L - Angle</option>
+                              <option value="T">T - Tee</option>
+                              <option value="WT">WT - Tee (from W)</option>
+                              <option value="S">S - American Standard Beam</option>
+                              <option value="M">M - Miscellaneous</option>
+                              <option value="MT">MT - Miscellaneous Tee</option>
+                              <option value="ST">ST - Structural Tee</option>
+                              <option value="PIPE">PIPE - Pipe</option>
+                            </select>
+                          )}
+                        </div>
                       ) : (
-                        line.materialType === "Rolled" && line.shapeType ? (
+                        displayLine.materialType === "Material" && displayLine.shapeType ? (
                           <span className="px-2 py-0.5 bg-blue-100 text-blue-800 text-xs rounded">
-                            {line.shapeType === "W" ? "Wide Flange" :
-                             line.shapeType === "HSS" ? "HSS" :
-                             line.shapeType === "C" ? "Channel" :
-                             line.shapeType === "L" ? "Angle" :
-                             line.shapeType === "T" ? "Tee" :
-                             line.shapeType === "WT" ? "WT" :
-                             line.shapeType === "S" ? "Standard Beam" :
-                             line.shapeType === "PIPE" ? "Pipe" :
-                             line.shapeType}
+                            {displayLine.shapeType === "W" ? "Wide Flange" :
+                             displayLine.shapeType === "HSS" ? "HSS" :
+                             displayLine.shapeType === "C" ? "Channel" :
+                             displayLine.shapeType === "L" ? "Angle" :
+                             displayLine.shapeType === "T" ? "Tee" :
+                             displayLine.shapeType === "WT" ? "WT" :
+                             displayLine.shapeType === "S" ? "Standard Beam" :
+                             displayLine.shapeType === "PIPE" ? "Pipe" :
+                             displayLine.shapeType}
                           </span>
                         ) : (
-                          getTypeBadge(line.materialType)
+                          getTypeBadge(displayLine.materialType)
                         )
                       )}
                     </td>
@@ -276,59 +469,166 @@ export default function EstimatingGridCompact({
                     <td className="px-4 py-2 text-gray-700">
                       {isManualMode ? (
                         (() => {
-                          const currentMaterialType = (isEditing ? editingLine.materialType : line.materialType) || line.materialType;
-                          const currentShapeType = isEditing ? editingLine.shapeType : line.shapeType;
+                          const currentMaterialType = displayLine.materialType || "Material";
+                          const currentShapeType = displayLine.shapeType;
                           
-                          if (currentMaterialType === "Rolled") {
+                          if (currentMaterialType === "Material") {
                             const availableSizes = currentShapeType
                               ? getShapesByType(currentShapeType as any).map((shape) => shape["Member Size"])
                               : [];
+                            const lineId = line.id || "";
+                            const currentValue = isEditing ? (editingLine.sizeDesignation || "") : (line.sizeDesignation || "");
+                            const filterValue = sizeFilters[lineId] || "";
+                            const isOpen = sizeDropdownOpen[lineId] || false;
+                            
+                            // Filter sizes based on input - if no filter, show all
+                            const filteredSizes = filterValue
+                              ? availableSizes.filter((size) =>
+                                  size.toLowerCase().includes(filterValue.toLowerCase())
+                                )
+                              : availableSizes;
+                            
+                            // Determine what to show in the input
+                            // When dropdown is open, always show filterValue (even if empty) so user can type
+                            // When closed, show currentValue
+                            const displayValue = isOpen ? filterValue : currentValue;
+                            
                             return (
-                              <select
-                                value={isEditing ? (editingLine.sizeDesignation || "") : (line.sizeDesignation || "")}
-                                onChange={(e) => {
-                                  if (!isEditing) {
-                                    onEdit(line);
-                                  }
-                                  // Update sizeDesignation - this will trigger weight recalculation
-                                  onChange("sizeDesignation", e.target.value, line);
-                                  // Don't save immediately - let the calculation effect run first
-                                  setTimeout(() => {
-                                    if (isEditing || editingId === line.id) {
-                                      onSave();
-                                    }
-                                  }, 300); // Increased delay to allow calculation to complete
+                              <div 
+                                className="relative w-full" 
+                                ref={(el) => {
+                                  if (el) sizeDropdownRefs.current[lineId] = el;
                                 }}
-                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                disabled={!currentShapeType}
                               >
-                                <option value="">Select Size...</option>
-                                {availableSizes.map((size) => (
-                                  <option key={size} value={size}>{size}</option>
-                                ))}
-                              </select>
+                                <div className="relative">
+                                  <input
+                                    type="text"
+                                    value={displayValue}
+                                    onChange={(e) => {
+                                      const newFilter = e.target.value;
+                                      setSizeFilters((prev) => ({ ...prev, [lineId]: newFilter }));
+                                      
+                                      // Always keep dropdown open when typing
+                                      if (!isOpen) {
+                                        setSizeDropdownOpen((prev) => ({ ...prev, [lineId]: true }));
+                                      }
+                                      
+                                      // If exact match found, select it
+                                      const exactMatch = availableSizes.find(
+                                        (size) => size.toLowerCase() === newFilter.toLowerCase()
+                                      );
+                                      if (exactMatch) {
+                                        if (!isEditing) {
+                                          onEdit(line);
+                                        }
+                                        onChange("sizeDesignation", exactMatch, line);
+                                        setSizeFilters((prev) => ({ ...prev, [lineId]: "" }));
+                                        setSizeDropdownOpen((prev) => ({ ...prev, [lineId]: false }));
+                                        setTimeout(() => {
+                                          if (isEditing || editingId === line.id) {
+                                            onSave();
+                                          }
+                                        }, 300);
+                                      }
+                                    }}
+                                    onFocus={(e) => {
+                                      setSizeDropdownOpen((prev) => ({ ...prev, [lineId]: true }));
+                                      // Clear the filter so input is empty and user can type
+                                      setSizeFilters((prev) => ({ ...prev, [lineId]: "" }));
+                                      // Select all text if there's a current value, so typing replaces it
+                                      if (currentValue) {
+                                        e.currentTarget.select();
+                                      }
+                                    }}
+                                    onBlur={(e) => {
+                                      // Delay closing to allow click on dropdown option to register
+                                      setTimeout(() => {
+                                        const activeElement = document.activeElement;
+                                        if (!sizeDropdownRefs.current[lineId]?.contains(activeElement)) {
+                                          setSizeFilters((prev) => ({ ...prev, [lineId]: "" }));
+                                          setSizeDropdownOpen((prev) => ({ ...prev, [lineId]: false }));
+                                        }
+                                      }, 200);
+                                    }}
+                                    placeholder={currentValue || "Type to filter sizes..."}
+                                    className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    disabled={!currentShapeType}
+                                  />
+                                  <ChevronDown 
+                                    className={`absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                                  />
+                                </div>
+                                {isOpen && currentShapeType && availableSizes.length > 0 && (
+                                  <>
+                                    {filteredSizes.length > 0 ? (
+                                      <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                                        {filteredSizes.map((size) => (
+                                          <button
+                                            key={size}
+                                            type="button"
+                                            onMouseDown={(e) => {
+                                              // Use onMouseDown to prevent blur from firing first
+                                              e.preventDefault();
+                                              if (!isEditing) {
+                                                onEdit(line);
+                                              }
+                                              onChange("sizeDesignation", size, line);
+                                              setSizeFilters((prev) => ({ ...prev, [lineId]: "" }));
+                                              setSizeDropdownOpen((prev) => ({ ...prev, [lineId]: false }));
+                                              setTimeout(() => {
+                                                if (isEditing || editingId === line.id) {
+                                                  onSave();
+                                                }
+                                              }, 300);
+                                            }}
+                                            className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 ${
+                                              currentValue === size ? "bg-blue-100 font-semibold" : ""
+                                            }`}
+                                          >
+                                            {size}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    ) : filterValue ? (
+                                      <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg p-3 text-sm text-gray-500">
+                                        No sizes found matching "{filterValue}"
+                                      </div>
+                                    ) : null}
+                                  </>
+                                )}
+                              </div>
                             );
                           } else {
                             return (
                               <div className="flex gap-1 text-xs">
-                                <input
-                                  type="number"
-                                  value={isEditing ? (editingLine.thickness || "") : (line.thickness || "")}
+                                <select
+                                  value={
+                                    isEditing
+                                      ? getPlateThicknessDisplay(editingLine.thickness) || ""
+                                      : getPlateThicknessDisplay(line.thickness) || ""
+                                  }
                                   onChange={(e) => {
                                     if (!isEditing) {
                                       onEdit(line);
                                     }
-                                    onChange("thickness", parseFloat(e.target.value) || 0, line);
+                                    const selected = e.target.value;
+                                    const numeric = convertThicknessInputToInches(selected);
+                                    onChange("thickness", numeric, line);
+                                    setTimeout(() => {
+                                      if (isEditing || editingId === line.id) {
+                                        onSave();
+                                      }
+                                    }, 100);
                                   }}
-                                  onBlur={() => {
-                                    if (isEditing) {
-                                      onSave();
-                                    }
-                                  }}
-                                  className="w-16 px-1 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                  placeholder="T"
-                                  step="0.125"
-                                />
+                                  className="w-20 px-1 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                >
+                                  <option value="">T</option>
+                                  {plateThicknessOptions.map((opt) => (
+                                    <option key={opt} value={opt}>
+                                      {opt}"
+                                    </option>
+                                  ))}
+                                </select>
                                 <span className="self-center">"</span>
                                 <input
                                   type="number"
@@ -371,7 +671,7 @@ export default function EstimatingGridCompact({
                           }
                         })()
                       ) : (
-                        getSpecDisplay(line)
+                        getSpecDisplay(displayLine)
                       )}
                     </td>
 
@@ -379,12 +679,12 @@ export default function EstimatingGridCompact({
                     <td className="px-4 py-2 text-gray-700">
                       {isManualMode ? (
                         <select
-                          value={isEditing ? (editingLine.materialType === "Rolled" ? (editingLine.grade || "") : (editingLine.plateGrade || "")) : (line.materialType === "Rolled" ? (line.grade || "") : (line.plateGrade || ""))}
+                          value={displayLine.materialType === "Material" ? (displayLine.grade || "") : (displayLine.plateGrade || "")}
                           onChange={(e) => {
                             if (!isEditing) {
                               onEdit(line);
                             }
-                            const field = line.materialType === "Rolled" ? "grade" : "plateGrade";
+                            const field = displayLine.materialType === "Material" ? "grade" : "plateGrade";
                             onChange(field, e.target.value, line);
                             setTimeout(() => {
                               if (isEditing || editingId === line.id) {
@@ -395,14 +695,38 @@ export default function EstimatingGridCompact({
                           className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                         >
                           <option value="">Select Grade...</option>
-                          <option value="A36">A36</option>
-                          <option value="A572 Gr50">A572 Gr50</option>
-                          <option value="A992">A992</option>
-                          <option value="A500 GrB">A500 GrB</option>
-                          <option value="A500 GrC">A500 GrC</option>
+                          {displayLine.materialType === "Material" ? (
+                            <>
+                              {["A992", "A913 Grade 65", "A913 Grade 70", "A500 Grade B", "A500 Grade C", "A1085", "A53 Type E", "A53 Type S", "A252 Grade 1", "A252 Grade 2", "A252 Grade 3", "Stainless 304", "Stainless 316"].map((grade) => {
+                                const gradeInfo = getMaterialGradeInfo(grade);
+                                const title = gradeInfo 
+                                  ? `${gradeInfo.description}\n\nTypical Uses:\n${gradeInfo.typicalUses.join("\n• ")}\n\n${gradeInfo.notes || ""}`
+                                  : grade;
+                                return (
+                                  <option key={grade} value={grade} title={title}>
+                                    {grade}
+                                  </option>
+                                );
+                              })}
+                            </>
+                          ) : (
+                            <>
+                              {["A36", "A572 Grade 50", "A572 Grade 42", "A588 (Weathering)", "A514 (T-1)", "A516 Grade 70", "A529 Grade 50"].map((grade) => {
+                                const gradeInfo = getPlateGradeInfo(grade);
+                                const title = gradeInfo 
+                                  ? `${gradeInfo.description}\n\nTypical Uses:\n${gradeInfo.typicalUses.join("\n• ")}\n\n${gradeInfo.notes || ""}`
+                                  : grade;
+                                return (
+                                  <option key={grade} value={grade} title={title}>
+                                    {grade}
+                                  </option>
+                                );
+                              })}
+                            </>
+                          )}
                         </select>
                       ) : (
-                        line.materialType === "Rolled" ? line.grade : line.plateGrade || "-"
+                        displayLine.materialType === "Material" ? displayLine.grade : displayLine.plateGrade || "-"
                       )}
                     </td>
 
@@ -411,12 +735,12 @@ export default function EstimatingGridCompact({
                       {isManualMode ? (
                         <input
                           type="number"
-                          value={isEditing ? (editingLine.materialType === "Rolled" ? (editingLine.qty || "") : (editingLine.plateQty || "")) : (line.materialType === "Rolled" ? (line.qty || "") : (line.plateQty || ""))}
+                          value={displayLine.materialType === "Material" ? (displayLine.qty || "") : (displayLine.plateQty || "")}
                           onChange={(e) => {
                             if (!isEditing) {
                               onEdit(line);
                             }
-                            const field = line.materialType === "Rolled" ? "qty" : "plateQty";
+                            const field = displayLine.materialType === "Material" ? "qty" : "plateQty";
                             onChange(field, parseFloat(e.target.value) || 0, line);
                           }}
                           onBlur={() => {
@@ -429,14 +753,14 @@ export default function EstimatingGridCompact({
                           step="1"
                         />
                       ) : (
-                        line.materialType === "Rolled" ? line.qty : line.plateQty || "-"
+                        displayLine.materialType === "Material" ? displayLine.qty : displayLine.plateQty || "-"
                       )}
                     </td>
 
                     {/* Length - Editable in manual mode */}
                     <td className="px-4 py-2 text-gray-700">
                       {isManualMode ? (
-                        line.materialType === "Rolled" ? (
+                        displayLine.materialType === "Material" ? (
                           <div className="flex gap-1 items-center">
                             <input
                               type="text"
@@ -561,6 +885,11 @@ export default function EstimatingGridCompact({
                       ${(displayLine.coatingCost || 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}
                     </td>
 
+                    {/* Hardware Cost */}
+                    <td className="px-4 py-2 text-gray-700 font-medium bg-orange-50">
+                      ${hardwareCostDisplay.toLocaleString("en-US", { maximumFractionDigits: 2 })}
+                    </td>
+
                     {/* Labor */}
                     <td className="px-4 py-2 text-gray-700 bg-green-50">
                       {(displayLine.totalLabor || 0).toFixed(2)}
@@ -637,6 +966,9 @@ export default function EstimatingGridCompact({
                           defaultMaterialRate={defaultMaterialRate}
                           defaultLaborRate={defaultLaborRate}
                           defaultCoatingRate={defaultCoatingRate}
+                          companySettings={companySettings}
+                          projectSettings={projectSettings}
+                          lines={allLines}
                           onEdit={onEdit}
                           onSave={onSave}
                           onCancel={onCancel}
@@ -666,6 +998,9 @@ export default function EstimatingGridCompact({
               </td>
               <td className="px-4 py-3 text-gray-900 font-medium bg-purple-50">
                 ${totals.coatingCost.toLocaleString("en-US", { maximumFractionDigits: 2 })}
+              </td>
+              <td className="px-4 py-3 text-gray-900 font-medium bg-orange-50">
+                ${totals.hardwareCost.toLocaleString("en-US", { maximumFractionDigits: 2 })}
               </td>
               <td className="px-4 py-3 text-gray-900 font-medium bg-green-50">
                 {totals.totalLabor.toFixed(2)}

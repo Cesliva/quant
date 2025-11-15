@@ -215,6 +215,7 @@ export function calculateTotalCostWithMarkup(
   materialCost: number,
   laborCost: number,
   coatingCost: number,
+  hardwareCost: number = 0,
   companySettings: CompanySettings,
   projectSettings?: ProjectSettings
 ): number {
@@ -230,8 +231,8 @@ export function calculateTotalCostWithMarkup(
   const materialWithWaste = materialCost * (1 + materialWasteFactor);
   const laborWithWaste = laborCost * (1 + laborWasteFactor);
 
-  // Subtotal before overhead
-  const subtotal = materialWithWaste + laborWithWaste + coatingCost;
+  // Subtotal before overhead (hardware cost added directly, no waste factor)
+  const subtotal = materialWithWaste + laborWithWaste + coatingCost + hardwareCost;
 
   // Apply overhead
   const overheadPercentage = projectSettings?.overheadPercentage !== undefined
@@ -287,7 +288,29 @@ export async function saveProjectSettings(
   try {
     // Project settings should be saved as a field in the project document
     const projectPath = `companies/${companyId}/projects`;
-    await updateDocument(projectPath, projectId, { settings });
+    const fullProjectPath = `${projectPath}/${projectId}`;
+    
+    // Check if project document exists
+    const { getDocument, setDocument } = await import("@/lib/firebase/firestore");
+    const existingProject = await getDocument(fullProjectPath);
+    
+    // Clean settings - remove undefined values
+    const cleanedSettings: any = {};
+    Object.keys(settings).forEach(key => {
+      const value = settings[key as keyof ProjectSettings];
+      if (value !== undefined) {
+        cleanedSettings[key] = value;
+      }
+    });
+    
+    if (existingProject) {
+      // Document exists, update it
+      const { updateDocument } = await import("@/lib/firebase/firestore");
+      await updateDocument(projectPath, projectId, { settings: cleanedSettings });
+    } else {
+      // Document doesn't exist, create it with settings
+      await setDocument(fullProjectPath, { settings: cleanedSettings }, true);
+    }
   } catch (error) {
     console.error("Failed to save project settings:", error);
     throw error;

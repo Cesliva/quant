@@ -36,28 +36,38 @@ export const FIELD_NUMBER_MAP: FieldNumberMapping[] = [
   // weightPerFoot, totalWeight, surfaceAreaPerFoot, totalSurfaceArea (Rolled)
   // plateArea, edgePerimeter, plateSurfaceArea, plateTotalWeight (Plate)
   
-  // 3. COATING (13)
-  { number: 13, fieldName: "coatingSystem", displayName: "Coating System", category: "Coating", section: "Coating" },
+  // 3. HARDWARE (13-17)
+  { number: 13, fieldName: "hardwareQuantity", displayName: "Bolt Sets", category: "Hardware", section: "Hardware" },
+  { number: 14, fieldName: "hardwareBoltDiameter", displayName: "Bolt Diameter", category: "Hardware", section: "Hardware" },
+  { number: 15, fieldName: "hardwareBoltType", displayName: "Bolt Type / Grade", category: "Hardware", section: "Hardware" },
+  { number: 16, fieldName: "hardwareBoltLength", displayName: "Bolt Length (in)", category: "Hardware", section: "Hardware" },
+  { number: 17, fieldName: "hardwareCostPerSet", displayName: "Cost per Set", category: "Hardware", section: "Hardware" },
   
-  // 4. LABOR (14-24)
-  { number: 14, fieldName: "laborUnload", displayName: "Unload", category: "Labor", section: "Labor Breakdown" },
-  { number: 15, fieldName: "laborCut", displayName: "Cut", category: "Labor", section: "Labor Breakdown" },
-  { number: 16, fieldName: "laborCope", displayName: "Cope", category: "Labor", section: "Labor Breakdown" },
-  { number: 17, fieldName: "laborProcessPlate", displayName: "Process", category: "Labor", section: "Labor Breakdown" },
-  { number: 18, fieldName: "laborDrillPunch", displayName: "Drill/Punch", category: "Labor", section: "Labor Breakdown" },
-  { number: 19, fieldName: "laborFit", displayName: "Fit", category: "Labor", section: "Labor Breakdown" },
-  { number: 20, fieldName: "laborWeld", displayName: "Weld", category: "Labor", section: "Labor Breakdown" },
-  { number: 21, fieldName: "laborPrepClean", displayName: "Prep/Clean", category: "Labor", section: "Labor Breakdown" },
-  { number: 22, fieldName: "laborPaint", displayName: "Paint", category: "Labor", section: "Labor Breakdown" },
-  { number: 23, fieldName: "laborHandleMove", displayName: "Handle/Move", category: "Labor", section: "Labor Breakdown" },
-  { number: 24, fieldName: "laborLoadShip", displayName: "Load/Ship", category: "Labor", section: "Labor Breakdown" },
+  // 4. COATING (18-19)
+  { number: 18, fieldName: "sspcPrep", displayName: "SSPC Surface Prep", category: "Coating", section: "Coating" },
+  { number: 19, fieldName: "coatingSystem", displayName: "Coating System", category: "Coating", section: "Coating" },
+  
+  // 5. LABOR (20-30)
+  { number: 20, fieldName: "laborUnload", displayName: "Unload", category: "Labor", section: "Labor Breakdown" },
+  { number: 21, fieldName: "laborCut", displayName: "Cut", category: "Labor", section: "Labor Breakdown" },
+  { number: 22, fieldName: "laborCope", displayName: "Cope", category: "Labor", section: "Labor Breakdown" },
+  { number: 23, fieldName: "laborProcessPlate", displayName: "Process", category: "Labor", section: "Labor Breakdown" },
+  { number: 24, fieldName: "laborDrillPunch", displayName: "Drill/Punch", category: "Labor", section: "Labor Breakdown" },
+  { number: 25, fieldName: "laborFit", displayName: "Fit", category: "Labor", section: "Labor Breakdown" },
+  { number: 26, fieldName: "laborWeld", displayName: "Weld", category: "Labor", section: "Labor Breakdown" },
+  { number: 27, fieldName: "laborPrepClean", displayName: "Prep/Clean", category: "Labor", section: "Labor Breakdown" },
+  { number: 28, fieldName: "laborPaint", displayName: "Paint", category: "Labor", section: "Labor Breakdown" },
+  { number: 29, fieldName: "laborHandleMove", displayName: "Handle/Move", category: "Labor", section: "Labor Breakdown" },
+  { number: 30, fieldName: "laborLoadShip", displayName: "Load/Ship", category: "Labor", section: "Labor Breakdown" },
   // totalLabor is read-only (auto-calculated)
   
-  // 5. ADMIN & NOTES (25-28)
-  { number: 25, fieldName: "notes", displayName: "Notes", category: "Admin", section: "Admin & Notes" },
-  { number: 26, fieldName: "hashtags", displayName: "Hashtags", category: "Admin", section: "Admin & Notes" },
-  { number: 27, fieldName: "status", displayName: "Status", category: "Admin", section: "Admin & Notes" },
-  { number: 28, fieldName: "useStockRounding", displayName: "Use Stock Rounding", category: "Admin", section: "Admin & Notes" },
+  // 6. ADMIN & NOTES (31-36)
+  { number: 31, fieldName: "notes", displayName: "Notes", category: "Admin", section: "Admin & Notes" },
+  { number: 32, fieldName: "hashtags", displayName: "Hashtags", category: "Admin", section: "Admin & Notes" },
+  { number: 33, fieldName: "status", displayName: "Status", category: "Admin", section: "Admin & Notes" },
+  { number: 34, fieldName: "useStockRounding", displayName: "Use Stock Rounding", category: "Admin", section: "Admin & Notes" },
+  { number: 35, fieldName: "isMainMember", displayName: "Main Member", category: "Admin", section: "Admin & Notes" },
+  { number: 36, fieldName: "parentLineId", displayName: "Parent Main Member", category: "Admin", section: "Admin & Notes" },
   
   // Cost fields are read-only calculated (not numbered - they're auto-calculated from rates and quantities)
   // materialRate, materialCost, laborRate, laborCost, coatingRate, coatingCost, totalCost

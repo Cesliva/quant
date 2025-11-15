@@ -9,12 +9,29 @@ interface KPISummaryProps {
 
 export default function KPISummary({ lines }: KPISummaryProps) {
   const totals = lines.reduce(
-    (acc, line) => ({
-      weight: acc.weight + (line.weight || 0),
-      surfaceArea: acc.surfaceArea + (line.surfaceArea || 0),
-      laborHours: acc.laborHours + (line.laborHours || 0),
-      cost: acc.cost + (line.cost || 0),
-    }),
+    (acc, line) => {
+      // Only count active (non-void) lines
+      if (line.status === "Void") {
+        return acc;
+      }
+      
+      // Weight: use totalWeight for Material, plateTotalWeight for Plate
+      const weight = line.materialType === "Material" 
+        ? (line.totalWeight || 0)
+        : (line.plateTotalWeight || 0);
+      
+      // Surface Area: use totalSurfaceArea for Material, plateSurfaceArea for Plate
+      const surfaceArea = line.materialType === "Material"
+        ? (line.totalSurfaceArea || 0)
+        : (line.plateSurfaceArea || 0);
+      
+      return {
+        weight: acc.weight + weight,
+        surfaceArea: acc.surfaceArea + surfaceArea,
+        laborHours: acc.laborHours + (line.totalLabor || 0),
+        cost: acc.cost + (line.totalCost || 0),
+      };
+    },
     { weight: 0, surfaceArea: 0, laborHours: 0, cost: 0 }
   );
 
@@ -24,7 +41,7 @@ export default function KPISummary({ lines }: KPISummaryProps) {
         <div className="p-4">
           <div className="text-sm text-gray-600 mb-1">Total Weight</div>
           <div className="text-2xl font-bold text-gray-900">
-            {totals.weight.toFixed(2)} lbs
+            {totals.weight.toLocaleString("en-US", { maximumFractionDigits: 2 })} lbs
           </div>
         </div>
       </Card>
@@ -33,7 +50,7 @@ export default function KPISummary({ lines }: KPISummaryProps) {
         <div className="p-4">
           <div className="text-sm text-gray-600 mb-1">Total Surface Area</div>
           <div className="text-2xl font-bold text-gray-900">
-            {totals.surfaceArea.toFixed(2)} SF
+            {totals.surfaceArea.toLocaleString("en-US", { maximumFractionDigits: 2 })} SF
           </div>
         </div>
       </Card>
@@ -42,7 +59,7 @@ export default function KPISummary({ lines }: KPISummaryProps) {
         <div className="p-4">
           <div className="text-sm text-gray-600 mb-1">Total Labor Hours</div>
           <div className="text-2xl font-bold text-gray-900">
-            {totals.laborHours.toFixed(2)} hrs
+            {totals.laborHours.toLocaleString("en-US", { maximumFractionDigits: 2 })} hrs
           </div>
         </div>
       </Card>
@@ -51,7 +68,7 @@ export default function KPISummary({ lines }: KPISummaryProps) {
         <div className="p-4">
           <div className="text-sm text-gray-600 mb-1">Total Cost</div>
           <div className="text-2xl font-bold text-gray-900">
-            ${totals.cost.toFixed(2)}
+            ${totals.cost.toLocaleString("en-US", { maximumFractionDigits: 2 })}
           </div>
         </div>
       </Card>

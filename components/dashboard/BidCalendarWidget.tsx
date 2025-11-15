@@ -46,20 +46,24 @@ export default function BidCalendarWidget({ companyId }: BidCalendarWidgetProps)
     return () => unsubscribe();
   }, [companyId]);
 
-  // Get upcoming bids (next 7 days)
+  // Get upcoming bids (all future bids, not just next 7 days)
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const nextWeek = new Date(today);
   nextWeek.setDate(today.getDate() + 7);
 
-  const upcomingBids = events
+  // Get all future bids (including beyond 7 days)
+  const allFutureBids = events
     .filter(event => {
       const eventDate = new Date(event.date);
       eventDate.setHours(0, 0, 0, 0);
-      return eventDate >= today && eventDate <= nextWeek;
+      return eventDate >= today; // All future bids, not just next 7 days
     })
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
     .slice(0, 5); // Show top 5 upcoming
+
+  // Use allFutureBids for display, but keep upcomingBids for "This Week" count
+  const upcomingBids = allFutureBids;
 
   // Get today's bids
   const todayStr = today.toISOString().split("T")[0];

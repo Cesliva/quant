@@ -4,8 +4,8 @@ import { useState, useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
-import { Save, BookOpen, ChevronDown, ChevronUp, AlertTriangle, Plus, Trash2, Users, Building2, MapPin, Phone, Mail } from "lucide-react";
-import { getDocument, updateDocument } from "@/lib/firebase/firestore";
+import { Save, BookOpen, ChevronDown, ChevronUp, AlertTriangle, Plus, Trash2, Users, Building2, MapPin, Phone, Mail, Edit } from "lucide-react";
+import { getDocument, updateDocument, setDocument } from "@/lib/firebase/firestore";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
 
 interface Contact {
@@ -46,7 +46,8 @@ export default function CompanyAddressBook({ companyId, compact = false }: Compa
       }
 
       try {
-        const companyDoc = await getDocument("companies", companyId);
+        const companyPath = `companies/${companyId}`;
+        const companyDoc = await getDocument(companyPath);
         if (companyDoc && companyDoc.contacts) {
           setContacts(companyDoc.contacts as Contact[]);
         }
@@ -76,9 +77,22 @@ export default function CompanyAddressBook({ companyId, compact = false }: Compa
         id: contact.id.startsWith("temp-") ? `contact-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` : contact.id
       }));
 
-      await updateDocument("companies", companyId, {
-        contacts: savedContacts,
-      });
+      const companyPath = `companies/${companyId}`;
+      
+      // Check if company document exists
+      const companyDoc = await getDocument(companyPath);
+      
+      if (companyDoc) {
+        // Document exists, update it
+        await updateDocument("companies", companyId, {
+          contacts: savedContacts,
+        });
+      } else {
+        // Document doesn't exist, create it with contacts
+        await setDocument(companyPath, {
+          contacts: savedContacts,
+        }, true);
+      }
 
       setContacts(savedContacts);
       setSaveStatus("saved");
@@ -88,9 +102,9 @@ export default function CompanyAddressBook({ companyId, compact = false }: Compa
       setTimeout(() => {
         setSaveStatus("unsaved");
       }, 2000);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error saving contacts:", error);
-      alert("Failed to save contacts. Please try again.");
+      alert(`Failed to save contacts: ${error.message || "Please try again."}`);
       setSaveStatus("unsaved");
     } finally {
       setIsSaving(false);
@@ -402,11 +416,12 @@ export default function CompanyAddressBook({ companyId, compact = false }: Compa
                         )}
                       </div>
                       <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm" onClick={() => handleEdit(contact)}>
+                        <Button variant="outline" size="sm" onClick={() => handleEdit(contact)} className="flex items-center gap-1">
+                          <Edit className="w-4 h-4" />
                           Edit
                         </Button>
-                        <Button variant="outline" size="sm" onClick={() => handleDelete(contact.id)}>
-                          <Trash2 className="w-4 h-4 text-red-600" />
+                        <Button variant="outline" size="sm" onClick={() => handleDelete(contact.id)} className="text-red-600 hover:text-red-700 hover:bg-red-50">
+                          <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
                     </div>

@@ -9,13 +9,8 @@ import { Download, FileText, Package, Users, Paintbrush, DollarSign, Filter, Fil
 import { subscribeToCollection } from "@/lib/firebase/firestore";
 import { getProjectPath } from "@/lib/firebase/firestore";
 import { EstimatingLine } from "@/components/estimating/EstimatingGrid";
-import { getSampleProjectData } from "@/lib/mock-data/sampleProjectData";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
 import { exportToPDF, exportToExcel } from "@/lib/utils/export";
-
-// TODO: REMOVE - This flag enables sample data for testing
-// Set to false once Firebase is fully integrated
-const USE_SAMPLE_DATA = false;
 
 function ReportsContent() {
   const params = useParams();
@@ -25,34 +20,57 @@ function ReportsContent() {
   // When accessed from /reports, params will be empty (no dynamic route)
   // params.id only exists if we're at /projects/[id]/reports
   const projectIdFromRoute = (params as any)?.id as string | undefined;
-  // Check URL search params for project ID (from landing page links)
-  const projectIdFromQuery = searchParams?.get("projectId");
+  const projectIdFromQuery = searchParams?.get("projectId") || "";
   const companyId = "default"; // TODO: Get from auth context
 
   const [lines, setLines] = useState<EstimatingLine[]>([]);
   const [selectedProject, setSelectedProject] = useState<string>(
     projectIdFromRoute || projectIdFromQuery || ""
   );
+  const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
 
-  // Mock projects list - replace with real Firestore query
-  const projects = [
-    { id: "1", name: "Downtown Office Building" },
-    { id: "2", name: "Industrial Warehouse" },
-    { id: "3", name: "Bridge Restoration" },
-  ];
+  const firebaseReady = isFirebaseConfigured();
+
+  useEffect(() => {
+    if (!firebaseReady) {
+      setProjects([]);
+      return () => {};
+    }
+
+    const projectsPath = `companies/${companyId}/projects`;
+    const unsubscribe = subscribeToCollection<{ id: string; projectName?: string }>(
+      projectsPath,
+      (data) => {
+        const mapped = data.map((p) => ({
+          id: p.id,
+          name: p.projectName || "Untitled Project",
+        }));
+        setProjects(mapped);
+        setSelectedProject((prev) => {
+          if (prev) return prev;
+          if (projectIdFromRoute && mapped.some((p) => p.id === projectIdFromRoute)) {
+            return projectIdFromRoute;
+          }
+          if (projectIdFromQuery && mapped.some((p) => p.id === projectIdFromQuery)) {
+            return projectIdFromQuery;
+          }
+          return mapped[0]?.id || "";
+        });
+      }
+    );
+
+    return () => unsubscribe();
+  }, [companyId, projectIdFromRoute, projectIdFromQuery, firebaseReady]);
 
   useEffect(() => {
     const currentProjectId = selectedProject || projectIdFromRoute || projectIdFromQuery;
     if (!currentProjectId) return;
 
-    // Use sample data if Firebase is not configured or USE_SAMPLE_DATA is true
-    if (USE_SAMPLE_DATA || !isFirebaseConfigured()) {
-      const sampleData = getSampleProjectData(currentProjectId);
-      setLines(sampleData.lines);
-      return;
+    if (!firebaseReady) {
+      setLines([]);
+      return () => {};
     }
 
-    // Use Firebase if configured
     const linesPath = getProjectPath(companyId, currentProjectId, "lines");
     const unsubscribe = subscribeToCollection<EstimatingLine>(
       linesPath,
@@ -64,7 +82,7 @@ function ReportsContent() {
     return () => {
       unsubscribe();
     };
-  }, [companyId, selectedProject, projectIdFromRoute, projectIdFromQuery]);
+  }, [companyId, selectedProject, projectIdFromRoute, projectIdFromQuery, firebaseReady]);
 
   // Helper functions to get values based on material type
   const getWeight = (line: EstimatingLine) => {
@@ -179,9 +197,9 @@ function ReportsContent() {
               <Filter className="w-4 h-4 mr-2" />
               Filter
             </Button>
-            {USE_SAMPLE_DATA && (
+            {!firebaseReady && (
               <span className="text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded">
-                Sample Data
+                Firebase Not Configured
               </span>
             )}
           </div>

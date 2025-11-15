@@ -40,6 +40,78 @@ export function getPlateByThicknessInches(thicknessInches: number): PlateSpec | 
   );
 }
 
+function parseFraction(input: string): number | null {
+  const sanitized = input.replace(/"/g, "").trim();
+  if (!sanitized) return null;
+
+  // Mixed number like 1-1/8 or 1 1/8
+  if (sanitized.includes("-") || sanitized.includes(" ")) {
+    const parts = sanitized.split(/[-\s]+/).filter(Boolean);
+    if (parts.length === 2) {
+      const whole = parseFloat(parts[0]);
+      const frac = parseFraction(parts[1]);
+      if (!isNaN(whole) && frac !== null) {
+        return whole + frac;
+      }
+    }
+  }
+
+  if (sanitized.includes("/")) {
+    const [numerator, denominator] = sanitized.split("/");
+    const num = parseFloat(numerator);
+    const den = parseFloat(denominator);
+    if (!isNaN(num) && !isNaN(den) && den !== 0) {
+      return num / den;
+    }
+    return null;
+  }
+
+  const asNumber = parseFloat(sanitized);
+  return isNaN(asNumber) ? null : asNumber;
+}
+
+/**
+ * Normalize any user-entered thickness (fraction string, mixed number, decimal, or number)
+ * to a decimal inches value.
+ */
+export function convertThicknessInputToInches(
+  thickness: number | string | undefined | null
+): number {
+  if (typeof thickness === "number") {
+    return thickness;
+  }
+
+  if (!thickness) {
+    return 0;
+  }
+
+  const stringValue = thickness.toString().trim();
+  if (!stringValue) {
+    return 0;
+  }
+
+  const spec = getPlateByThickness(stringValue);
+  if (spec) {
+    return spec.thicknessInches;
+  }
+
+  const parsed = parseFraction(stringValue);
+  return parsed ?? 0;
+}
+
+/**
+ * Get the friendly label (e.g., "1/4") for a numeric thickness in inches
+ */
+export function getThicknessLabelFromInches(
+  thicknessInches: number | undefined | null
+): string | undefined {
+  if (thicknessInches === undefined || thicknessInches === null) {
+    return undefined;
+  }
+  const spec = getPlateByThicknessInches(thicknessInches);
+  return spec?.thickness;
+}
+
 /**
  * Get weight per square foot for a given thickness
  */
@@ -73,18 +145,33 @@ export function getCommonLengths(thickness: string): number[] {
 }
 
 /**
- * Get available grades for a given thickness
+ * Get all available Plate grades
  */
-export function getAvailableGrades(thickness: string): string[] {
-  const plate = getPlateByThickness(thickness);
-  return plate?.grade || ["A36"];
+export function getAllPlateGrades(): string[] {
+  return [
+    "A36",
+    "A572 Grade 50",
+    "A572 Grade 42",
+    "A588 (Weathering)",
+    "A514 (T-1)",
+    "A516 Grade 70",
+    "A529 Grade 50",
+  ];
+}
+
+/**
+ * Get available grades for a given thickness
+ * Returns all Plate grades (thickness-specific filtering can be added later if needed)
+ */
+export function getAvailableGrades(thickness: string | number): string[] {
+  return getAllPlateGrades();
 }
 
 /**
  * Get valid plate grades (alias for getAvailableGrades for backwards compatibility)
  */
-export function getValidPlateGrades(thickness: string): string[] {
-  return getAvailableGrades(thickness);
+export function getValidPlateGrades(thickness: string | number): string[] {
+  return getAllPlateGrades();
 }
 
 /**

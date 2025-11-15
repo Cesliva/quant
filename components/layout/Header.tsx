@@ -8,7 +8,7 @@ export default function Header() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Link href="/" className="text-xl font-semibold text-gray-900 hover:text-blue-600 transition-colors">
-            Dashboard
+            Company Dashboard
           </Link>
           <span className="text-gray-400">|</span>
           <span className="text-gray-600">Quant Estimating AI</span>

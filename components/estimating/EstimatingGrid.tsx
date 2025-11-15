@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Plus, Upload, Edit, Trash2, Copy, Check, X, Undo2, Redo2, Download } from "lucide-react";
+import { Plus, Upload, Edit, Trash2, Copy, Check, X, Undo2, Redo2, Download, Layers } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { subscribeToCollection, createDocument, updateDocument, deleteDocument } from "@/lib/firebase/firestore";
@@ -83,6 +83,7 @@ export interface EstimatingLine {
   
   // Coating
   coatingSystem?: string; // None, Paint, Powder, Galv
+  sspcPrep?: string; // SSPC surface preparation standard
   
   // D) Labor (applies to any line type)
   laborUnload?: number;
@@ -120,6 +121,10 @@ export interface EstimatingLine {
   hashtags?: string;
   status?: "Active" | "Void";
   useStockRounding?: boolean; // Toggle for exact vs stock length
+  
+  // G) Member Grouping
+  isMainMember?: boolean; // true = main member, false/undefined = small part or ungrouped
+  parentLineId?: string; // Line ID of the main member this small part belongs to
 }
 
 interface EstimatingGridProps {
@@ -142,9 +147,61 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingLine, setEditingLine] = useState<Partial<EstimatingLine>>({});
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
+  const [groupByMainMember, setGroupByMainMember] = useState<boolean>(false);
   
   // Track if we should add to history (skip for Firestore updates)
   const skipHistoryRef = useRef(false);
+  
+  // Group lines by main member
+  const groupLinesByMainMember = (linesToGroup: EstimatingLine[]): EstimatingLine[] => {
+    // Separate main members and small parts
+    const mainMembers = linesToGroup.filter(l => l.isMainMember && l.status !== "Void");
+    const smallParts = linesToGroup.filter(l => !l.isMainMember && l.parentLineId && l.status !== "Void");
+    const ungrouped = linesToGroup.filter(l => !l.isMainMember && !l.parentLineId && l.status !== "Void");
+    
+    // Sort main members by lineId
+    mainMembers.sort((a, b) => {
+      const aNum = parseInt(a.lineId.replace('L', '')) || 0;
+      const bNum = parseInt(b.lineId.replace('L', '')) || 0;
+      return aNum - bNum;
+    });
+    
+    // Group small parts under their main members
+    const grouped: EstimatingLine[] = [];
+    
+    mainMembers.forEach(mainMember => {
+      // Add main member
+      grouped.push(mainMember);
+      
+      // Add associated small parts
+      const associatedParts = smallParts
+        .filter(part => part.parentLineId === mainMember.lineId)
+        .sort((a, b) => {
+          const aNum = parseInt(a.lineId.replace('L', '')) || 0;
+          const bNum = parseInt(b.lineId.replace('L', '')) || 0;
+          return aNum - bNum;
+        });
+      
+      grouped.push(...associatedParts);
+    });
+    
+    // Add ungrouped lines at the end
+    ungrouped.sort((a, b) => {
+      const aNum = parseInt(a.lineId.replace('L', '')) || 0;
+      const bNum = parseInt(b.lineId.replace('L', '')) || 0;
+      return aNum - bNum;
+    });
+    grouped.push(...ungrouped);
+    
+    // Add voided lines at the very end
+    const voided = linesToGroup.filter(l => l.status === "Void");
+    grouped.push(...voided);
+    
+    return grouped;
+  };
+  
+  // Get display lines (grouped or ungrouped)
+  const displayLines = groupByMainMember ? groupLinesByMainMember(lines) : lines;
   
   // Debounce save operations
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -1090,6 +1147,25 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
                 <Redo2 className="w-4 h-4 mr-2" />
                 Redo
               </Button>
+              <Button
+                variant={groupByMainMember ? "default" : "outline"}
+                size="sm"
+                onClick={() => setGroupByMainMember(!groupByMainMember)}
+                title={groupByMainMember ? "Ungroup lines" : "Group small parts under main members"}
+                className="flex items-center justify-center"
+              >
+                {groupByMainMember ? (
+                  <>
+                    <Layers className="w-4 h-4 mr-2" />
+                    Ungroup
+                  </>
+                ) : (
+                  <>
+                    <Layers className="w-4 h-4 mr-2" />
+                    Group by Main Member
+                  </>
+                )}
+              </Button>
             </>
           )}
           {isManualMode && expandedRowId && !editingId && (
@@ -1125,13 +1201,34 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
 
       <Card>
         <EstimatingGridCompact
-          lines={lines}
+          lines={displayLines}
+          allLines={lines}
           editingId={editingId}
           editingLine={editingLine}
           isManualMode={isManualMode}
-          defaultMaterialRate={companySettings ? getMaterialRateForGrade(undefined, companySettings) : 0.85}
-          defaultLaborRate={companySettings ? getLaborRate(undefined, companySettings) : 50}
-          defaultCoatingRate={companySettings ? getCoatingRate(undefined, companySettings) : 2.50}
+          defaultMaterialRate={
+            projectSettings?.materialRate !== undefined
+              ? projectSettings.materialRate
+              : companySettings
+              ? getMaterialRateForGrade(undefined, companySettings)
+              : 0.85
+          }
+          defaultLaborRate={
+            projectSettings?.laborRate !== undefined
+              ? projectSettings.laborRate
+              : companySettings
+              ? getLaborRate(undefined, companySettings)
+              : 50
+          }
+          defaultCoatingRate={
+            projectSettings?.coatingRate !== undefined
+              ? projectSettings.coatingRate
+              : companySettings
+              ? getCoatingRate(undefined, companySettings)
+              : 2.50
+          }
+          companySettings={companySettings}
+          projectSettings={projectSettings}
           onEdit={handleEdit}
           onSave={handleSave}
           onCancel={handleCancel}
