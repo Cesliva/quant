@@ -5,6 +5,7 @@ import {
   setDoc, 
   updateDoc, 
   deleteDoc,
+  deleteField,
   addDoc,
   query,
   where,

@@ -5,6 +5,7 @@ import { Plus, Upload, Edit, Trash2, Copy, Check, X, Undo2, Redo2, Download, Lay
 import Button from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { subscribeToCollection, createDocument, updateDocument, deleteDocument } from "@/lib/firebase/firestore";
+import { deleteField } from "firebase/firestore";
 import { getProjectPath } from "@/lib/firebase/firestore";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
 import { getFieldFromNumber, parseNumberFieldFormat } from "@/lib/utils/fieldNumberMap";
@@ -200,8 +201,32 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
     return grouped;
   };
   
-  // Get display lines (grouped or ungrouped)
-  const displayLines = groupByMainMember ? groupLinesByMainMember(lines) : lines;
+  // Sort lines by line ID (helper function)
+  const sortLinesByLineId = (linesToSort: EstimatingLine[]): EstimatingLine[] => {
+    // Separate active and voided lines
+    const activeLines = linesToSort.filter(l => l.status !== "Void");
+    const voidedLines = linesToSort.filter(l => l.status === "Void");
+    
+    // Sort active lines by line ID
+    const sortedActive = [...activeLines].sort((a, b) => {
+      const aNum = parseInt(a.lineId.replace('L', '')) || 0;
+      const bNum = parseInt(b.lineId.replace('L', '')) || 0;
+      return aNum - bNum;
+    });
+    
+    // Sort voided lines by line ID
+    const sortedVoided = [...voidedLines].sort((a, b) => {
+      const aNum = parseInt(a.lineId.replace('L', '')) || 0;
+      const bNum = parseInt(b.lineId.replace('L', '')) || 0;
+      return aNum - bNum;
+    });
+    
+    // Return active lines first, then voided lines
+    return [...sortedActive, ...sortedVoided];
+  };
+  
+  // Get display lines (grouped or sorted by line ID)
+  const displayLines = groupByMainMember ? groupLinesByMainMember(lines) : sortLinesByLineId(lines);
   
   // Debounce save operations
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -722,7 +747,48 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
     const performSave = async () => {
       try {
         const linePath = getProjectPath(companyId, projectId, "lines");
-        await updateDocument(linePath, editingId, editingLine);
+        
+        // Prepare data for save - ensure parentLineId and isMainMember are explicitly included
+        // Firestore doesn't accept undefined, so we need to filter it out
+        const currentLine = lines.find(l => l.id === editingId);
+        
+        // Merge current line data with editing line to ensure all fields are present
+        const mergedLine = { ...currentLine, ...editingLine };
+        
+        // Build data to save, filtering out undefined values
+        const dataToSave: any = {};
+        
+        // Copy all fields from mergedLine, but skip undefined values
+        Object.keys(mergedLine).forEach((key) => {
+          if (mergedLine[key as keyof EstimatingLine] !== undefined) {
+            dataToSave[key] = mergedLine[key as keyof EstimatingLine];
+          }
+        });
+        
+        // Always explicitly handle grouping fields to ensure they're saved correctly
+        // Handle isMainMember
+        if (editingLine.isMainMember !== undefined) {
+          dataToSave.isMainMember = editingLine.isMainMember === true;
+        } else if (currentLine?.isMainMember !== undefined) {
+          dataToSave.isMainMember = currentLine.isMainMember === true;
+        }
+        
+        // Handle parentLineId - always include it explicitly to ensure persistence
+        if (editingLine.parentLineId !== undefined) {
+          // User is explicitly setting or clearing parentLineId
+          if (editingLine.parentLineId && editingLine.parentLineId.trim() !== "") {
+            dataToSave.parentLineId = editingLine.parentLineId;
+          } else {
+            // User is clearing it - use deleteField to remove from Firestore
+            dataToSave.parentLineId = deleteField();
+          }
+        } else if (currentLine?.parentLineId) {
+          // Preserve existing parentLineId if not being changed
+          // Always include it to ensure it's persisted
+          dataToSave.parentLineId = currentLine.parentLineId;
+        }
+        
+        await updateDocument(linePath, editingId, dataToSave);
         // Don't clear editing state in manual mode - keep it editable
         // The line will be updated via Firestore subscription
       } catch (error: any) {
@@ -871,6 +937,18 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
         sum + (line.materialType === "Material" ? (line.totalSurfaceArea || 0) : (line.plateSurfaceArea || 0)), 0
       ),
       totalLabor: activeLines.reduce((sum, line) => sum + (line.totalLabor || 0), 0),
+      totalQuantity: activeLines.reduce((sum, line) => {
+        // For Material, use qty; for Plate, use plateQty (or qty if plateQty not set)
+        let qty = 0;
+        if (line.materialType === "Plate") {
+          qty = line.plateQty !== undefined && line.plateQty !== null ? line.plateQty : (line.qty !== undefined && line.qty !== null ? line.qty : 0);
+        } else {
+          qty = line.qty !== undefined && line.qty !== null ? line.qty : 0;
+        }
+        // Ensure qty is a number
+        const numQty = typeof qty === "number" ? qty : (typeof qty === "string" && qty.trim() !== "" ? parseFloat(qty) || 0 : 0);
+        return sum + numQty;
+      }, 0),
       materialCost: activeLines.reduce((sum, line) => sum + (line.materialCost || 0), 0),
       laborCost: activeLines.reduce((sum, line) => sum + (line.laborCost || 0), 0),
       coatingCost: activeLines.reduce((sum, line) => sum + (line.coatingCost || 0), 0),
@@ -1151,13 +1229,13 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
                 variant={groupByMainMember ? "default" : "outline"}
                 size="sm"
                 onClick={() => setGroupByMainMember(!groupByMainMember)}
-                title={groupByMainMember ? "Ungroup lines" : "Group small parts under main members"}
+                title={groupByMainMember ? "Sort by Line ID (L1, L2, L3...)" : "Group small parts under main members"}
                 className="flex items-center justify-center"
               >
                 {groupByMainMember ? (
                   <>
                     <Layers className="w-4 h-4 mr-2" />
-                    Ungroup
+                    Sort by ID
                   </>
                 ) : (
                   <>

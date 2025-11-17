@@ -90,12 +90,32 @@ export default function Sidebar() {
         {navigation.map((item) => {
           const Icon = item.icon;
           const AiIcon = (item as any).aiIcon;
-          const isActive = pathname?.startsWith(item.href);
+          
+          // If on a project page, use project-specific routes
+          let href = item.href;
+          if (isProjectPage && projectId) {
+            // Map navigation items to project-specific routes
+            if (item.name === "Estimating") {
+              href = `/projects/${projectId}/estimating`;
+            } else if (item.name === "AI Spec Review") {
+              href = `/spec-review?projectId=${projectId}`;
+            } else if (item.name === "AI Generated Proposal") {
+              href = `/proposal?projectId=${projectId}`;
+            }
+            // Other items can keep their original href or add projectId query param if needed
+          }
+          
+          const isActive = pathname?.startsWith(item.href) || 
+            (isProjectPage && projectId && (
+              (item.name === "Estimating" && pathname === `/projects/${projectId}/estimating`) ||
+              (item.name === "AI Spec Review" && pathname?.startsWith("/spec-review")) ||
+              (item.name === "AI Generated Proposal" && pathname?.startsWith("/proposal"))
+            ));
           
           return (
             <Link
               key={item.name}
-              href={item.href}
+              href={href}
               className={cn(
                 "flex items-center gap-3 px-4 py-3 rounded-lg transition-colors",
                 isActive
