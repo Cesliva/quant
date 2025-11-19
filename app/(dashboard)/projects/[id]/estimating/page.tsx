@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import EstimatingGrid from "@/components/estimating/EstimatingGrid";
 import KPISummary from "@/components/estimating/KPISummary";
 import { Save, Upload, ArrowLeft } from "lucide-react";
@@ -16,10 +16,14 @@ import { voiceCommandHistory, VoiceAction } from "@/lib/utils/voiceCommandHistor
 import { createLineFromStructuredData } from "@/lib/utils/structuredVoiceParser";
 import { exportToQuant, importFromQuant } from "@/lib/utils/quantExport";
 
+import { useCompanyId } from "@/lib/hooks/useCompanyId";
+
 export default function EstimatingPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const projectId = params.id as string;
-  const companyId = "default"; // TODO: Get from auth context
+  const companyId = useCompanyId();
+  const lineIdFromUrl = searchParams.get("lineId");
   
   const [lines, setLines] = useState<EstimatingLine[]>([]);
   const [projectName, setProjectName] = useState<string>("");
@@ -680,6 +684,7 @@ export default function EstimatingPage() {
         companyId={companyId} 
         projectId={projectId}
         isManualMode={true}
+        highlightLineId={lineIdFromUrl}
       />
     </div>
   );

@@ -101,7 +101,7 @@ export default function BidCalendarWidget({ companyId }: BidCalendarWidgetProps)
   return (
     <>
       <Card className="border-0 shadow-sm bg-white/80 backdrop-blur-sm">
-        <CardHeader className="pb-3">
+        <CardHeader className="pb-4">
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <Calendar className="w-5 h-5" />
@@ -120,7 +120,7 @@ export default function BidCalendarWidget({ companyId }: BidCalendarWidgetProps)
         </CardHeader>
         <CardContent>
           {/* Quick Stats */}
-          <div className="grid grid-cols-3 gap-4 mb-4 pb-4 border-b border-gray-200">
+          <div className="grid grid-cols-3 gap-4 mb-6 pb-6 border-b border-gray-200">
             <div className="text-center">
               <div className="text-2xl font-bold text-gray-900">{todayBids.length}</div>
               <div className="text-xs text-gray-600">Today</div>
@@ -136,7 +136,7 @@ export default function BidCalendarWidget({ companyId }: BidCalendarWidgetProps)
           </div>
 
           {/* Upcoming Bids List */}
-          <div className="space-y-2">
+          <div className="space-y-2 mt-6">
             {upcomingBids.length > 0 ? (
               upcomingBids.map((bid) => {
                 const daysUntil = getDaysUntil(bid.date);
@@ -145,7 +145,7 @@ export default function BidCalendarWidget({ companyId }: BidCalendarWidgetProps)
                 return (
                   <div
                     key={bid.id}
-                    className={`p-3 rounded-lg border transition-colors ${
+                    className={`p-4 rounded-lg border transition-colors ${
                       isUrgent
                         ? "bg-orange-50 border-orange-200"
                         : "bg-gray-50 border-gray-200 hover:bg-gray-100"
@@ -177,14 +177,14 @@ export default function BidCalendarWidget({ companyId }: BidCalendarWidgetProps)
                 );
               })
             ) : (
-              <div className="text-center py-6 text-gray-500 text-sm">
-                <Calendar className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+              <div className="text-center py-8 text-gray-500 text-sm">
+                <Calendar className="w-8 h-8 mx-auto mb-4 text-gray-400" />
                 <p>No upcoming bids</p>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setIsModalOpen(true)}
-                  className="mt-3"
+                  className="mt-4"
                 >
                   Add Bid
                 </Button>
@@ -193,7 +193,7 @@ export default function BidCalendarWidget({ companyId }: BidCalendarWidgetProps)
           </div>
 
           {upcomingBids.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-gray-200">
+            <div className="mt-6 pt-6 border-t border-gray-200">
               <Button
                 variant="outline"
                 size="sm"

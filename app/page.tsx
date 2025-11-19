@@ -134,127 +134,126 @@ export default function Home() {
     }
   };
 
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        {/* Header Section - Refined */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-gray-200/60">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-1">Dashboard</h1>
-            <p className="text-sm text-gray-500">
-              Welcome back • {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
-            </p>
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        {/* 12-Column Grid Container */}
+        <div className="grid grid-cols-12 gap-6 items-start">
+          
+          {/* Header Section - Full Width (12 columns) */}
+          <div className="col-span-12 pb-4 border-b border-gray-200/60">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">Dashboard</h1>
+                <p className="text-sm text-gray-500">
+                  Welcome back • {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Link href="/settings">
+                  <Button variant="outline" size="lg" className="gap-2">
+                    <FileText className="w-5 h-5" />
+                    Company Settings
+                  </Button>
+                </Link>
+                <Link href="/projects/new/details">
+                  <Button variant="primary" size="lg" className="gap-2 shadow-md hover:shadow-lg transition-shadow">
+                    <Plus className="w-5 h-5" />
+                    New Project
+                  </Button>
+                </Link>
+              </div>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            <Link href="/settings">
-              <Button variant="outline" size="lg" className="gap-2">
-                <FileText className="w-5 h-5" />
-                Company Settings
-              </Button>
-            </Link>
-            <Link href="/projects/new/details">
-              <Button variant="primary" size="lg" className="gap-2 shadow-md hover:shadow-lg transition-shadow">
-                <Plus className="w-5 h-5" />
-                New Project
-              </Button>
-            </Link>
-            {/* Admin-only destructive buttons removed for production */}
+
+          {/* Quick Stats - Full Width (12 columns) */}
+          <div className="col-span-12 grid grid-cols-12 gap-6">
+            <Card className="col-span-6 md:col-span-3 border-0 shadow-sm hover:shadow-md transition-shadow bg-white/80 backdrop-blur-sm">
+              <CardContent>
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Total Projects</p>
+                    <p className="text-3xl font-bold text-gray-900 mb-2">{activeProjects.length || 0}</p>
+                    <p className="text-xs text-gray-500">All time</p>
+                  </div>
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <FileText className="w-5 h-5 text-blue-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="col-span-6 md:col-span-3 border-0 shadow-sm hover:shadow-md transition-shadow bg-white/80 backdrop-blur-sm">
+              <CardContent>
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Active Bids</p>
+                    <p className="text-3xl font-bold text-gray-900 mb-2">
+                      {activeProjects.filter(p => p.status === "active").length}
+                    </p>
+                    <p className="text-xs text-green-600 font-medium">In progress</p>
+                  </div>
+                  <div className="p-2 bg-green-100 rounded-lg">
+                    <TrendingUp className="w-5 h-5 text-green-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="col-span-6 md:col-span-3 border-0 shadow-sm hover:shadow-md transition-shadow bg-white/80 backdrop-blur-sm">
+              <CardContent>
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Upcoming Bids</p>
+                    <p className="text-3xl font-bold text-gray-900 mb-2">
+                      {upcomingBids.length}
+                    </p>
+                    <p className="text-xs text-orange-600 font-medium">Next 7 days</p>
+                  </div>
+                  <div className="p-2 bg-orange-100 rounded-lg">
+                    <Calendar className="w-5 h-5 text-orange-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="col-span-6 md:col-span-3 border-0 shadow-sm hover:shadow-md transition-shadow bg-white/80 backdrop-blur-sm">
+              <CardContent>
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Win Rate</p>
+                    <p className="text-3xl font-bold text-gray-900 mb-2">
+                      {winRate}%
+                    </p>
+                    <p className="text-xs text-purple-600 font-medium">
+                      {totalBids > 0 ? `${totalBids} total bids` : "No data yet"}
+                    </p>
+                  </div>
+                  <div className="p-2 bg-purple-100 rounded-lg">
+                    <Target className="w-5 h-5 text-purple-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
-        </div>
 
-        {/* Quick Stats - Enhanced */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card className="border-0 shadow-sm hover:shadow-md transition-shadow bg-white/80 backdrop-blur-sm">
-            <CardContent className="p-5">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Total Projects</p>
-                  <p className="text-3xl font-bold text-gray-900 mb-1">{activeProjects.length || 0}</p>
-                  <p className="text-xs text-gray-500">All time</p>
-                </div>
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <FileText className="w-5 h-5 text-blue-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          {/* Company Address Book - Full Width (12 columns) */}
+          <div className="col-span-12">
+            <CompanyAddressBook companyId={companyId} compact={true} />
+          </div>
 
-          <Card className="border-0 shadow-sm hover:shadow-md transition-shadow bg-white/80 backdrop-blur-sm">
-            <CardContent className="p-5">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Active Bids</p>
-                  <p className="text-3xl font-bold text-gray-900 mb-1">
-                    {activeProjects.filter(p => p.status === "active").length}
-                  </p>
-                  <p className="text-xs text-green-600 font-medium">In progress</p>
-                </div>
-                <div className="p-2 bg-green-100 rounded-lg">
-                  <TrendingUp className="w-5 h-5 text-green-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-0 shadow-sm hover:shadow-md transition-shadow bg-white/80 backdrop-blur-sm">
-            <CardContent className="p-5">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Upcoming Bids</p>
-                  <p className="text-3xl font-bold text-gray-900 mb-1">
-                    {upcomingBids.length}
-                  </p>
-                  <p className="text-xs text-orange-600 font-medium">Next 7 days</p>
-                </div>
-                <div className="p-2 bg-orange-100 rounded-lg">
-                  <Calendar className="w-5 h-5 text-orange-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-0 shadow-sm hover:shadow-md transition-shadow bg-white/80 backdrop-blur-sm">
-            <CardContent className="p-5">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Win Rate</p>
-                  <p className="text-3xl font-bold text-gray-900 mb-1">
-                    {winRate}%
-                  </p>
-                  <p className="text-xs text-purple-600 font-medium">
-                    {totalBids > 0 ? `${totalBids} total bids` : "No data yet"}
-                  </p>
-                </div>
-                <div className="p-2 bg-purple-100 rounded-lg">
-                  <Target className="w-5 h-5 text-purple-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-        </div>
-
-        {/* Company Address Book */}
-        <div>
-          <CompanyAddressBook companyId={companyId} compact={true} />
-        </div>
-
-        {/* Main Control Center Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column - Active Projects & Calendar */}
-          <div className="lg:col-span-2 space-y-5">
+          {/* LEFT COLUMN - 8 columns */}
+          <div className="col-span-12 lg:col-span-8 space-y-6">
             {/* Bid Calendar Widget */}
             <BidCalendarWidget companyId={companyId} />
             
-            {/* Active Projects - Enhanced */}
+            {/* Active Projects */}
             <div>
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h2 className="text-xl font-bold text-gray-900">Active Projects</h2>
-                  <p className="text-sm text-gray-500 mt-0.5">
+                  <p className="text-sm text-gray-500 mt-1">
                     Your current work in progress {(() => {
-                      // Deduplicate before counting to ensure accurate count
                       const uniqueProjects = activeProjects.filter((project, index, self) => 
                         index === self.findIndex((p) => p.id === project.id)
                       );
@@ -264,18 +263,18 @@ export default function Home() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Link href="/projects/archived">
-                    <Button variant="outline" size="sm" className="text-xs gap-1">
+                    <Button variant="outline" size="sm" className="gap-1">
                       <Archive className="w-3 h-3" />
                       Archived
                     </Button>
                   </Link>
                   <Link href="/projects">
-                    <Button variant="outline" size="sm" className="text-xs">View All →</Button>
+                    <Button variant="outline" size="sm">View All →</Button>
                   </Link>
                 </div>
               </div>
 
-              {/* Search/Filter by Project Number */}
+              {/* Search/Filter */}
               <div className="mb-4">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -290,7 +289,7 @@ export default function Home() {
               </div>
 
               <Card className="border-0 shadow-sm bg-white/80 backdrop-blur-sm">
-                <CardContent className="p-0">
+                <CardContent>
                   <div className="divide-y divide-gray-100">
                     {activeProjects
                       .filter((project) => {
@@ -302,7 +301,6 @@ export default function Home() {
                           project.gc?.toLowerCase().includes(query)
                         );
                       })
-                      // Deduplicate by ID to prevent React key warnings
                       .filter((project, index, self) => 
                         index === self.findIndex((p) => p.id === project.id)
                       )
@@ -361,12 +359,12 @@ export default function Home() {
               </Card>
             </div>
 
-            {/* Win/Loss Widget - Compact */}
+            {/* Win/Loss Widget */}
             <WinLossWidget companyId={companyId} />
           </div>
 
-          {/* Right Column - Performance & Activity */}
-          <div className="space-y-5">
+          {/* RIGHT COLUMN - 4 columns */}
+          <div className="col-span-12 lg:col-span-4 space-y-6">
             {/* Performance Metrics Widget */}
             <PerformanceMetrics companyId={companyId} />
 
@@ -376,13 +374,13 @@ export default function Home() {
             {/* Reports Widget */}
             <Link href="/reports">
               <Card className="border-0 shadow-sm hover:shadow-lg transition-all cursor-pointer group border-2 hover:border-amber-300 bg-gradient-to-br from-amber-50 to-orange-50">
-                <CardContent className="p-6">
+                <CardContent>
                   <div className="flex items-center gap-4">
                     <div className="w-16 h-16 bg-amber-500 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform shadow-lg">
                       <BarChart3 className="w-8 h-8 text-white" />
                     </div>
                     <div className="flex-1">
-                      <h3 className="text-lg font-bold text-gray-900 mb-1">
+                      <h3 className="text-lg font-bold text-gray-900 mb-2">
                         Reports & Analytics
                       </h3>
                       <p className="text-sm text-gray-600 mb-2">
@@ -400,14 +398,14 @@ export default function Home() {
             {/* AI Post Bid Analysis Widget */}
             <Link href="/post-bid-analysis">
               <Card className="border-0 shadow-sm hover:shadow-lg transition-all cursor-pointer group border-2 hover:border-purple-300 bg-gradient-to-br from-purple-50 to-indigo-50">
-                <CardContent className="p-6">
+                <CardContent>
                   <div className="flex items-center gap-4">
                     <div className="w-16 h-16 bg-purple-500 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform shadow-lg relative">
                       <Brain className="w-8 h-8 text-white" />
                       <Sparkles className="w-4 h-4 text-yellow-300 absolute -top-1 -right-1 drop-shadow-lg" />
                     </div>
                     <div className="flex-1">
-                      <h3 className="text-lg font-bold text-gray-900 mb-1 flex items-center gap-2">
+                      <h3 className="text-lg font-bold text-gray-900 mb-2 flex items-center gap-2">
                         AI Post Bid Analysis
                       </h3>
                       <p className="text-sm text-gray-600 mb-2">
@@ -427,4 +425,3 @@ export default function Home() {
     </div>
   );
 }
-

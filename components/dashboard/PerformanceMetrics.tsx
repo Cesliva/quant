@@ -166,13 +166,13 @@ export default function PerformanceMetrics({ companyId }: PerformanceMetricsProp
 
   return (
     <Card className="border-0 shadow-sm bg-white/80 backdrop-blur-sm">
-      <CardHeader className="pb-3">
+      <CardHeader className="pb-4">
         <CardTitle className="flex items-center gap-2 text-base">
           <Target className="w-5 h-5 text-blue-600" />
           Bid Pipeline & Activity
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-6">
         {/* Estimates Created Trend Chart */}
         <div>
           <div className="flex items-center justify-between mb-2">
@@ -184,7 +184,7 @@ export default function PerformanceMetrics({ companyId }: PerformanceMetricsProp
               <TrendingUp className={`w-4 h-4 ${metrics.estimatesChange >= 0 ? 'text-green-600' : 'text-red-600 rotate-180'}`} />
             </div>
           </div>
-          <div className="relative h-32 bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-3">
+          <div className="relative h-32 bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-4">
             <div className="flex items-end justify-between h-full gap-1">
               {metrics.estimatesPerMonth.map((value, index) => {
                 const height = metrics.maxEstimates > 0 ? (value / metrics.maxEstimates) * 100 : 0;
@@ -206,8 +206,8 @@ export default function PerformanceMetrics({ companyId }: PerformanceMetricsProp
         </div>
 
         {/* Key Metrics */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="p-3 bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg border border-green-200">
+        <div className="grid grid-cols-2 gap-4">
+          <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg border border-green-200">
             <div className="flex items-center gap-2 mb-1">
               <DollarSign className="w-4 h-4 text-green-600" />
               <span className="text-xs text-gray-600">Pipeline Value</span>
@@ -215,11 +215,11 @@ export default function PerformanceMetrics({ companyId }: PerformanceMetricsProp
             <div className="text-lg font-bold text-green-700">
               ${metrics.totalPipelineValue.toLocaleString("en-US", { maximumFractionDigits: 0 })}
             </div>
-            <div className="text-[10px] text-gray-500 mt-0.5">
+            <div className="text-[10px] text-gray-500 mt-1">
               Active bids
             </div>
           </div>
-          <div className="p-3 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+          <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
             <div className="flex items-center gap-2 mb-1">
               <FileText className="w-4 h-4 text-blue-600" />
               <span className="text-xs text-gray-600">In Progress</span>
@@ -227,7 +227,7 @@ export default function PerformanceMetrics({ companyId }: PerformanceMetricsProp
             <div className="text-lg font-bold text-blue-700">
               {metrics.estimatesInProgress}
             </div>
-            <div className="text-[10px] text-gray-500 mt-0.5">
+            <div className="text-[10px] text-gray-500 mt-1">
               Being estimated
             </div>
           </div>
@@ -235,16 +235,16 @@ export default function PerformanceMetrics({ companyId }: PerformanceMetricsProp
 
         {/* Secondary Metrics */}
         <div className="grid grid-cols-3 gap-2">
-          <div className="p-2 bg-gray-50 rounded-lg border border-gray-200 text-center">
-            <div className="text-xs text-gray-600 mb-0.5">Avg Estimate</div>
+          <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 text-center">
+            <div className="text-xs text-gray-600 mb-1">Avg Estimate</div>
             <div className="text-sm font-bold text-gray-900">
               ${metrics.averageEstimateValue > 0 
                 ? metrics.averageEstimateValue.toLocaleString("en-US", { maximumFractionDigits: 0 })
                 : "-"}
             </div>
           </div>
-          <div className="p-2 bg-gray-50 rounded-lg border border-gray-200 text-center">
-            <div className="flex items-center justify-center gap-1 mb-0.5">
+          <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 text-center">
+            <div className="flex items-center justify-center gap-1 mb-1">
               <Calendar className="w-3 h-3 text-gray-500" />
               <span className="text-xs text-gray-600">This Month</span>
             </div>
@@ -252,8 +252,8 @@ export default function PerformanceMetrics({ companyId }: PerformanceMetricsProp
               {metrics.estimatesThisMonth}
             </div>
           </div>
-          <div className="p-2 bg-gray-50 rounded-lg border border-gray-200 text-center">
-            <div className="flex items-center justify-center gap-1 mb-0.5">
+          <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 text-center">
+            <div className="flex items-center justify-center gap-1 mb-1">
               <Percent className="w-3 h-3 text-gray-500" />
               <span className="text-xs text-gray-600">Win Rate</span>
             </div>

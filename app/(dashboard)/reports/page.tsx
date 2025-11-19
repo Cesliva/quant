@@ -11,6 +11,7 @@ import { getProjectPath } from "@/lib/firebase/firestore";
 import { EstimatingLine } from "@/components/estimating/EstimatingGrid";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
 import { exportToPDF, exportToExcel } from "@/lib/utils/export";
+import { useCompanyId } from "@/lib/hooks/useCompanyId";
 
 function ReportsContent() {
   const params = useParams();
@@ -21,13 +22,15 @@ function ReportsContent() {
   // params.id only exists if we're at /projects/[id]/reports
   const projectIdFromRoute = (params as any)?.id as string | undefined;
   const projectIdFromQuery = searchParams?.get("projectId") || "";
-  const companyId = "default"; // TODO: Get from auth context
+  const companyId = useCompanyId();
 
   const [lines, setLines] = useState<EstimatingLine[]>([]);
   const [selectedProject, setSelectedProject] = useState<string>(
     projectIdFromRoute || projectIdFromQuery || ""
   );
-  const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
+  const [projects, setProjects] = useState<{ id: string; name: string; projectType?: string; projectTypeSubCategory?: string }[]>([]);
+  const [filterProjectType, setFilterProjectType] = useState<string>("");
+  const [sortBy, setSortBy] = useState<"name" | "type" | "value">("name");
 
   const firebaseReady = isFirebaseConfigured();
 
@@ -38,12 +41,15 @@ function ReportsContent() {
     }
 
     const projectsPath = `companies/${companyId}/projects`;
-    const unsubscribe = subscribeToCollection<{ id: string; projectName?: string }>(
+    const unsubscribe = subscribeToCollection<{ id: string; projectName?: string; projectType?: string; projectTypeSubCategory?: string; estimatedValue?: string | number }>(
       projectsPath,
       (data) => {
         const mapped = data.map((p) => ({
           id: p.id,
           name: p.projectName || "Untitled Project",
+          projectType: p.projectType || "",
+          projectTypeSubCategory: p.projectTypeSubCategory || "",
+          estimatedValue: typeof p.estimatedValue === 'string' ? parseFloat(p.estimatedValue) : (p.estimatedValue || 0),
         }));
         setProjects(mapped);
         setSelectedProject((prev) => {
@@ -145,18 +151,43 @@ function ReportsContent() {
   const costPerHour = laborTotal > 0 ? costTotal / laborTotal : 0;
 
   const handleExport = (type: "pdf" | "excel" | string) => {
-    if (type === "pdf" || type === "excel") {
-      const currentProject = projects.find((p) => p.id === selectedProject);
-      const projectName = currentProject?.name || "Project";
-      
-      if (type === "pdf") {
-        exportToPDF(lines, projectName, "Company");
-      } else if (type === "excel") {
-        exportToExcel(lines, projectName, "Company");
-      }
+    const currentProject = projects.find((p) => p.id === selectedProject);
+    const projectName = currentProject?.name || "Project";
+    
+    if (type === "pdf") {
+      exportToPDF(lines, projectName, "Company");
+    } else if (type === "excel") {
+      exportToExcel(lines, projectName, "Company");
     } else {
-      // Legacy export types - show coming soon for now
-      alert(`${type} export functionality coming soon!`);
+      // For category-specific exports, export filtered data as PDF
+      let filteredLines = lines;
+      
+      if (type === "material") {
+        // Export only material-related lines
+        filteredLines = lines.filter(line => line.materialType === "Material" || line.materialType === "Plate");
+      } else if (type === "labor") {
+        // Export all lines (labor is on all lines)
+        filteredLines = lines;
+      } else if (type === "coating") {
+        // Export lines with coating
+        filteredLines = lines.filter(line => line.coatingSystem || line.totalSurfaceArea);
+      } else if (type === "cost") {
+        // Export all lines with costs
+        filteredLines = lines.filter(line => line.totalCost);
+      } else if (type === "material-detail") {
+        // Export material breakdown
+        filteredLines = lines.filter(line => line.materialType === "Material" || line.materialType === "Plate");
+      } else if (type === "cost-analysis") {
+        // Export all lines for cost analysis
+        filteredLines = lines;
+      }
+      
+      // Export filtered lines as PDF
+      if (filteredLines.length > 0) {
+        exportToPDF(filteredLines, `${projectName} - ${type}`, "Company");
+      } else {
+        alert(`No data available for ${type} export`);
+      }
     }
   };
 
@@ -180,23 +211,55 @@ function ReportsContent() {
             Detailed project analysis and summaries
           </p>
         </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <select
-              value={selectedProject}
-              onChange={(e) => handleProjectChange(e.target.value)}
-              className="px-4 py-2 rounded-lg border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={filterProjectType}
+              onChange={(e) => setFilterProjectType(e.target.value)}
+              className="px-3 py-2 rounded-lg border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
             >
-              <option value="">Select Project...</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
+              <option value="">All Project Types</option>
+              {Array.from(new Set(projects.map(p => p.projectType).filter(Boolean))).sort().map((type) => (
+                <option key={type} value={type}>
+                  {type}
                 </option>
               ))}
             </select>
-            <Button variant="outline" size="sm">
-              <Filter className="w-4 h-4 mr-2" />
-              Filter
-            </Button>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as "name" | "type" | "value")}
+              className="px-3 py-2 rounded-lg border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            >
+              <option value="name">Sort by Name</option>
+              <option value="type">Sort by Type</option>
+              <option value="value">Sort by Value</option>
+            </select>
+            <select
+              value={selectedProject}
+              onChange={(e) => handleProjectChange(e.target.value)}
+              className="px-4 py-2 rounded-lg border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[200px]"
+            >
+              <option value="">Select Project...</option>
+              {(() => {
+                let filtered = projects;
+                if (filterProjectType) {
+                  filtered = filtered.filter(p => p.projectType === filterProjectType);
+                }
+                filtered = [...filtered].sort((a, b) => {
+                  if (sortBy === "type") {
+                    return (a.projectType || "").localeCompare(b.projectType || "");
+                  } else if (sortBy === "value") {
+                    return (b.estimatedValue || 0) - (a.estimatedValue || 0);
+                  } else {
+                    return (a.name || "").localeCompare(b.name || "");
+                  }
+                });
+                return filtered.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name} {project.projectType ? `(${project.projectType}${project.projectTypeSubCategory ? ` - ${project.projectTypeSubCategory}` : ""})` : ""}
+                  </option>
+                ));
+              })()}
+            </select>
             {!firebaseReady && (
               <span className="text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded">
                 Firebase Not Configured
@@ -297,8 +360,9 @@ function ReportsContent() {
             </Card>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Material Breakdown */}
+          {/* Material & Coating Breakdown - Golden Ratio (1.618:1) */}
+          <div className="grid grid-cols-1 lg:grid-cols-[1.618fr_1fr] gap-6">
+            {/* Material Breakdown (61.8%) */}
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">

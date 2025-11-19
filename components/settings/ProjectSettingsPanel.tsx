@@ -27,6 +27,7 @@ interface Project {
   projectNumber?: string;
   projectName?: string;
   projectType?: string;
+  projectTypeSubCategory?: string; // User-defined sub-category (e.g., "Tilt-up", "2 line pipe rail galvanized")
   status?: string;
   owner?: string;
   generalContractor?: string;
@@ -90,6 +91,7 @@ export default function ProjectSettingsPanel({ companyId, projectId, compact = f
     projectNumber: "",
     projectName: "",
     projectType: "",
+    projectTypeSubCategory: "",
     status: "draft",
     owner: "",
     generalContractor: "",
@@ -527,21 +529,43 @@ export default function ProjectSettingsPanel({ companyId, projectId, compact = f
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Project Type
+                  Project Type <span className="text-gray-500">(for tracking & comparison)</span>
                 </label>
                 <select
                   value={project.projectType || ""}
                   onChange={(e) => setProject({ ...project, projectType: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="">Select type...</option>
-                  <option value="structural">Structural Steel</option>
-                  <option value="misc">Miscellaneous Metals</option>
-                  <option value="stairs">Stairs & Railings</option>
-                  <option value="bridge">Bridge Work</option>
-                  <option value="plate">Plate Work</option>
-                  <option value="other">Other</option>
+                  <option value="">Select project type...</option>
+                  <option value="Commercial">Commercial</option>
+                  <option value="Industrial">Industrial</option>
+                  <option value="Residential">Residential</option>
+                  <option value="Infrastructure">Infrastructure</option>
+                  <option value="Institutional">Institutional</option>
+                  <option value="Mixed Use">Mixed Use</option>
+                  <option value="Warehouse">Warehouse</option>
+                  <option value="Retail">Retail</option>
+                  <option value="Office">Office</option>
+                  <option value="Healthcare">Healthcare</option>
+                  <option value="Education">Education</option>
+                  <option value="Hospitality">Hospitality</option>
+                  <option value="Manufacturing">Manufacturing</option>
+                  <option value="Miscellaneous">Miscellaneous</option>
+                  <option value="Other">Other</option>
                 </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Sub-Category <span className="text-gray-500">(e.g., "Tilt-up", "2 line pipe rail galvanized")</span>
+                </label>
+                <Input
+                  value={project.projectTypeSubCategory || ""}
+                  onChange={(e) => setProject({ ...project, projectTypeSubCategory: e.target.value })}
+                  placeholder="Optional: Add specific sub-category"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Helps compare similar projects for strategic advantage
+                </p>
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">

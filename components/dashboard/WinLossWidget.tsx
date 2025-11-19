@@ -105,42 +105,42 @@ export default function WinLossWidget({ companyId }: WinLossWidgetProps) {
   return (
     <>
       <Card className="border-0 shadow-sm bg-white/80 backdrop-blur-sm">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
           <CardTitle className="text-base font-semibold flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-green-600" />
             Win/Loss
           </CardTitle>
-          <Button variant="outline" size="sm" onClick={() => setIsModalOpen(true)} className="text-xs">
+          <Button variant="outline" size="sm" onClick={() => setIsModalOpen(true)}>
             View Full
           </Button>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-4">
           {/* Key Metrics - Even Grid */}
           <div className="grid grid-cols-2 gap-2">
-            <div className="p-3 bg-green-50 rounded-lg border border-green-200 text-center">
+            <div className="p-4 bg-green-50 rounded-lg border border-green-200 text-center">
               <div className="text-2xl font-bold text-green-700">{stats.wins}</div>
-              <div className="text-xs text-gray-600 mt-0.5">Wins</div>
+              <div className="text-xs text-gray-600 mt-1">Wins</div>
             </div>
-            <div className="p-3 bg-red-50 rounded-lg border border-red-200 text-center">
+            <div className="p-4 bg-red-50 rounded-lg border border-red-200 text-center">
               <div className="text-2xl font-bold text-red-700">{stats.losses}</div>
-              <div className="text-xs text-gray-600 mt-0.5">Losses</div>
+              <div className="text-xs text-gray-600 mt-1">Losses</div>
             </div>
-            <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 text-center">
+            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200 text-center">
               <div className="text-2xl font-bold text-blue-700">{stats.winRate.toFixed(1)}%</div>
-              <div className="text-xs text-gray-600 mt-0.5">Win Rate</div>
+              <div className="text-xs text-gray-600 mt-1">Win Rate</div>
             </div>
-            <div className="p-3 bg-purple-50 rounded-lg border border-purple-200 text-center">
+            <div className="p-4 bg-purple-50 rounded-lg border border-purple-200 text-center">
               <div className="text-2xl font-bold text-purple-700">
                 {stats.averageMargin > 0 ? `${stats.averageMargin.toFixed(1)}%` : "-"}
               </div>
-              <div className="text-xs text-gray-600 mt-0.5">Avg Margin</div>
+              <div className="text-xs text-gray-600 mt-1">Avg Margin</div>
             </div>
           </div>
 
           {/* Empty State or Quick Action */}
           {records.length === 0 && (
-            <div className="text-center py-3">
-              <Button variant="outline" size="sm" onClick={() => setIsModalOpen(true)} className="w-full text-xs">
+            <div className="text-center py-4">
+              <Button variant="outline" size="sm" onClick={() => setIsModalOpen(true)} className="w-full">
                 <Plus className="w-3 h-3 mr-1" />
                 Log First Record
               </Button>

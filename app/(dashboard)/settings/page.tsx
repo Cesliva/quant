@@ -34,8 +34,10 @@ interface CoatingType {
   costPerSF: number;
 }
 
+import { useCompanyId } from "@/lib/hooks/useCompanyId";
+
 export default function SettingsPage() {
-  const companyId = "default"; // TODO: Get from auth context
+  const companyId = useCompanyId();
   const [activeTab, setActiveTab] = useState<TabType>("company");
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);

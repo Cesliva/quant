@@ -23,10 +23,12 @@ interface QuoteDocument {
   status?: "draft" | "reviewing" | "quoted" | "archived";
 }
 
+import { useCompanyId } from "@/lib/hooks/useCompanyId";
+
 export default function ImportQuotesPage() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const companyId = "default"; // TODO: Get from auth context
+  const companyId = useCompanyId();
   
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -421,11 +423,19 @@ export default function ImportQuotesPage() {
                       <div className="flex items-center gap-2 ml-4">
                         <button
                           onClick={() => {
-                            // TODO: Open PDF viewer or download
-                            alert("PDF viewing will be implemented with Firebase Storage integration");
+                            // Note: PDF viewing requires Firebase Storage integration
+                            // For now, show file information
+                            alert(
+                              `PDF File: ${quote.fileName}\n` +
+                              `Size: ${(quote.fileSize / 1024).toFixed(2)} KB\n\n` +
+                              `To enable PDF viewing, please:\n` +
+                              `1. Set up Firebase Storage\n` +
+                              `2. Upload PDFs to Storage\n` +
+                              `3. Store download URLs in Firestore`
+                            );
                           }}
                           className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                          title="View PDF"
+                          title="View PDF (requires Firebase Storage)"
                         >
                           <Eye className="w-4 h-4" />
                         </button>

@@ -20,9 +20,11 @@ interface Project {
   archived?: boolean;
 }
 
+import { useCompanyId } from "@/lib/hooks/useCompanyId";
+
 export default function ArchivedProjectsPage() {
   const router = useRouter();
-  const companyId = "default"; // TODO: Get from auth context
+  const companyId = useCompanyId();
   const [archivedProjects, setArchivedProjects] = useState<Project[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
 

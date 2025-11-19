@@ -139,25 +139,25 @@ export default function ActivityFeed({ companyId }: ActivityFeedProps) {
 
   return (
     <Card className="border-0 shadow-sm bg-white/80 backdrop-blur-sm">
-      <CardHeader className="pb-3">
+      <CardHeader className="pb-4">
         <CardTitle className="flex items-center gap-2 text-base">
           <Clock className="w-5 h-5 text-gray-600" />
           Recent Activity
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="space-y-3">
+        <div className="space-y-2">
           {activities.map((activity) => (
             <div
               key={activity.id}
-              className={`p-3 rounded-lg border ${getActivityColor(activity.type)} transition-all hover:shadow-sm`}
+              className={`p-4 rounded-lg border ${getActivityColor(activity.type)} transition-all hover:shadow-sm`}
             >
               <div className="flex items-start gap-3">
                 <div className="mt-0.5">{getActivityIcon(activity.type)}</div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900">{activity.message}</p>
                   {activity.projectName && (
-                    <p className="text-xs text-gray-600 mt-0.5">{activity.projectName}</p>
+                    <p className="text-xs text-gray-600 mt-1">{activity.projectName}</p>
                   )}
                   <p className="text-xs text-gray-500 mt-1">{formatTimeAgo(activity.timestamp)}</p>
                 </div>

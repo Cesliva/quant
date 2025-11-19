@@ -132,9 +132,10 @@ interface EstimatingGridProps {
   companyId: string;
   projectId: string;
   isManualMode?: boolean;
+  highlightLineId?: string | null;
 }
 
-export default function EstimatingGrid({ companyId, projectId, isManualMode = false }: EstimatingGridProps) {
+export default function EstimatingGrid({ companyId, projectId, isManualMode = false, highlightLineId }: EstimatingGridProps) {
   // Undo/Redo state management
   const {
     state: lines,
@@ -149,9 +150,41 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
   const [editingLine, setEditingLine] = useState<Partial<EstimatingLine>>({});
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
   const [groupByMainMember, setGroupByMainMember] = useState<boolean>(false);
+  const highlightedLineRef = useRef<HTMLTableRowElement | null>(null);
   
   // Track if we should add to history (skip for Firestore updates)
   const skipHistoryRef = useRef(false);
+  
+  // Handle highlighting and scrolling to line from URL parameter
+  useEffect(() => {
+    if (highlightLineId && lines.length > 0) {
+      // Find the line
+      const line = lines.find(l => l.id === highlightLineId);
+      if (line) {
+        // Expand the row if it's not already expanded
+        if (expandedRowId !== line.id) {
+          setExpandedRowId(line.id);
+        }
+        // Set editing state to make it editable
+        if (editingId !== line.id) {
+          setEditingId(line.id);
+          setEditingLine(line);
+        }
+        // Scroll to the line after a short delay to allow DOM to update
+        setTimeout(() => {
+          const element = document.getElementById(`line-${line.id}`);
+          if (element) {
+            element.scrollIntoView({ behavior: "smooth", block: "center" });
+            // Add highlight class temporarily
+            element.classList.add("bg-yellow-100");
+            setTimeout(() => {
+              element.classList.remove("bg-yellow-100");
+            }, 3000);
+          }
+        }, 300);
+      }
+    }
+  }, [highlightLineId, lines, expandedRowId, editingId]);
   
   // Group lines by main member
   const groupLinesByMainMember = (linesToGroup: EstimatingLine[]): EstimatingLine[] => {

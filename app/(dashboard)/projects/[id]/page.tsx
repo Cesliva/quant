@@ -62,11 +62,13 @@ interface Project {
   updatedAt?: any;
 }
 
+import { useCompanyId } from "@/lib/hooks/useCompanyId";
+
 export default function ProjectDashboard() {
   const params = useParams();
   const router = useRouter();
   const projectId = params.id as string;
-  const companyId = "default"; // TODO: Get from auth context
+  const companyId = useCompanyId();
   
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
@@ -298,10 +300,10 @@ export default function ProjectDashboard() {
       color: "bg-blue-500 hover:bg-blue-600",
     },
     {
-      name: "Project Reports",
+      name: "Estimating Summary",
       href: `/projects/${projectId}/reports`,
       icon: FileText,
-      description: "Financial reports & review",
+      description: "Finalize estimate before proposal",
       color: "bg-amber-500 hover:bg-amber-600",
     },
     {
@@ -599,10 +601,10 @@ export default function ProjectDashboard() {
           </div>
         </div>
 
-        {/* Secondary Actions & Project Info */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Secondary Actions */}
-          <div className="lg:col-span-1">
+        {/* Secondary Actions & Project Info - Golden Ratio (1.618:1) */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.618fr] gap-6">
+          {/* Secondary Actions (38.2%) */}
+          <div>
             <h2 className="text-xl font-semibold text-gray-900 mb-4">More Tools</h2>
             <div className="space-y-2">
               {secondaryActions.map((action) => {
@@ -630,8 +632,8 @@ export default function ProjectDashboard() {
             </div>
           </div>
 
-          {/* Project Timeline & Info */}
-          <div className="lg:col-span-2">
+          {/* Project Timeline & Info (61.8%) */}
+          <div>
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Project Timeline</h2>
             <Card>
               <CardContent className="p-6">

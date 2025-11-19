@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useParams } from "next/navigation";
+import { usePathname, useParams, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils/cn";
 import { 
   FileText, 
@@ -28,13 +28,18 @@ const navigation = [
 export default function Sidebar() {
   const pathname = usePathname();
   const params = useParams();
-  const projectId = params?.id as string | undefined;
+  const searchParams = useSearchParams();
+  const projectIdFromParams = params?.id as string | undefined;
+  const projectIdFromQuery = searchParams?.get("projectId");
+  const projectId = projectIdFromParams || projectIdFromQuery || undefined;
   
-  // Check if we're on a project sub-page
-  const isProjectPage = pathname?.startsWith("/projects/") && projectId;
-  const isProjectDashboard = pathname === `/projects/${projectId}`;
+  // Check if we're on a project sub-page (either in /projects/[id] or with projectId query param)
+  const hasProjectIdInPath = pathname?.startsWith("/projects/") && projectIdFromParams;
+  const hasProjectIdInQuery = Boolean(projectIdFromQuery);
+  const isProjectPage = hasProjectIdInPath || hasProjectIdInQuery;
+  const isProjectDashboard = pathname === `/projects/${projectIdFromParams}`;
   const isProjectSubPage = isProjectPage && !isProjectDashboard;
-  const isReportsPage = pathname === `/projects/${projectId}/reports`;
+  const isReportsPage = pathname === `/projects/${projectIdFromParams}/reports`;
 
   return (
     <div className="w-64 bg-white border-r border-gray-200 min-h-screen p-4">
@@ -62,7 +67,7 @@ export default function Sidebar() {
         {isProjectPage && projectId && (
           <>
             <Link
-              href={`/projects/${projectId}`}
+              href={projectIdFromParams ? `/projects/${projectId}` : `/projects/${projectId}`}
               className={cn(
                 "flex items-center gap-3 px-4 py-3 rounded-lg transition-colors",
                 isProjectDashboard
@@ -83,7 +88,7 @@ export default function Sidebar() {
               )}
             >
               <BarChart3 className="w-5 h-5" />
-              <span>Project Reports</span>
+              <span>Estimating Summary</span>
             </Link>
           </>
         )}
@@ -108,8 +113,8 @@ export default function Sidebar() {
           const isActive = pathname?.startsWith(item.href) || 
             (isProjectPage && projectId && (
               (item.name === "Estimating" && pathname === `/projects/${projectId}/estimating`) ||
-              (item.name === "AI Spec Review" && pathname?.startsWith("/spec-review")) ||
-              (item.name === "AI Generated Proposal" && pathname?.startsWith("/proposal"))
+              (item.name === "AI Spec Review" && pathname === "/spec-review" && projectIdFromQuery === projectId) ||
+              (item.name === "AI Generated Proposal" && pathname === "/proposal" && projectIdFromQuery === projectId)
             ));
           
           return (

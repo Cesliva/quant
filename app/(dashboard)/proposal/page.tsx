@@ -1,12 +1,17 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
-import { FileDown, Sparkles } from "lucide-react";
+import { FileDown, Sparkles, ArrowLeft } from "lucide-react";
 import { generateProposal } from "@/lib/openai/gpt4";
+import { exportProposalToPDF } from "@/lib/utils/export";
 
 export default function ProposalPage() {
+  const searchParams = useSearchParams();
+  const projectId = searchParams?.get("projectId");
   const [proposalText, setProposalText] = useState(
     "AI-generated proposal text appears here..."
   );
@@ -32,16 +37,35 @@ export default function ProposalPage() {
   };
 
   const handleExportPDF = () => {
-    // TODO: Implement PDF export
-    alert("PDF export functionality coming soon");
+    if (!proposalText.trim() || proposalText === "AI-generated proposal text appears here...") {
+      alert("Please generate a proposal first");
+      return;
+    }
+    
+    // Extract project name from summary if available
+    const projectName = projectSummary.trim() 
+      ? projectSummary.split('\n')[0].substring(0, 50) 
+      : "Project";
+    
+    exportProposalToPDF(proposalText, projectName, "", "Company");
   };
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-        <Sparkles className="w-8 h-8 text-purple-500" />
-        <span>AI Generated Proposal</span>
-      </h1>
+      <div className="flex items-center gap-4">
+        {projectId && (
+          <Link href={`/projects/${projectId}`}>
+            <Button variant="outline" size="sm">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Project
+            </Button>
+          </Link>
+        )}
+        <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
+          <Sparkles className="w-8 h-8 text-purple-500" />
+          <span>AI Generated Proposal</span>
+        </h1>
+      </div>
       
       <Card>
         <CardHeader>

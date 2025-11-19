@@ -17,10 +17,12 @@ import { createLineFromStructuredData } from "@/lib/utils/structuredVoiceParser"
 import { FileText, ArrowRight, Save, Upload } from "lucide-react";
 import { exportToQuant, importFromQuant } from "@/lib/utils/quantExport";
 
+import { useCompanyId } from "@/lib/hooks/useCompanyId";
+
 function EstimatingContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const companyId = "default"; // TODO: Get from auth context
+  const companyId = useCompanyId();
   
   const projectIdFromQuery = searchParams?.get("projectId") || "";
   const [selectedProject, setSelectedProject] = useState<string>(projectIdFromQuery);

@@ -333,6 +333,7 @@ export default function EstimatingGridCompact({
               return (
                 <>
                   <tr
+                    id={`line-${line.id}`}
                     key={line.id}
                     className={`hover:bg-gray-50 transition-colors ${
                       line.status === "Void" ? "opacity-50" : ""

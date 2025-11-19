@@ -31,14 +31,17 @@ export function calculateWhisperCost(durationMinutes: number): number {
 }
 
 export function calculateGPT4Cost(tokens: number, model: string = "gpt-4o-mini"): number {
-  // Approximate costs per 1K tokens
-  const inputCostPer1K = model.includes("gpt-4") ? 0.15 : 0.15;
-  const outputCostPer1K = model.includes("gpt-4") ? 0.6 : 0.6;
+  // OpenAI pricing (per 1M tokens)
+  // GPT-4o: $2.50 input, $10.00 output
+  // GPT-4o-mini: $0.15 input, $0.60 output
+  const isGPT4o = model === "gpt-4o";
+  const inputCostPer1M = isGPT4o ? 2.50 : 0.15;
+  const outputCostPer1M = isGPT4o ? 10.00 : 0.60;
   
   // Rough estimate: assume 80% input, 20% output
   const inputTokens = tokens * 0.8;
   const outputTokens = tokens * 0.2;
   
-  return (inputTokens / 1000) * inputCostPer1K + (outputTokens / 1000) * outputCostPer1K;
+  return (inputTokens / 1000000) * inputCostPer1M + (outputTokens / 1000000) * outputCostPer1M;
 }
 

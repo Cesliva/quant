@@ -91,9 +91,11 @@ interface Project {
   projectNumber?: string;
 }
 
+import { useCompanyId } from "@/lib/hooks/useCompanyId";
+
 export default function PostBidAnalysisPage() {
   const router = useRouter();
-  const companyId = "default"; // TODO: Get from auth context
+  const companyId = useCompanyId();
   
   const [analyses, setAnalyses] = useState<PostBidAnalysis[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);

@@ -10,6 +10,7 @@ import { subscribeToCollection, getProjectPath } from "@/lib/firebase/firestore"
 import { isFirebaseConfigured } from "@/lib/firebase/config";
 import { EstimatingLine } from "@/components/estimating/EstimatingGrid";
 import NestingCanvas from "@/components/nesting/NestingCanvas";
+import { useCompanyId } from "@/lib/hooks/useCompanyId";
 
 interface NestItem {
   id: string;
@@ -44,7 +45,7 @@ interface NestingSheet {
 
 export default function MaterialNestingPage() {
   const router = useRouter();
-  const companyId = "default"; // TODO: Get from auth context
+  const companyId = useCompanyId();
   
   const [selectedProject, setSelectedProject] = useState<string>("");
   const [availableLines, setAvailableLines] = useState<EstimatingLine[]>([]);
@@ -64,12 +65,34 @@ export default function MaterialNestingPage() {
   // Standard stock lengths for rolled materials (in feet)
   const rolledStockLengths = [20, 24, 30, 40, 50, 60];
 
-  // Mock projects - replace with real Firestore query
-  const projects = [
-    { id: "1", name: "Downtown Office Building" },
-    { id: "2", name: "Industrial Warehouse" },
-    { id: "3", name: "Bridge Restoration" },
-  ];
+  // Load projects from Firestore
+  const [projects, setProjects] = useState<Array<{ id: string; name: string }>>([]);
+
+  useEffect(() => {
+    if (!isFirebaseConfigured()) {
+      setProjects([]);
+      return;
+    }
+
+    const projectsPath = `companies/${companyId}/projects`;
+    const unsubscribe = subscribeToCollection<{ id: string; projectName?: string; projectNumber?: string; archived?: boolean }>(
+      projectsPath,
+      (data) => {
+        // Filter out archived projects and format for dropdown
+        const activeProjects = data
+          .filter((p) => !p.archived)
+          .map((p) => ({
+            id: p.id,
+            name: p.projectNumber && p.projectName 
+              ? `${p.projectNumber} - ${p.projectName}`
+              : p.projectName || p.projectNumber || "Untitled Project",
+          }));
+        setProjects(activeProjects);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [companyId]);
 
   // Load estimating lines from selected project
   useEffect(() => {

@@ -32,11 +32,13 @@ interface Contact {
   notes?: string;
 }
 
+import { useCompanyId } from "@/lib/hooks/useCompanyId";
+
 export default function ProjectDetailsPage() {
   const params = useParams();
   const router = useRouter();
   const projectId = params.id as string;
-  const companyId = "default"; // TODO: Get from auth context
+  const companyId = useCompanyId();
   const isNewProject = projectId === "new";
   
   const [project, setProject] = useState({
