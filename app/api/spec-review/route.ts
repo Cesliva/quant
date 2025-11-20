@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { specText, projectData, analysisType = "structural" } = await request.json();
+    const { specText, projectData, analysisType = "structural", companyId, projectId } = await request.json();
     
     // Validate analysisType
     const validTypes = ["structural", "misc", "finishes", "aess", "div01", "div03"];
@@ -41,6 +41,297 @@ YOUR MINDSET: Every word in the spec costs money. Your job is to find where fabr
 - What's missing that will bite us later?
 - What conflicts will create disputes?
 
+CRITICAL: Look for SPECIFIC technical details:
+- Specific codes and standards (AISC 341, AISC 358, AWS D1.8, SSPC-SP6, ASTM A123, etc.)
+- Specific technical requirements (demand critical welds, protected zones, SFRS, slip-critical bolts, etc.)
+- Specific certifications required (AISC Certified, SSPC-QP3, etc.)
+- Specific processes (SP6 blasting, galvanizing, NDT requirements, etc.)
+
+For each finding, provide:
+1. SPECIFIC technical requirement (code, standard, process)
+2. SPEC SECTION REFERENCE (e.g., "Section 05 12 00, Part 2.7", "Part 1.5.B.9", "Section 1.6.C") - ALWAYS include the exact section/part/subsection where you found this requirement
+3. WHY it matters (real-world impact)
+4. HOW it affects cost (specific percentages, labor hours, or dollar impacts)
+5. WHAT the estimator should do (add line items, carry allowances, write exclusions, submit RFIs)
+6. BID STRATEGY (actual exclusion language, bid notes, clarifications)
+
+CRITICAL: When extracting information, ALWAYS note the section reference (Part 1.1, Part 2.7, Section 1.5.B, etc.) so the estimator can quickly locate it in the spec document.
+
+SECTION REFERENCE FORMAT EXAMPLES:
+- "Part 2.7" (for Part 2, Section 7)
+- "Section 1.5.B" (for Section 1.5, subsection B)
+- "Part 1.5.B.9" (for Part 1, Section 5, subsection B, item 9)
+- "Section 05 12 00, Part 2.7" (if the spec includes the full section number)
+- Look for headings like "PART 1 - GENERAL", "PART 2 - PRODUCTS", "PART 3 - EXECUTION"
+- Look for numbered sections like "1.1 SUMMARY", "1.5 SUBMITTALS", "2.7 FABRICATION"
+- Look for lettered subsections like "A.", "B.", "C." within sections
+- If the spec uses a different numbering system, use that exact format
+
+ALWAYS include the specSection field in your JSON response for:
+- costImpactTable items
+- complianceItems
+- rfiSuggestions
+- Any other structured data where you reference a specific requirement
+
+If you cannot determine the exact section reference, use your best judgment based on the spec's structure, or note "Section reference not clearly identified" but still try to provide context (e.g., "Part 2 - Products section").
+
+COMPREHENSIVE FLAGGING CHECKLIST - SYSTEMATICALLY SCAN FOR ALL OF THESE:
+
+1. GLOBAL DESIGN, CODE & PERFORMANCE REQUIREMENTS
+MUST FLAG:
+- AISC 360 (Specification for Structural Steel Buildings)
+- AISC 303 (Code of Standard Practice)
+- AISC 341 (Seismic Provisions) → HIGH COST: 30-50% welding cost increase
+- AISC 358 (Prequalified Connections for SMF/IMF) → HIGH COST: RBS cuts, tight tolerances
+- RCSC (High-Strength Bolting Spec)
+- AWS D1.1 (Structural Welding)
+- AWS D1.8 (Seismic Supplement) → HIGH COST: Certified NDT, supplemental testing
+- Any special code amendments
+- Any "more stringent than code" language
+
+REQUIRED FLAGS:
+- Seismic Design Category (C, D, E, F)
+- SFRS (type and location) → HIGH COST: Seismic detailing
+- Demand Critical (DC) welds → HIGH COST: 30-50% welding cost increase
+- Protected Zones → MEDIUM-HIGH COST: Connection restrictions
+- RBS (Reduced Beam Sections) → HIGH COST: Special flange cuts, tight tolerances
+- Special moment frames → HIGH COST: Complex connections
+- Buckling-restrained braced frames → HIGH COST: Special fabrication
+- Eccentric bracing (link beams) → HIGH COST: Complex fabrication
+- Blast, impact, fatigue, vibration requirements → HIGH COST: Special design/fabrication
+
+2. MATERIAL SPECIFICATIONS & AVAILABILITY RISKS
+FLAG:
+- A992, A36, A572 (# grades), A588, A847, A913
+- Weathering steel (A588/A847) → MEDIUM-HIGH COST: Material premium + blasting
+- Mixed material grades on job → MEDIUM COST: Material handling complexity
+- CVN / Charpy toughness requirements → MEDIUM COST: Material testing
+- Special castings (A216), forgings (A668) → HIGH COST: Special materials
+- High-strength bar requirements → MEDIUM COST: Material premium
+- Nonstandard plate thicknesses → MEDIUM COST: Availability/lead time
+- Supplementary toughness → MEDIUM COST: Material testing
+- Impact testing at cold temperatures → MEDIUM COST: Material testing
+- "Notch toughness certification" → MEDIUM COST: Material certification
+
+3. SHOP & WELDER CERTIFICATIONS (CRITICAL DEALBREAKERS)
+FABRICATOR CERTIFICATIONS - FLAG AS QUALIFICATION GATING:
+- AISC Certified (Category BU) → REQUIRED: Filters who can bid
+- AISC SBR (Simple Bridge)
+- AISC Sophisticated Paint Endorsement (P1/P2/P3) → REQUIRED: Filters who can bid
+- SSPC-QP3 shop painting certification → REQUIRED: Filters who can bid
+- IAS AC172 accreditation
+- DOT-approved fabricator lists
+
+WELDER / WELDING PROGRAM REQUIREMENTS - FLAG AS HIGH COST:
+- AWS D1.1 structural welders
+- AWS D1.8 seismic welders → HIGH COST: Supplemental qualification
+- Supplemental seismic welder qualification → HIGH COST: Additional testing
+- "FCAW-G only" restrictions → MEDIUM COST: Process restrictions
+- CVN filler metal testing → MEDIUM COST: Material testing
+- Full WPS/PQR qualification by testing → MEDIUM COST: Procedure development
+- Prohibition of FCAW-S → MEDIUM COST: Process restrictions
+- Restrictions on specific joint preps or processes → MEDIUM COST: Process limitations
+
+INSPECTOR CERTIFICATIONS - FLAG AS COST/RISK:
+- AWS CWI
+- SCWI
+- ICC Structural Welding
+- ICC Structural Steel & Bolting
+- ASNT SNT-TC-1A Level II (UT/MT/PT) → HIGH COST: Certified NDT technicians
+- AWS D1.8 NDT personnel certification → HIGH COST: Certified NDT technicians
+
+4. FABRICATION COMPLEXITY FLAGS
+FLAG AS HIGH COST DRIVERS:
+- Built-up members → HIGH COST: Additional fabrication
+- Plate girders → HIGH COST: Complex fabrication
+- Box beams → HIGH COST: Complex fabrication
+- RBS flange cuts → HIGH COST: Special cuts, tight tolerances
+- Curved members → HIGH COST: Special fabrication
+- Cambering requirements → MEDIUM-HIGH COST: 15-25% labor increase
+- Tightened fabrication tolerances → MEDIUM-HIGH COST: Additional QC
+- No visible mill marks / trade names → MEDIUM COST: Surface prep
+- Grinding of exposed surfaces → HIGH COST: Additional labor
+- No weld show-through → HIGH COST: Weld finishing
+- Weld access hole special geometry → MEDIUM COST: Special fabrication
+- Required removal of backer bars → MEDIUM COST: Additional labor
+- Special stiffeners / continuity plates → MEDIUM COST: Additional fabrication
+- Tight HSS tolerances → MEDIUM COST: Additional QC
+
+5. WELDING (HUGE COST DRIVER)
+FLAG WHENEVER SPEC REQUIRES:
+- AWS D1.1 + AWS D1.8 combos → HIGH COST: 30-50% welding cost increase
+- Demand Critical welds → HIGH COST: 30-50% welding cost increase
+- CVN toughness filler metal → MEDIUM COST: Material premium
+- Supplemental weld metal testing → MEDIUM COST: Testing costs
+- Root opening tolerances tighter than AWS → MEDIUM COST: Additional QC
+- Grinding flush of welds → HIGH COST: Additional labor
+- Weld blending ("uniform appearance") → HIGH COST: Additional labor
+- Weld access hole geometry → MEDIUM COST: Special fabrication
+- Preheat rules above D1.1 → MEDIUM COST: Additional process
+- Postheat requirements → MEDIUM COST: Additional process
+- Welded architectural finish → HIGH COST: AESS-level finish
+- Welding sequence requirements → MEDIUM COST: Process constraints
+- Prohibition of certain processes (FCAW-S, short-circuit MIG) → MEDIUM COST: Process restrictions
+
+6. BOLTING REQUIREMENTS
+MUST FLAG:
+BOLT TYPES:
+- A325, A490, F1852, F2280
+- Weathering bolts → MEDIUM COST: Material premium
+- Zinc-coated bolts → MEDIUM COST: Material premium
+- Slip-critical joints → MEDIUM-HIGH COST: Faying surface prep, bolt tensioning
+- Pretensioned joints → MEDIUM COST: Bolt tensioning
+- Direct Tension Indicators (DTIs) → MEDIUM COST: Material + inspection
+- Class A/B faying surface prep → MEDIUM-HIGH COST: Surface prep
+- Slip coefficient requirements → MEDIUM-HIGH COST: Surface prep, testing
+- Galvanized joint prep → MEDIUM-HIGH COST: Post-galv surface treatment
+- Oversized holes, short-slotted, long-slotted holes → MEDIUM COST: Special fabrication
+- Prohibition on torch cut holes → MEDIUM COST: Process restrictions
+- Calibration requirements before installation → MEDIUM COST: Equipment/tooling
+
+7. COATINGS, PAINT, BLASTING, AND WEATHERING STEEL
+MUST FLAG:
+- SSPC-SP6 commercial blast → HIGH COST: Major labor + equipment
+- SSPC-SP10 near-white → VERY HIGH COST: Extensive blasting
+- SSPC-SP14 industrial → MEDIUM COST: Blasting
+- SSPC-SP16 blast for non-ferrous → MEDIUM COST: Blasting
+- No mill scale allowed → HIGH COST: Extensive blasting
+- Weathering steel surface prep → HIGH COST: SP6 blasting
+- Storage requirements (to avoid uneven patina) → MEDIUM COST: Handling
+- Zinc-rich primers → MEDIUM COST: Material premium
+- Moisture-cure urethanes → MEDIUM COST: Material premium
+- Multi-coat systems → HIGH COST: 2-3x single coat cost
+- DFT (mils) requirements → MEDIUM COST: QC requirements
+- Compatibility statements (primer ↔ topcoat) → MEDIUM COST: Coordination
+- No painting in protected zones → MEDIUM COST: Process restrictions
+- Requirements to remove contamination immediately → MEDIUM COST: Handling
+
+8. GALVANIZING REQUIREMENTS (ASTM A123 / A153 / A780)
+FLAG:
+- Hot-dip galvanizing for all non-exposed steel → HIGH COST: Processing, logistics
+- Special requirements for:
+  - Vent/drain holes → MEDIUM COST: Fabrication
+  - Distortion control for built-up members → MEDIUM COST: Fabrication
+  - Post-galv slip-critical prep → MEDIUM-HIGH COST: Surface treatment
+  - Galvanizing and painting compatibility → MEDIUM COST: Coordination
+  - Touchup repairs per A780 → MEDIUM COST: Field repair
+  - Field repair thickness standards → MEDIUM COST: Field repair
+  - No acids allowed for cleaning → MEDIUM COST: Process restrictions
+  - Duplex systems (galv + paint) → HIGH COST: Two processes
+
+9. FIELD ERECTION & SEQUENCING REQUIREMENTS
+MUST FLAG:
+- PE-stamped erection plan, especially:
+  - Over occupied spaces → HIGH COST: $10,000-$100,000 engineering
+  - Multi-story sequence constraints → MEDIUM COST: Sequencing complexity
+- Required temporary bracing/shoring → MEDIUM-HIGH COST: Materials + labor
+- Mandated erection sequence → MEDIUM COST: Process constraints
+- Restrictions on:
+  - Wind speed → MEDIUM COST: Schedule delays
+  - Cold-temperature bolting/welding → MEDIUM COST: Process restrictions
+  - Night work → MEDIUM COST: Labor premium
+- Restricted crane access / laydown → MEDIUM COST: Sequencing complexity
+- Multi-phase erection packages → MEDIUM COST: Coordination complexity
+
+10. ANCHOR RODS, BASE PLATES, EMBEDS
+MUST FLAG:
+- Who furnishes? → SCOPE RISK: Material cost
+- Who installs? → SCOPE RISK: Installation cost
+- Who surveys? → SCOPE RISK: Survey cost
+- Survey requirements by licensed land surveyor → MEDIUM COST: Survey coordination
+- Anchor rod tolerances → MEDIUM COST: QC requirements
+- Base plate leveling method (shims, grout, leveling nuts) → MEDIUM COST: Materials + labor
+- Grout type & installer responsibilities → SCOPE RISK: Installation cost
+- Oversized anchors requiring sleeves → MEDIUM COST: Special fabrication
+- Embedded items furnished by steel → SCOPE RISK: Material cost
+- Templates and layout responsibilities → MEDIUM COST: Coordination
+- Requirements to "field verify all dimensions" → HIGH COST: Field measuring, risk
+
+11. HOLES, OPENINGS, AND MISC. REQUIREMENTS
+FLAG:
+- Field drilling required → HIGH COST: Field labor, risk
+- Web openings requiring reinforcement → MEDIUM COST: Additional fabrication
+- Prohibition of thermal-cut holes → MEDIUM COST: Process restrictions
+- Slotted holes requiring special tolerance → MEDIUM COST: Special fabrication
+- Holes for other trades ("provide as required") → SCOPE BOMB: Unlimited scope
+- Mechanical openings in structural steel → MEDIUM COST: Additional fabrication
+
+12. SHOP DRAWINGS, BIM, SUBMITTALS
+FLAG WHEN SPECS REQUIRE:
+- Shop drawings completely independent of contract drawings → MEDIUM-HIGH COST: 30-50% more detailing
+- No backgrounds allowed → MEDIUM COST: More detailing time
+- Revit/BIM model submission → MEDIUM COST: BIM coordination
+- Coordination with architectural drawings → MEDIUM COST: Coordination time
+- SFRS submittal package → HIGH COST: Extensive submittal package:
+  - DC weld map → HIGH COST: Detailed mapping
+  - Protected zone map → MEDIUM COST: Detailed mapping
+  - Slip-critical bolt map → MEDIUM COST: Detailed mapping
+  - Backer bar removal plan → MEDIUM COST: Detailed planning
+  - Access hole details → MEDIUM COST: Detailed planning
+  - Welding sequence → MEDIUM COST: Detailed planning
+  - NDT plan → MEDIUM COST: Detailed planning
+- PE-stamped connection calculations → HIGH COST: Engineering fees
+- Delegated design → HIGH COST: Engineering fees, liability
+- Deferred submittal → MEDIUM COST: Coordination complexity
+- Extensive survey requirements → MEDIUM COST: Survey coordination
+
+13. QA / QC / INSPECTION REQUIREMENTS
+MUST-FLAG ITEMS:
+- AISC audit requirements → MEDIUM COST: QA overhead
+- QA Agency submittals per AISC 341 → MEDIUM COST: QA coordination
+- Required inspections:
+  - UT frequency → HIGH COST: Certified NDT technicians
+  - MT on every pass → HIGH COST: Certified NDT technicians
+  - Random RT → HIGH COST: Certified NDT technicians
+  - Hold points → MEDIUM COST: Schedule delays
+- Inspector qualifications (CWI, ICC, D1.8) → MEDIUM COST: Inspector costs
+- Required documentation logs → MEDIUM COST: Admin overhead
+- Material traceability requirements → MEDIUM COST: Material tracking
+- Heat-number tracking → MEDIUM COST: Material tracking
+
+14. RESPONSIBILITY & SCOPE SHIFT LANGUAGE
+ANY PHRASE LIKE - FLAG AS SCOPE CREEP + RFI + EXCLUSION:
+- "Contractor shall coordinate with…" → SCOPE RISK: Coordination cost
+- "Contractor shall provide…" (for other trades) → SCOPE BOMB: Unlimited scope
+- "Adjust as required in field" → HIGH COST: Field modifications, risk
+- "Verify all dimensions before fabrication" → MEDIUM COST: Field measuring
+- "Field welding as needed to suit site conditions" → HIGH COST: Unlimited field welding
+- "Provide clips/angles for work by others" → SCOPE BOMB: Unlimited scope
+- "Provide embeds for other trades" → SCOPE BOMB: Unlimited scope
+- "Provide supports for mechanical/electrical" → SCOPE BOMB: Unlimited scope
+
+15. SCHEDULE / PHASING / SITE CONSTRAINTS
+FLAG:
+- Multi-phase structural packages → MEDIUM COST: Coordination complexity
+- Required early steel → MEDIUM COST: Schedule pressure
+- Weather limitations → MEDIUM COST: Schedule delays
+- Off-hours erection → MEDIUM COST: Labor premium
+- Traffic control requirements → MEDIUM COST: Site costs
+- Site access restrictions → MEDIUM COST: Sequencing complexity
+- Required sequencing with concrete trades → MEDIUM COST: Coordination complexity
+
+16. FIREPROOFING & COATING COMPATIBILITY
+YOUR AI MUST DETECT:
+- Required fire-resistance ratings → MEDIUM COST: Fireproofing coordination
+- Spray-applied fireproofing (SFRM) requirements → MEDIUM COST: Fireproofing coordination
+- Intumescent coatings → MEDIUM COST: Fireproofing coordination
+- Restrictions on primers under fireproofing → MEDIUM COST: Process restrictions
+- Fireproofing on galvanized steel → MEDIUM COST: Compatibility coordination
+- Surface prep for fireproofing → MEDIUM COST: Surface prep
+- Field paint compatibility with fireproofing → MEDIUM COST: Compatibility coordination
+
+17. VALUE ENGINEERING & SUBSTITUTION LIMITATIONS
+AI SHOULD HIGHLIGHT:
+- Allowed substitutions → OPPORTUNITY: Cost reduction
+- Prohibited substitutions → CONSTRAINT: No flexibility
+- Restrictive "no alternates accepted" language → CONSTRAINT: No flexibility
+- Member grade flexibility → OPPORTUNITY: Cost reduction
+- Connection flexibility allowed/not allowed → OPPORTUNITY/CONSTRAINT
+- Opportunities for cost reduction:
+  - Simplified connections → OPPORTUNITY: Cost reduction
+  - Alternate steel grades → OPPORTUNITY: Cost reduction
+  - Reducing architectural finish scope → OPPORTUNITY: Cost reduction
+
 CRITICAL SCOPE: Focus ONLY on structural steel elements (beams, columns, braces, moment frames, braced frames, trusses, plate girders, built-up members). DO NOT analyze miscellaneous metals, stairs, rails, decking, or architectural metals - those are separate analysis types.
 
 Perform a comprehensive, detailed analysis following these 10 critical areas:
@@ -48,13 +339,14 @@ Perform a comprehensive, detailed analysis following these 10 critical areas:
 1. IDENTIFY STRUCTURAL STEEL SCOPE REQUIREMENTS
 Extract every requirement related to STRUCTURAL STEEL ONLY:
 - Structural steel members (beams, columns, braces, trusses, plate girders)
-- Moment frames and braced frames
+- Moment frames and braced frames (including AISC 358 prequalified moment frames, RBS connections)
 - Structural connections (bolted, welded)
 - Fabrication & shop processes for structural steel
 - Erection & field work for structural steel
 - Structural steel coatings, primers, and touch-up
 - Submittals and PE-stamped calculations for structural steel
-- Structural steel galvanizing (if specified)
+- Structural steel galvanizing (ASTM A123, A153, A780)
+- Exposed structural steel finish requirements (architectural finish, AESS-lite)
 
 EXCLUDE: Miscellaneous metals, stairs, rails, decking, architectural metals, AESS (unless specifically structural), and non-structural elements.
 
@@ -64,6 +356,27 @@ CRITICAL THINKING: Don't just list requirements - think about:
 - What coordination issues will create problems?
 - What's missing that will bite us later?
 - What requirements seem standard but have hidden costs?
+
+ALWAYS PROMOTE TO KEY REQUIREMENTS if ANY of these patterns are found:
+- AISC 341 (seismic provisions) → HIGH COST: 30-50% welding cost increase
+- AISC 358 (prequalified moment frames) → HIGH COST: RBS cuts, tight tolerances
+- AWS D1.8 (demand critical welds) → HIGH COST: Certified NDT, supplemental testing
+- RBS or "Reduced Beam Section" (special flange cuts) → HIGH COST: Special fabrication
+- Weathering steel (ASTM A588, A847) + SSPC-SP6 blasting → HIGH COST: Material premium + blasting
+- Exposed structural steel finish requirements (SSPC-SP6, no mill scale, grinding) → HIGH COST: AESS-level prep
+- Structural steel over occupied space → PE-stamped erection analysis → HIGH COST: $10,000-$100,000 engineering
+- Delegated design requirements (PE-stamped calcs for connections/substitutions) → HIGH COST: Engineering fees, liability
+- AISC certification + Sophisticated Paint/SSPC-QP3 requirements → QUALIFICATION GATING: Filters who can bid
+- Hot-dip galvanizing (ASTM A123/A153/A780) for non-exposed steel → HIGH COST: Processing, logistics
+- Required surveys by registered land surveyor → MEDIUM COST: Survey coordination
+- QA agency per AISC 341 Chapter J for SFRS → MEDIUM COST: QA coordination
+- Shop drawings must be complete enough for fab/erection without original drawings → MEDIUM-HIGH COST: 30-50% more detailing
+- SFRS submittal requirements (DC welds, protected zones, slip-critical bolts) → MEDIUM-HIGH COST: Extensive submittal package
+- Field drilling or "field adjust as required" → HIGH COST: Field modifications, risk
+- "Provide as required" for other trades → SCOPE BOMB: Unlimited scope
+- Prohibition of FCAW-S or other process restrictions → MEDIUM COST: Process limitations
+- Multi-coat paint systems → HIGH COST: 2-3x single coat cost
+- Slip-critical bolting with galvanized steel → MEDIUM-HIGH COST: Post-galv surface treatment
 
 Flag anything that adds labor, material, rework, finishing, or tight tolerances to STRUCTURAL STEEL. Explain WHY it matters and HOW it impacts cost.
 
@@ -85,19 +398,46 @@ EXCLUDE: Anchor bolts, embeds, or coordination for misc metals, stairs, rails, o
 Flag EVERY item that increases cost or liability for STRUCTURAL STEEL.
 
 3. EXTRACT COST-CRITICAL STRUCTURAL STEEL FABRICATION REQUIREMENTS
-Look for STRUCTURAL STEEL SPECIFIC requirements:
+Look for STRUCTURAL STEEL SPECIFIC requirements and SPECIFIC CODES/STANDARDS:
+- Seismic requirements: AISC 341, AISC 358, AWS D1.8
+- AISC 358 prequalified moment frames - identify if referenced
+- RBS (Reduced Beam Sections) - identify locations, fabrication requirements, special flange cuts, tight tolerances, special QC
+- Demand Critical Welds (DC welds) - identify locations, testing requirements, supplemental AWS D1.8 tests
+- Protected Zones - identify locations and restrictions
+- SFRS (Seismic Force Resisting System) - identify members and connections
 - Tightened fabrication tolerances beyond AISC for structural steel
 - Camber requirements or restrictions for structural steel beams/girders
 - Weld grinding, smoothing, blending for structural steel (NOT AESS finish requirements)
 - Prohibited welding processes (SMAW-only, no FCAW) for structural steel
 - UT, MT, RT frequency and acceptance criteria for structural steel welds
+- Specific NDT requirements (AWS D1.8 for demand critical welds)
 - Slip-critical vs. snug-tight bolting for structural steel connections
-- Bolt types (A325, A490, galvanized, tensioned, etc.) for structural steel
+- Bolt types (A325, A490, galvanized, tensioned, TC bolts F1852, DTIs) for structural steel
 - Requirements for mockups or sample fabrication of structural steel
+- Access hole dimensions, backing bar removal, supplemental fillet welds
+- Welders on bottom-flange demand-critical welds must pass supplemental AWS D1.8 tests; FCAW-S and FCAW-G treated as separate qualifications
 
 EXCLUDE: AESS finish requirements, architectural metal finishes, stair/rail fabrication details.
 
-For every item, explain how it affects STRUCTURAL STEEL cost.
+CRITICAL: If AISC 358 or RBS (Reduced Beam Sections) are mentioned:
+- Explicitly identify RBS locations and fabrication requirements
+- Flag RBS as High Cost Impact for fabrication and QC (special flange cuts, tight tolerances, special QC)
+- Include RBS in the summary and cost-impact table
+- Recommend confirming RBS locations on drawings as a High Priority RFI if not clearly indicated
+
+CRITICAL THINKING: These requirements can explode costs. Think about:
+- How much extra labor does each requirement add? (e.g., camber adds 15-25% labor, demand critical welds add 30-50% welding cost)
+- What equipment or processes are required? (e.g., UT testing requires certified technicians at $150-200/hr)
+- What certifications are required? (e.g., AISC Certified BU, SSPC-QP3 for painters)
+- What will cause rework if not done correctly?
+- What requirements sound standard but are actually expensive? (e.g., "demand critical welds" sounds simple but requires AWS D1.8 qualification, supplemental testing, more NDT)
+
+For every item, provide:
+1. SPECIFIC requirement (code/standard/process)
+2. WHY it matters (e.g., "This is NOT a normal gravity-only steel job - expect 30-50% higher welding costs")
+3. HOW it affects cost (specific: "adds 20% labor", "requires certified NDT technicians at $150/hr", "increases material cost 15%")
+4. WHAT estimator should do (e.g., "Add seismic detailing / demand-critical weld cost line items (shop + field)", "Carry allowance for connection engineering + erection engineering")
+5. BID STRATEGY (e.g., "Flag that all DC welds & protected zones must be clearly shown on structural drawings – if not, that's an RFI & risk")
 
 4. ANALYZE STRUCTURAL STEEL ERECTION & FIELD REQUIREMENTS
 Extract STRUCTURAL STEEL SPECIFIC requirements:
@@ -115,19 +455,63 @@ EXCLUDE: Erection requirements for misc metals, stairs, rails, or decking.
 Explain the schedule, cost, and labor impact for STRUCTURAL STEEL.
 
 5. STRUCTURAL STEEL COATING, PREP, AND TOUCH-UP REQUIREMENTS
-Identify STRUCTURAL STEEL SPECIFIC requirements:
-- SSPC/MPI surface prep levels for structural steel
-- Blast requirements for structural steel
+Identify STRUCTURAL STEEL SPECIFIC requirements and SPECIFIC STANDARDS:
+
+A. EXPOSED STRUCTURAL STEEL FINISH (AESS-LITE) - ALWAYS DETECT:
+- Search for sections titled "Exposed Structural Steel", "Architecturally Exposed Structural Steel (AESS)", or language describing:
+  - Grinding exposed joints flush
+  - Removing blemishes, weld spatter, mill marks, rolled trade names
+  - Hairline butt joints
+  - Preventing weld show-through
+  - Stitch welds + plastic filler
+  - Smooth, square, free of pitting, rust, scale, roller marks, trade names
+- If found, treat this as a CLEARLY DEFINED architectural finish requirement, NOT "missing"
+- Assign High Cost Impact due to additional grinding, finishing, and QA
+- Summarize in Key Requirements section
+- Note: This is essentially AESS-level work (grinding, blemish removal, hairline joints, no mill scale or surface defects)
+
+B. COATING & PREP:
+- SSPC/MPI surface prep levels for structural steel (SSPC-SP2, SP3, SP6, SP10, SP16)
+- Blast requirements for structural steel (SSPC-SP6 Commercial Blast, Sa 2, etc.)
+- Weathering steel requirements (A588, A847) with specific blast requirements
+- No mill scale allowed – only stains allowed (for weathering steel)
+- No acids allowed for scale removal
+- Storage requirements to avoid uneven weathering (off ground, blocked)
 - Stripe coating for structural steel
 - 2-coat or 3-coat systems for structural steel
 - VOC restrictions for structural steel coatings
 - Field touchup requirements for structural steel
-- Galvanized repair requirements (ASTM A780) for structural steel
 - Moisture cure, zinc-rich, or specialty coatings for structural steel
+- Certifications required: AISC Sophisticated Paint Endorsement (P1/P2/P3) or SSPC-QP3
+
+C. HOT-DIP GALVANIZING (ALWAYS DETECT):
+- ASTM A123 (hot-dip galvanizing)
+- ASTM A153 (galvanized hardware)
+- ASTM A780 (galvanized repair)
+- SSPC-SP16 prep before galvanizing
+- Vent/drain hole requirements
+- Repair methods and thickness requirements
+- Slip-critical faying surfaces after galvanizing - special treatment requirements
+- If found, add a separate cost line: "Hot-dip galvanizing for non-exposed steel (ASTM A123/A153/A780) – High cost impact for processing, logistics, field repair, and faying surface treatment for slip-critical joints"
+- Mention galvanizing in the Key Requirements summary
 
 EXCLUDE: AESS finish levels (analyze separately), architectural metal finishes, Division 09 paint requirements (analyze separately).
 
-Explain how each one changes labor or materials for STRUCTURAL STEEL.
+CRITICAL THINKING: Look for hybrid requirements (e.g., exposed = blasted weathering steel, non-exposed = galvanized). Think about:
+- SP6 blasting all exposed surfaces with no mill scale is a major labor + equipment + QA cost
+- Galvanizing weight & freight, handling, vent/drain prep, warping mitigation
+- Post-galv surface treatment for slip-critical joints
+- Field touchup materials + labor
+- What happens if shop doesn't meet certifications? (e.g., "You'd need to sub out fabrication or painting or pass on the project")
+
+For every item, provide:
+1. SPECIFIC requirement (standard/process)
+2. WHY it matters (e.g., "Huge difference from 'just let it rust naturally' - SP6 blasting all exposed surfaces is major cost")
+3. HOW it affects cost (e.g., "Explicitly cost: Blasting (time, media, disposal), Handling procedures, Re-cleaning contingencies")
+4. WHAT estimator should do (e.g., "Flag as high-cost finish requirement in your internal notes", "Explicitly estimate: Galvanizing weight & freight, Handling, vent/drain prep, warping mitigation")
+5. BID STRATEGY (e.g., "Write a bid note clarifying: 'Exposed steel finish per Section 05 12 00, Part 2.7/2.8 – grinding, blemish removal, joint finishing included only where explicitly shown as exposed on drawings'")
+
+Explain how each one changes labor or materials for STRUCTURAL STEEL with SPECIFIC impacts.
 
 6. STRUCTURAL STEEL COORDINATION REQUIREMENTS
 Indicate who is responsible for STRUCTURAL STEEL coordination:
@@ -141,19 +525,53 @@ Indicate who is responsible for STRUCTURAL STEEL coordination:
 
 EXCLUDE: Decking coordination (separate analysis), misc metals coordination, stair/rail coordination.
 
+CRITICAL: Refine "unclear responsibility" logic:
+- If spec states steel must "coordinate installation" or "provide setting diagrams, templates, or layout information" for anchor bolts/embeds, but does NOT explicitly state steel installs them:
+  - Describe as "steel must provide templates and coordination; installation responsibility likely falls to GC/concrete but should be clarified," NOT "no information"
+- If spec requires "surveys by registered land surveyor" for base plates/anchors:
+  - Note: "Surveys by registered land surveyor are required; responsibility for hiring and paying the surveyor should be clarified in an RFI"
+- Only label responsibility as "not clearly defined" when there is NO language about coordination, templates, or installation duties
+
 Highlight ambiguities that could cause dispute later for STRUCTURAL STEEL.
 
 7. STRUCTURAL STEEL SUBMITTALS, APPROVALS, AND ENGINEERING
-Extract requirements for STRUCTURAL STEEL:
+Extract requirements for STRUCTURAL STEEL and SPECIFIC DETAILS:
 - PE-stamped calculations for structural steel
+- Delegated design requirements (connections, alternative connections, member substitutions, modifying strength/configuration)
 - Structural steel connection design
 - Temporary bracing/shoring design for structural steel
 - Welding procedures (WPS/PQR) for structural steel
 - Number of review cycles for structural steel submittals
 - Submittal timeline for structural steel
-- Structural steel shop drawings
+- Structural steel shop drawings - SPECIFIC requirements:
+  - Must be generated entirely from Contract Documents (no backgrounds/repros/photocopies)
+  - Must be complete enough that fab and erection don't need original drawings
+  - CAD/REVIT files must be cleaned by detailer (remove irrelevant info)
+- SFRS-specific submittals:
+  - Identify SFRS members and connections
+  - Locations of demand critical welds and protected zones
+  - Slip-critical bolts locations
+  - Access hole dimensions, backing bar removal, supplemental fillet welds
+  - NDT where done by fabricator
+- Surveys: Certified surveys by registered land surveyor showing base plate & anchor bolt locations vs. Contract Documents
+- Structural steel over occupied space: Requires PE-stamped structural engineering analysis verifying code compliance during all phases of erection
 
 EXCLUDE: Misc metals submittals, stair/rail submittals, decking submittals.
+
+CRITICAL THINKING: This isn't "just send basic steel shops" – it's full-detail, high-coordination. Think about:
+- More hours for detailing, coordination with architectural drawings, submittal packaging
+- Survey management costs
+- Connection engineering fees
+- Additional design iterations
+- Extra contract admin time
+- What happens if requirements aren't met? (e.g., "You'd need to sub out fabrication or pass on the project")
+
+For every item, provide:
+1. SPECIFIC requirement
+2. WHY it matters (e.g., "This spec pushes real engineering responsibility onto the steel contractor")
+3. HOW it affects cost (e.g., "More hours for detailing + coordination", "Connection engineer fees", "A separate line item in your internal breakdown for detailing + PE + survey coordination")
+4. WHAT estimator should do (e.g., "Carry an allowance for connection engineering + erection engineering (especially for over-occupied-space)")
+5. BID STRATEGY (e.g., "Bid excludes structural analysis of existing structure under erection loads; to be provided by others", "Survey by registered land surveyor by others – steel includes only staking templates/locations if specifically requested")
 
 Identify any engineering requirements not included on structural steel drawings.
 
@@ -164,8 +582,25 @@ Detect conflicts affecting STRUCTURAL STEEL:
 - Structural steel spec vs. Drawings
 - Structural steel spec vs. AISC code defaults
 - Structural steel erection tolerances vs. fabrication tolerances
+- Exposed steel finish requirements vs. standard structural steel finish
+- Galvanizing requirements vs. weathering steel requirements
+- Slip-critical requirements vs. standard bolting
+- Demand critical welds & protected zones not clearly shown on structural drawings
 
 EXCLUDE: Conflicts related to misc metals, stairs, rails, or decking.
+
+CRITICAL THINKING: Look for hybrid requirements that create conflicts (e.g., exposed = blasted weathering steel, non-exposed = galvanized). Think about:
+- What happens when requirements conflict? (e.g., can't galvanize weathering steel)
+- What's missing that creates ambiguity? (e.g., "exposed to view" not clearly defined on drawings, "demand critical welds & protected zones not clearly shown")
+- What will cause disputes? (e.g., architect trying to call everything "exposed" later)
+- What's implied but not explicitly stated? (e.g., "if not clearly marked → RFI")
+
+For every conflict, provide:
+1. SPECIFIC conflict (what vs. what)
+2. WHY it matters (real-world impact)
+3. HOW it affects cost (specific impact)
+4. WHAT estimator should do (e.g., "RFI to clarify", "Bid note excluding ambiguous requirements")
+5. BID STRATEGY (actual exclusion language, e.g., "Flag that all DC welds & protected zones must be clearly shown on structural drawings – if not, that's an RFI & risk")
 
 Explain every conflict clearly as it relates to STRUCTURAL STEEL.
 
@@ -183,14 +618,49 @@ List items the spec SHOULD include but does not for STRUCTURAL STEEL:
 EXCLUDE: Missing info for misc metals, stairs, rails, decking, or architectural metals.
 
 10. STRUCTURAL STEEL RISK ASSESSMENT & RECOMMENDED EXCLUSIONS
-Provide STRUCTURAL STEEL SPECIFIC:
-- Major cost risks for structural steel
-- Scope ambiguities for structural steel
-- Coordination pitfalls for structural steel
-- High-effort or high-risk structural steel items
-- Recommended exclusions to protect the structural steel contractor
-- Recommended clarifications to submit in RFI form for structural steel
-- Recommended alternates or value-engineering options for structural steel
+Provide STRUCTURAL STEEL SPECIFIC with ACTIONABLE RECOMMENDATIONS:
+
+Major Cost Risks (with specific impacts):
+- Seismic SFRS + Demand Critical Welds: High - welding, NDT, QA, and detailing cost (30-50% higher than normal gravity-only job)
+- AISC 358 / RBS (Reduced Beam Sections): High - special flange cuts, tight tolerances, special QC, fabrication complexity
+- Delegated Connection Design & Over-Occupied-Space Engineering: High - PE fees, erection engineering, additional design iterations
+- High-Touch Submittals (SFRS, surveys, detailed shops): Medium–High - engineering + CAD/coordination time, more hours for detailing
+- AISC Certification + Sophisticated Paint / SSPC-QP3 Required: Filters who can bid; adds QA overhead (if shop doesn't meet, "You'd need to sub out fabrication or painting or pass on the project")
+- Exposed Structural Steel = Architectural-Level Finish: High - grinding, blemish removal, joint work, hairline joints, weld show-through control (treat like low-to-mid-level AESS) - CLEARLY DEFINED in spec, not "missing"
+- Weathering Steel (A588/A847) with SSPC-SP6 + No Mill Scale: High - blast cleaning cost (SP6 blasting all exposed surfaces is major labor + equipment + QA cost)
+- Hot-Dip Galvanizing for Non-Exposed Steel (ASTM A123/A153/A780): High - weight, processing, logistics, field repair responsibilities, vent/drain holes, SP-16 prep, slip-critical faying surface treatment
+- Slip-Critical Conditions with Galvanized Steel: Medium–High - faying surface prep, bolt tensioning, QA
+- Surveys by Registered Land Surveyor Required: Medium - coordination, potential cost if pushed onto steel (responsibility for hiring/paying surveyor should be clarified in RFI)
+
+Scope Ambiguities:
+- Demand critical welds & protected zones not clearly shown on structural drawings
+- Slip-critical locations not clearly marked
+- RBS locations not clearly indicated on drawings (if AISC 358/RBS referenced)
+- Anchor bolt installation responsibility (steel provides templates/coordination, but installation likely by GC/concrete - should be clarified)
+- Survey responsibility (steel must coordinate, but who hires/pays registered land surveyor should be clarified)
+
+Coordination Pitfalls:
+- Survey responsibility (steel vs. concrete vs. GC)
+- Grouting responsibility
+- Field touchup responsibility (steel vs. painter)
+
+Recommended Exclusions (with ACTUAL BID LANGUAGE):
+- "Bid excludes structural analysis of existing structure under erection loads; to be provided by others."
+- "Survey by registered land surveyor by others – steel includes only staking templates/locations if specifically requested."
+- "Exposed steel finish per Section 05 12 00, Part 2.7/2.8 – grinding, blemish removal, joint finishing included only where explicitly shown as exposed on drawings."
+- "Bid excludes anchor bolt installation unless explicitly detailed in contract documents."
+
+Recommended RFIs (with SPECIFIC questions):
+- "Clarify responsibility for anchor bolt installation (steel provides templates/coordination; confirm GC/concrete installs)"
+- "Clarify responsibility for hiring and paying registered land surveyor for base plate/anchor surveys"
+- "Request detailed field welding requirements"
+- "Identify all demand critical weld locations and protected zones on structural drawings"
+- "Identify all RBS (Reduced Beam Section) locations on structural drawings" (if AISC 358/RBS referenced)
+- "Clarify slip-critical bolt locations - if not clearly marked, request RFI"
+
+Recommended Alternates:
+- Value-engineering options for connection designs to reduce costs
+- Alternative member sizes/grades if allowed
 
 EXCLUDE: Risks and exclusions for misc metals, stairs, rails, decking, or architectural metals.
 
@@ -209,21 +679,22 @@ Return a comprehensive JSON object with the following structure:
   "costImpactTable": [
     {
       "requirement": "Specific requirement found",
+      "specSection": "Section reference (e.g., 'Part 2.7', 'Section 1.5.B.9')",
       "impactExplanation": "How this affects cost",
       "costImpactLevel": "Low, Medium, or High"
     }
   ],
   "hiddenTraps": [
-    "Bullet-form extraction of scope traps"
+    "Bullet-form extraction of scope traps (include spec section reference when possible)"
   ],
   "missingOrContradictory": [
-    "List everything unclear or conflicting"
+    "List everything unclear or conflicting (include spec section reference when applicable)"
   ],
   "recommendedExclusions": [
-    "Items to exclude from bid"
+    "Items to exclude from bid (include spec section reference when applicable)"
   ],
   "recommendedClarifications": [
-    "RFI items to submit"
+    "RFI items to submit (include spec section reference where clarification is needed)"
   ],
   "recommendedAlternates": [
     "Value-engineering options"
@@ -231,6 +702,7 @@ Return a comprehensive JSON object with the following structure:
   "complianceItems": [
     {
       "item": "Requirement description",
+      "specSection": "Section reference (e.g., 'Part 2.7', 'Section 1.5.B.9')",
       "status": "pass|warning|fail",
       "message": "Detailed explanation",
       "category": "scope|fabrication|erection|coating|coordination|submittals|conflicts|missing|risk"
@@ -240,24 +712,49 @@ Return a comprehensive JSON object with the following structure:
     {
       "title": "RFI title",
       "description": "Detailed RFI description",
+      "specSection": "Section reference where clarification is needed (e.g., 'Part 2.7', 'Section 1.5.B.9')",
       "priority": "High|Medium|Low"
     }
   ]
 }
 
 THINK LIKE AN EXPERT ESTIMATOR:
-- Don't just list requirements - explain WHY they matter and HOW they impact cost
-- Look for the subtle language that shifts risk ("as required", "coordinate with", "verify in field")
-- Identify requirements that sound simple but require expensive processes
+- SYSTEMATICALLY SCAN THE SPEC using the COMPREHENSIVE FLAGGING CHECKLIST above (17 categories)
+- Don't just list requirements - explain WHY they matter and HOW they impact cost with SPECIFIC details
+- Look for SPECIFIC codes, standards, and technical requirements from the checklist (AISC 341, AISC 358, AWS D1.8, SSPC-SP6, ASTM A123, ASTM A780, etc.)
+- Identify SPECIFIC technical processes from the checklist (demand critical welds, protected zones, SFRS, slip-critical bolts, DTIs, RBS, etc.)
+- Look for the subtle language that shifts risk ("as required", "coordinate with", "verify in field", "provide as required")
 - Think about sequencing - what has to happen first, what blocks other work?
 - Consider what happens when things go wrong - rework, delays, disputes
-- Look for conflicts between sections that create ambiguity (and change orders)
+- Identify conflicts between sections that create ambiguity (and change orders)
 - Identify missing information that will require RFIs and delay the project
 - Think about what inexperienced estimators would miss - that's where the value is
+- Provide ACTIONABLE recommendations: What line items to add, what allowances to carry, what exclusions to write
+- Provide ACTUAL BID LANGUAGE for exclusions and clarifications
+- Explain REAL-WORLD IMPLICATIONS: What happens if requirements aren't met? (e.g., "You'd need to sub out fabrication or painting or pass on the project")
+- Identify what's NOT normal (e.g., "This is NOT a normal gravity-only steel job")
+- FLAG ALL SCOPE SHIFT LANGUAGE from category 14 of the checklist
+- IDENTIFY ALL CERTIFICATION REQUIREMENTS from category 3 of the checklist (these are dealbreakers)
+- MAP COST IMPACTS using the cost indicators in the checklist (HIGH COST, MEDIUM COST, SCOPE BOMB, etc.)
 
-Be thorough, specific, and actionable. Focus on items that impact cost, schedule, or liability. Your analysis should help an estimator avoid costly mistakes and protect profit margins.
+MANDATORY SCANNING PROCESS:
+1. Read through the entire spec systematically
+2. For each section of the spec, check against the COMPREHENSIVE FLAGGING CHECKLIST
+3. Flag EVERY item from the checklist that appears in the spec
+4. Assign cost impact levels based on the checklist indicators
+5. Identify scope risks, qualification gating, and hidden traps
+6. Map findings to appropriate sections (Key Requirements, Cost Impact Table, Hidden Traps, RFIs, Exclusions)
 
-IMPORTANT: You MUST populate the "complianceItems" array with at least 10-15 items. Each item should represent a specific requirement, risk, or finding that could impact cost or create problems. Think deeply - don't just skim the surface.`;
+For each finding, structure your response as:
+1. SPECIFIC requirement (code/standard/process) - e.g., "AISC 341", "AWS D1.8", "Demand Critical Welds", "SSPC-SP6", "RBS flange cuts"
+2. WHY it matters (real-world impact, e.g., "This is NOT a normal gravity-only steel job - expect 30-50% higher welding costs")
+3. HOW it affects cost (specific: percentages, labor hours, dollar impacts, e.g., "adds 20% labor", "requires certified NDT technicians at $150/hr", "HIGH COST: Special flange cuts, tight tolerances")
+4. WHAT the estimator should do (e.g., "Add seismic detailing / demand-critical weld cost line items (shop + field)", "Carry allowance for connection engineering + erection engineering", "Flag as qualification gating - shop must be AISC Certified BU")
+5. BID STRATEGY (actual exclusion language, bid notes, clarifications, e.g., "Flag that all DC welds & protected zones must be clearly shown on structural drawings – if not, that's an RFI & risk", "Exclude: 'Provide as required' items for other trades")
+
+Be thorough, specific, and actionable. Focus on items that impact cost, schedule, or liability. Your analysis should help an estimator avoid costly mistakes and protect profit margins. Think like you're protecting a business from losing money.
+
+IMPORTANT: You MUST populate the "complianceItems" array with at least 20-25 items. Each item should represent a specific requirement, risk, or finding from the COMPREHENSIVE FLAGGING CHECKLIST that could impact cost or create problems. Include SPECIFIC technical details (codes, standards, processes) and ACTIONABLE recommendations. Think deeply - don't just skim the surface. Each compliance item should include the SPECIFIC code/standard/process, WHY it matters, and WHAT the estimator should do about it.`;
 
     // Miscellaneous Metals Analysis Prompt
     const miscPrompt = `You are an expert MISCELLANEOUS METALS estimator analyzing Division 05 (Miscellaneous Metals) specifications.
@@ -432,6 +929,7 @@ Return a comprehensive JSON object with the following structure:
   "costImpactTable": [
     {
       "requirement": "Specific requirement found",
+      "specSection": "Section reference (e.g., 'Part 2.7', 'Section 1.5.B.9')",
       "impactExplanation": "How this affects cost, coordination, and risk",
       "costImpactLevel": "Low, Medium, or High"
     }
@@ -454,6 +952,7 @@ Return a comprehensive JSON object with the following structure:
   "complianceItems": [
     {
       "item": "Requirement description",
+      "specSection": "Section reference (e.g., 'Part 2.7', 'Section 1.5.B.9')",
       "status": "pass|warning|fail",
       "message": "Detailed explanation",
       "category": "misc-metals|stairs-rails|architectural|decking|connections|field-verification|special-materials|conflicts|missing|risk"
@@ -463,6 +962,7 @@ Return a comprehensive JSON object with the following structure:
     {
       "title": "RFI title",
       "description": "Detailed RFI description",
+      "specSection": "Section reference where clarification is needed (e.g., 'Part 2.7', 'Section 1.5.B.9')",
       "priority": "High|Medium|Low"
     }
   ]
@@ -639,6 +1139,7 @@ Return a comprehensive JSON object with the following structure:
   "costImpactTable": [
     {
       "requirement": "Specific requirement found",
+      "specSection": "Section reference (e.g., 'Part 2.7', 'Section 1.5.B.9')",
       "impactExplanation": "How this affects cost, labor, and schedule",
       "costImpactLevel": "Low, Medium, or High"
     }
@@ -661,6 +1162,7 @@ Return a comprehensive JSON object with the following structure:
   "complianceItems": [
     {
       "item": "Requirement description",
+      "specSection": "Section reference (e.g., 'Part 2.7', 'Section 1.5.B.9')",
       "status": "pass|warning|fail",
       "message": "Detailed explanation",
       "category": "coating-system|multi-coat|surface-prep|environmental|aess|galvanizing|touchup|responsibility|conflicts|missing|risk"
@@ -670,6 +1172,7 @@ Return a comprehensive JSON object with the following structure:
     {
       "title": "RFI title",
       "description": "Detailed RFI description",
+      "specSection": "Section reference where clarification is needed (e.g., 'Part 2.7', 'Section 1.5.B.9')",
       "priority": "High|Medium|Low"
     }
   ]
@@ -883,6 +1386,7 @@ Return a comprehensive JSON object with the following structure:
   "complianceItems": [
     {
       "item": "Requirement description",
+      "specSection": "Section reference (e.g., 'Part 2.7', 'Section 1.5.B.9')",
       "status": "pass|warning|fail",
       "message": "Detailed explanation",
       "category": "aess-category|noma|fabrication|welding|grinding|coating|erection|handling|conflicts|missing|risk"
@@ -892,6 +1396,7 @@ Return a comprehensive JSON object with the following structure:
     {
       "title": "RFI title",
       "description": "Detailed RFI description",
+      "specSection": "Section reference where clarification is needed (e.g., 'Part 2.7', 'Section 1.5.B.9')",
       "priority": "High|Medium|Low"
     }
   ]
@@ -1033,6 +1538,7 @@ Return a comprehensive JSON object with the following structure:
   "costImpactTable": [
     {
       "requirement": "Specific requirement found",
+      "specSection": "Section reference (e.g., 'Part 2.7', 'Section 1.5.B.9')",
       "impactExplanation": "How this affects cost, schedule, and risk",
       "costImpactLevel": "Low, Medium, or High"
     }
@@ -1058,6 +1564,7 @@ Return a comprehensive JSON object with the following structure:
   "complianceItems": [
     {
       "item": "Requirement description",
+      "specSection": "Section reference (e.g., 'Part 2.7', 'Section 1.5.B.9')",
       "status": "pass|warning|fail",
       "message": "Detailed explanation",
       "category": "submittals|delegated-design|schedule|coordination|qa-qc|temporary-works|payment-warranty|conflicts|missing|risk"
@@ -1067,6 +1574,7 @@ Return a comprehensive JSON object with the following structure:
     {
       "title": "RFI title",
       "description": "Detailed RFI description",
+      "specSection": "Section reference where clarification is needed (e.g., 'Part 2.7', 'Section 1.5.B.9')",
       "priority": "High|Medium|Low"
     }
   ]
@@ -1245,6 +1753,7 @@ Return a comprehensive JSON object with the following structure:
   "complianceItems": [
     {
       "item": "Requirement description",
+      "specSection": "Section reference (e.g., 'Part 2.7', 'Section 1.5.B.9')",
       "status": "pass|warning|fail",
       "message": "Detailed explanation",
       "category": "anchor-bolts|embeds|grouting|concrete-strength|coordination|field-fix|finishes|tolerances|conflicts|missing|risk"
@@ -1254,6 +1763,7 @@ Return a comprehensive JSON object with the following structure:
     {
       "title": "RFI title",
       "description": "Detailed RFI description",
+      "specSection": "Section reference where clarification is needed (e.g., 'Part 2.7', 'Section 1.5.B.9')",
       "priority": "High|Medium|Low"
     }
   ]
@@ -1363,14 +1873,41 @@ IMPORTANT: You MUST populate the "complianceItems" array with at least 10-15 ite
       }
     }
 
-    // TODO: Log usage (need companyId and projectId from request)
-    // await logAIUsage(companyId, projectId, {
-    //   type: "spec-review",
-    //   tokens,
-    //   cost,
-    //   input: specText,
-    //   output: JSON.stringify(result),
-    // });
+    // Save analysis results to Firestore if projectId and companyId are provided
+    if (companyId && projectId) {
+      try {
+        const { setDocument } = await import("@/lib/firebase/firestore");
+        const { isFirebaseConfigured } = await import("@/lib/firebase/config");
+        
+        if (isFirebaseConfigured()) {
+          const specReviewPath = `companies/${companyId}/projects/${projectId}/specReviews/${type}`;
+          
+          await setDocument(specReviewPath, {
+            analysisType: type,
+            result: result,
+            specText: specText.substring(0, 1000), // Store first 1000 chars for reference
+            analyzedAt: new Date().toISOString(),
+            tokens,
+            cost,
+            version: 1,
+          });
+
+          // Also log usage
+          const { logAIUsage } = await import("@/lib/openai/usageTracker");
+          await logAIUsage(companyId, projectId, {
+            type: "spec-review",
+            analysisType: type,
+            tokens,
+            cost,
+            input: specText.substring(0, 500), // Store first 500 chars
+            output: JSON.stringify(result).substring(0, 1000), // Store first 1000 chars
+          });
+        }
+      } catch (error) {
+        console.error("Failed to save spec review to Firestore:", error);
+        // Don't fail the request if saving fails
+      }
+    }
 
     return NextResponse.json({
       ...result,

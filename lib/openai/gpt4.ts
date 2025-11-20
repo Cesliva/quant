@@ -9,6 +9,7 @@ export interface SpecReviewResult {
   };
   costImpactTable?: Array<{
     requirement: string;
+    specSection?: string;
     impactExplanation: string;
     costImpactLevel: "Low" | "Medium" | "High";
   }>;
@@ -40,6 +41,7 @@ export interface SpecReviewResult {
   coordinationRequirements?: string[];
   complianceItems?: Array<{
     item: string;
+    specSection?: string;
     status: "pass" | "warning" | "fail";
     message: string;
     category?: string;
@@ -47,6 +49,7 @@ export interface SpecReviewResult {
   rfiSuggestions?: Array<{
     title: string;
     description: string;
+    specSection?: string;
     priority?: "High" | "Medium" | "Low";
   }>;
   // Legacy fields for backward compatibility
@@ -68,14 +71,16 @@ export interface ProposalResult {
 export async function reviewSpecifications(
   specText: string,
   projectData: any,
-  analysisType: "structural" | "misc" | "finishes" | "aess" | "div01" | "div03" = "structural"
+  analysisType: "structural" | "misc" | "finishes" | "aess" | "div01" | "div03" = "structural",
+  companyId?: string,
+  projectId?: string
 ): Promise<SpecReviewResult> {
   const response = await fetch("/api/spec-review", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ specText, projectData, analysisType }),
+    body: JSON.stringify({ specText, projectData, analysisType, companyId, projectId }),
   });
 
   if (!response.ok) {

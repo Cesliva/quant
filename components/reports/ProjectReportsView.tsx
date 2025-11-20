@@ -33,6 +33,7 @@ import { isFirebaseConfigured } from "@/lib/firebase/config";
 import { EstimatingLine } from "@/components/estimating/EstimatingGrid";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import SpecReviewSummary from "./SpecReviewSummary";
 import {
   loadCompanySettings,
   loadProjectSettings,
@@ -2582,6 +2583,11 @@ export default function ProjectReportsView({ companyId, projectId, project, onDa
             </div>
           </CardContent>
         </Card>
+      </div>
+
+      {/* AI Spec Review Summary */}
+      <div className="mt-6">
+        <SpecReviewSummary companyId={companyId} projectId={projectId} />
       </div>
     </div>
   );

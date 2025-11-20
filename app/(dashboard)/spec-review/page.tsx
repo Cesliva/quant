@@ -1,22 +1,70 @@
 "use client";
 
-import { useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
-import { CheckCircle, AlertTriangle, XCircle, Sparkles, ArrowLeft, DollarSign, Shield, FileQuestion, Lightbulb, TrendingUp, AlertCircle, Info, Wrench } from "lucide-react";
+import { CheckCircle, AlertTriangle, XCircle, Sparkles, ArrowLeft, DollarSign, Shield, FileQuestion, Lightbulb, TrendingUp, AlertCircle, Info, Wrench, Save } from "lucide-react";
 import { reviewSpecifications, type SpecReviewResult } from "@/lib/openai/gpt4";
 import { extractTextFromFile } from "@/lib/utils/fileExtractor";
+import { useCompanyId } from "@/lib/hooks/useCompanyId";
+import { setDocument, getDocument } from "@/lib/firebase/firestore";
+import { isFirebaseConfigured } from "@/lib/firebase/config";
 
 export default function SpecReviewPage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const projectId = searchParams?.get("projectId");
+  const viewType = searchParams?.get("view"); // "view" to show saved analysis
+  const companyId = useCompanyId();
   const [analysisResult, setAnalysisResult] = useState<SpecReviewResult | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [specText, setSpecText] = useState("");
   const [isExtracting, setIsExtracting] = useState(false);
   const [analysisType, setAnalysisType] = useState<"structural" | "misc" | "finishes" | "aess" | "div01" | "div03">("structural");
+
+  // Load saved analysis if viewing from summary
+  useEffect(() => {
+    const loadSavedAnalysis = async () => {
+      if (viewType === "view" && projectId && companyId && isFirebaseConfigured()) {
+        const analysisTypeParam = searchParams?.get("analysisType") || "structural";
+        const validTypes = ["structural", "misc", "finishes", "aess", "div01", "div03"];
+        const type = validTypes.includes(analysisTypeParam) ? analysisTypeParam as AnalysisType : "structural";
+        
+        setAnalysisType(type);
+        
+        try {
+          const specReviewPath = `companies/${companyId}/projects/${projectId}/specReviews/${type}`;
+          const saved = await getDocument<{ result: SpecReviewResult; specText: string }>(specReviewPath);
+          if (saved) {
+            setAnalysisResult(saved.result);
+            setSpecText(saved.specText || "");
+          }
+        } catch (error) {
+          console.error("Failed to load saved analysis:", error);
+        }
+      } else {
+        // Load spec text from localStorage if available
+        const savedSpecText = localStorage.getItem(`specText_${projectId || 'default'}`);
+        if (savedSpecText) {
+          setSpecText(savedSpecText);
+        }
+        const savedAnalysisType = localStorage.getItem(`analysisType_${projectId || 'default'}`);
+        if (savedAnalysisType) {
+          const validTypes = ["structural", "misc", "finishes", "aess", "div01", "div03"];
+          if (validTypes.includes(savedAnalysisType)) {
+            setAnalysisType(savedAnalysisType as AnalysisType);
+          }
+        }
+      }
+    };
+
+    loadSavedAnalysis();
+  }, [viewType, projectId, companyId, searchParams]);
+
+  type AnalysisType = "structural" | "misc" | "finishes" | "aess" | "div01" | "div03";
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -53,7 +101,7 @@ export default function SpecReviewPage() {
     setIsAnalyzing(true);
     setAnalysisResult(null);
     try {
-      const result = await reviewSpecifications(specText, {}, analysisType);
+      const result = await reviewSpecifications(specText, {}, analysisType, companyId, projectId || undefined);
       console.log("Analysis result:", result); // Debug log
       
       // Ensure complianceItems exists even if AI doesn't return it
@@ -63,6 +111,7 @@ export default function SpecReviewPage() {
         if (result.costImpactTable && result.costImpactTable.length > 0) {
           result.complianceItems = result.costImpactTable.map(item => ({
             item: item.requirement,
+            specSection: item.specSection,
             status: item.costImpactLevel === "High" ? "fail" : item.costImpactLevel === "Medium" ? "warning" : "pass",
             message: item.impactExplanation,
             category: "cost-impact"
@@ -71,11 +120,61 @@ export default function SpecReviewPage() {
       }
       
       setAnalysisResult(result);
+      
+      // Save spec text to localStorage
+      if (projectId) {
+        localStorage.setItem(`specText_${projectId}`, specText);
+        localStorage.setItem(`analysisType_${projectId}`, analysisType);
+      }
     } catch (error: any) {
       console.error("Spec review error:", error);
       alert("Failed to analyze specifications. Please try again.");
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!analysisResult) {
+      alert("No analysis to save. Please run an analysis first.");
+      return;
+    }
+
+    if (!projectId || !companyId) {
+      alert("Cannot save: Project ID is required. Please navigate from a project.");
+      return;
+    }
+
+    if (!isFirebaseConfigured()) {
+      alert("Firebase is not configured. Cannot save analysis.");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const specReviewPath = `companies/${companyId}/projects/${projectId}/specReviews/${analysisType}`;
+      
+      await setDocument(specReviewPath, {
+        analysisType: analysisType,
+        result: analysisResult,
+        specText: specText.substring(0, 1000), // Store first 1000 chars for reference
+        analyzedAt: new Date().toISOString(),
+        version: 1,
+      });
+
+      // Clear the page and navigate to summary
+      setAnalysisResult(null);
+      setSpecText("");
+      localStorage.removeItem(`specText_${projectId}`);
+      localStorage.removeItem(`analysisType_${projectId}`);
+      
+      // Navigate to reports page
+      router.push(`/projects/${projectId}/reports`);
+    } catch (error: any) {
+      console.error("Failed to save analysis:", error);
+      alert("Failed to save analysis. Please try again.");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -182,15 +281,22 @@ export default function SpecReviewPage() {
                       key={index}
                       className={`p-4 rounded-lg border-2 ${getCostImpactColor(item.costImpactLevel)}`}
                     >
-                      <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-start justify-between mb-2 gap-2 flex-wrap">
                         <div className="font-semibold text-gray-900 flex-1">{item.requirement}</div>
-                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                          item.costImpactLevel === "High" ? "bg-red-100 text-red-700" :
-                          item.costImpactLevel === "Medium" ? "bg-yellow-100 text-yellow-700" :
-                          "bg-green-100 text-green-700"
-                        }`}>
-                          {item.costImpactLevel} Impact
-                        </span>
+                        <div className="flex items-center gap-2">
+                          {item.specSection && (
+                            <span className="text-xs font-mono text-gray-500 bg-gray-100 px-2 py-1 rounded whitespace-nowrap">
+                              {item.specSection}
+                            </span>
+                          )}
+                          <span className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${
+                            item.costImpactLevel === "High" ? "bg-red-100 text-red-700" :
+                            item.costImpactLevel === "Medium" ? "bg-yellow-100 text-yellow-700" :
+                            "bg-green-100 text-green-700"
+                          }`}>
+                            {item.costImpactLevel} Impact
+                          </span>
+                        </div>
                       </div>
                       <p className="text-sm text-gray-700">{item.impactExplanation}</p>
                     </div>
@@ -557,6 +663,11 @@ export default function SpecReviewPage() {
                     >
                       {getStatusIcon(item.status)}
                       <div className="flex-1">
+                        {item.specSection && (
+                          <span className="text-xs font-mono text-gray-500 bg-gray-100 px-2 py-1 rounded mb-2 inline-block">
+                            {item.specSection}
+                          </span>
+                        )}
                         <div className="flex items-center gap-2 mb-1">
                           <div className="font-medium text-gray-900">{item.item}</div>
                           {item.category && (
@@ -589,17 +700,24 @@ export default function SpecReviewPage() {
                       key={index}
                       className={`p-4 rounded-lg border-2 ${getPriorityColor(rfi.priority)}`}
                     >
-                      <div className="flex items-start justify-between mb-2">
-                        <h4 className="font-semibold text-gray-900">{rfi.title}</h4>
-                        {rfi.priority && (
-                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                            rfi.priority === "High" ? "bg-red-100 text-red-700" :
-                            rfi.priority === "Medium" ? "bg-yellow-100 text-yellow-700" :
-                            "bg-blue-100 text-blue-700"
-                          }`}>
-                            {rfi.priority} Priority
-                          </span>
-                        )}
+                      <div className="flex items-start justify-between mb-2 gap-2 flex-wrap">
+                        <h4 className="font-semibold text-gray-900 flex-1">{rfi.title}</h4>
+                        <div className="flex items-center gap-2">
+                          {rfi.specSection && (
+                            <span className="text-xs font-mono text-gray-500 bg-gray-100 px-2 py-1 rounded whitespace-nowrap">
+                              {rfi.specSection}
+                            </span>
+                          )}
+                          {rfi.priority && (
+                            <span className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${
+                              rfi.priority === "High" ? "bg-red-100 text-red-700" :
+                              rfi.priority === "Medium" ? "bg-yellow-100 text-yellow-700" :
+                              "bg-blue-100 text-blue-700"
+                            }`}>
+                              {rfi.priority} Priority
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <p className="text-sm text-gray-700">{rfi.description}</p>
                     </div>
@@ -618,8 +736,8 @@ export default function SpecReviewPage() {
         </div>
       )}
 
-      {/* Empty State */}
-      {!analysisResult && !isAnalyzing && (
+      {/* Empty State - Only show if not viewing saved analysis */}
+      {!analysisResult && !isAnalyzing && viewType !== "view" && (
         <Card className="border-dashed">
           <CardContent className="p-12 text-center">
             <Sparkles className="w-12 h-12 text-gray-400 mx-auto mb-4" />
@@ -627,7 +745,21 @@ export default function SpecReviewPage() {
           </CardContent>
         </Card>
       )}
+      
+      {/* Loading state for saved analysis */}
+      {viewType === "view" && !analysisResult && !isAnalyzing && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Loading Analysis...</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-gray-600">Loading saved analysis...</p>
+          </CardContent>
+        </Card>
+      )}
 
+      {/* Input form - only show if not viewing saved analysis */}
+      {viewType !== "view" && (
       <Card>
         <CardContent>
           <div className="space-y-4">
@@ -703,12 +835,26 @@ export default function SpecReviewPage() {
                 <p className="text-sm text-blue-600 mt-2">Extracting text from file...</p>
               )}
             </div>
-            <Button onClick={handleAnalyze} disabled={isAnalyzing}>
-              {isAnalyzing ? "Analyzing..." : "Analyze Specifications"}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button onClick={handleAnalyze} disabled={isAnalyzing}>
+                {isAnalyzing ? "Analyzing..." : "Analyze Specifications"}
+              </Button>
+              {analysisResult && projectId && (
+                <Button 
+                  onClick={handleSave} 
+                  disabled={isSaving}
+                  variant="default"
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  <Save className="w-4 h-4 mr-2" />
+                  {isSaving ? "Saving..." : "Save & Go to Summary"}
+                </Button>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>
+      )}
     </div>
   );
 }
