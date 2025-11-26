@@ -5,6 +5,7 @@ import { Clock, FileText, CheckCircle, XCircle, Sparkles } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import { subscribeToCollection } from "@/lib/firebase/firestore";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
+import { cn } from "@/lib/utils/cn";
 
 interface ActivityItem {
   id: string;
@@ -16,9 +17,10 @@ interface ActivityItem {
 
 interface ActivityFeedProps {
   companyId: string;
+  className?: string;
 }
 
-export default function ActivityFeed({ companyId }: ActivityFeedProps) {
+export default function ActivityFeed({ companyId, className }: ActivityFeedProps) {
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
 
@@ -138,39 +140,43 @@ export default function ActivityFeed({ companyId }: ActivityFeedProps) {
   };
 
   return (
-    <Card className="border-0 shadow-sm bg-white/80 backdrop-blur-sm">
-      <CardHeader className="pb-4">
-        <CardTitle className="flex items-center gap-2 text-base">
+    <Card className={cn("border border-gray-200 shadow-lg hover:shadow-xl transition-all duration-300 bg-white h-full", className)}>
+      <CardHeader className="pb-5">
+        <CardTitle className="flex items-center gap-2 text-lg font-semibold">
           <Clock className="w-5 h-5 text-gray-600" />
           Recent Activity
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="space-y-2">
-          {activities.map((activity) => (
-            <div
-              key={activity.id}
-              className={`p-4 rounded-lg border ${getActivityColor(activity.type)} transition-all hover:shadow-sm`}
-            >
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5">{getActivityIcon(activity.type)}</div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900">{activity.message}</p>
-                  {activity.projectName && (
-                    <p className="text-xs text-gray-600 mt-1">{activity.projectName}</p>
-                  )}
-                  <p className="text-xs text-gray-500 mt-1">{formatTimeAgo(activity.timestamp)}</p>
+        {activities.length === 0 ? (
+          <div className="text-center py-12">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 flex items-center justify-center">
+              <Clock className="w-8 h-8 text-gray-400" />
+            </div>
+            <h3 className="text-base font-semibold text-gray-900 mb-2">No Recent Activity</h3>
+            <p className="text-sm text-gray-500">Activity will appear here as you work on projects</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {activities.map((activity) => (
+              <div
+                key={activity.id}
+                className={`p-4 rounded-xl border-2 ${getActivityColor(activity.type)} transition-all duration-200 hover:shadow-md`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5">{getActivityIcon(activity.type)}</div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-900">{activity.message}</p>
+                    {activity.projectName && (
+                      <p className="text-sm text-gray-600 mt-1 font-medium">{activity.projectName}</p>
+                    )}
+                    <p className="text-xs text-gray-500 mt-1.5">{formatTimeAgo(activity.timestamp)}</p>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-          {activities.length === 0 && (
-            <div className="text-center py-8 text-gray-500 text-sm">
-              <Clock className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-              <p>No recent activity</p>
-            </div>
-          )}
-        </div>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

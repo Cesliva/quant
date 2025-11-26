@@ -151,13 +151,13 @@ function ReportsContent() {
   const costPerHour = laborTotal > 0 ? costTotal / laborTotal : 0;
 
   const handleExport = (type: "pdf" | "excel" | string) => {
-    const currentProject = projects.find((p) => p.id === selectedProject);
-    const projectName = currentProject?.name || "Project";
-    
-    if (type === "pdf") {
-      exportToPDF(lines, projectName, "Company");
-    } else if (type === "excel") {
-      exportToExcel(lines, projectName, "Company");
+      const currentProject = projects.find((p) => p.id === selectedProject);
+      const projectName = currentProject?.name || "Project";
+      
+      if (type === "pdf") {
+        exportToPDF(lines, projectName, "Company");
+      } else if (type === "excel") {
+        exportToExcel(lines, projectName, "Company");
     } else {
       // For category-specific exports, export filtered data as PDF
       let filteredLines = lines;
@@ -185,7 +185,7 @@ function ReportsContent() {
       // Export filtered lines as PDF
       if (filteredLines.length > 0) {
         exportToPDF(filteredLines, `${projectName} - ${type}`, "Company");
-      } else {
+    } else {
         alert(`No data available for ${type} export`);
       }
     }
@@ -254,9 +254,9 @@ function ReportsContent() {
                   }
                 });
                 return filtered.map((project) => (
-                  <option key={project.id} value={project.id}>
+                <option key={project.id} value={project.id}>
                     {project.name} {project.projectType ? `(${project.projectType}${project.projectTypeSubCategory ? ` - ${project.projectTypeSubCategory}` : ""})` : ""}
-                  </option>
+                </option>
                 ));
               })()}
             </select>

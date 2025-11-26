@@ -24,7 +24,9 @@ import {
   Download,
   Plus,
   X,
-  ChevronRight
+  ChevronRight,
+  ChevronDown,
+  ChevronUp
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { subscribeToCollection, updateDocument, getDocument } from "@/lib/firebase/firestore";
@@ -193,6 +195,25 @@ export default function ProjectReportsView({ companyId, projectId, project, onDa
   const [similarProjects, setSimilarProjects] = useState<any[]>([]);
   const [loadingSimilarProjects, setLoadingSimilarProjects] = useState(false);
   
+  // Collapsible sections state (default to collapsed for most sections)
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    executiveSummary: true, // Always visible
+    similarProjects: false,
+    costBreakdown: false,
+    financialAdjustments: false, // Financial adjustments section
+    sanityChecks: false,
+    strategicAnalysis: false,
+    specReview: false,
+    keyAssumptions: false,
+  });
+
+  const toggleSection = (section: string) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [section]: !prev[section]
+    }));
+  };
+  
   // Cost codes for budget
   const [costCodes, setCostCodes] = useState<CostCode[]>([
     { id: "mat", code: "", description: "Material", category: "Material" },
@@ -263,14 +284,31 @@ export default function ProjectReportsView({ companyId, projectId, project, onDa
       }
       
       // Load saved buyouts if they exist
-      if (projectData?.buyouts && Array.isArray(projectData.buyouts)) {
-        // Merge saved buyouts with defaults (preserve defaults, add custom ones)
-        const savedBuyoutIds = new Set(projectData.buyouts.map(b => b.id));
-        const mergedBuyouts = [
-          ...defaultBuyouts,
-          ...projectData.buyouts.filter(b => !defaultBuyouts.some(db => db.id === b.id))
-        ];
-        setBuyouts(mergedBuyouts);
+      if (projectData?.buyouts && Array.isArray(projectData.buyouts) && projectData.buyouts.length > 0) {
+        // Merge saved buyouts with defaults (preserve defaults, update amounts from saved)
+        const savedBuyoutsMap = new Map(projectData.buyouts.map(b => [b.id, b]));
+        const mergedBuyouts = defaultBuyouts.map(defaultBuyout => {
+          const savedBuyout = savedBuyoutsMap.get(defaultBuyout.id);
+          // If saved buyout exists, use its amount and name (in case name changed)
+          if (savedBuyout) {
+            return {
+              ...defaultBuyout,
+              amount: savedBuyout.amount || 0,
+              name: savedBuyout.name || defaultBuyout.name, // Allow name changes
+            };
+          }
+          return defaultBuyout;
+        });
+        
+        // Add any custom buyouts that aren't in defaults
+        const customBuyouts = projectData.buyouts.filter(b => 
+          !defaultBuyouts.some(db => db.id === b.id)
+        );
+        
+        setBuyouts([...mergedBuyouts, ...customBuyouts]);
+      } else {
+        // If no saved buyouts, ensure we still set the defaults
+        setBuyouts(defaultBuyouts);
       }
       
       // Load cost codes (from budget or project level)
@@ -326,11 +364,7 @@ export default function ProjectReportsView({ companyId, projectId, project, onDa
     const saveTimeout = setTimeout(async () => {
       try {
         const projectPath = getProjectPath(companyId, projectId);
-        // Only save custom buyouts (not defaults)
-        const customBuyouts = buyouts.filter(b => b.id.startsWith("custom_") || 
-          (b.amount > 0 && !defaultBuyouts.some(db => db.id === b.id)));
-        
-        // Save all buyouts (including defaults with amounts) for persistence
+        // Save all buyouts (including defaults with amounts and custom buyouts) for persistence
         await updateDocument(
           `companies/${companyId}/projects`,
           projectId,
@@ -1392,92 +1426,78 @@ export default function ProjectReportsView({ companyId, projectId, project, onDa
         </CardContent>
       </Card>
 
-      {/* Similar Projects Comparison */}
-      {project.projectType && similarProjects.length > 0 && (
-        <Card className="border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-white">
-          <CardHeader className="bg-purple-600 text-white rounded-t-lg">
-            <CardTitle className="flex items-center gap-2 text-xl">
-              <BarChart3 className="w-6 h-6" />
-              Similar Projects Comparison
-            </CardTitle>
-            <p className="text-sm text-purple-100 mt-1">
-              Compare this estimate with similar {project.projectType} projects for strategic advantage
-            </p>
-          </CardHeader>
-          <CardContent className="p-6">
-            <div className="space-y-4">
-              {similarProjects.map((similar) => (
-                <div
-                  key={similar.id}
-                  className="p-4 bg-white rounded-lg border border-gray-200 hover:border-purple-300 transition-colors"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <h4 className="font-semibold text-gray-900">
-                          {similar.projectNumber || ""} {similar.projectNumber && similar.projectName ? "- " : ""}
-                          {similar.projectName}
-                        </h4>
-                        {similar.projectTypeSubCategory && (
-                          <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded">
-                            {similar.projectTypeSubCategory}
-                          </span>
-                        )}
-                      </div>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                        <div>
-                          <div className="text-xs text-gray-600">Budget Total</div>
-                          <div className="font-semibold text-gray-900">
-                            {formatCurrency(similar.budget?.totalCost || 0)}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-gray-600">Cost per Pound</div>
-                          <div className="font-semibold text-gray-900">
-                            {similar.budget?.totalWeight && similar.budget.totalWeight > 0
-                              ? formatCurrency((similar.budget.totalCost || 0) / similar.budget.totalWeight)
-                              : "-"}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-gray-600">Man Hours per Ton</div>
-                          <div className="font-semibold text-gray-900">
-                            {similar.budget?.totalWeight && similar.budget.totalWeight > 0
-                              ? formatNumber(((similar.budget.totalLaborHours || 0) / similar.budget.totalWeight) * 2000, 2)
-                              : "-"}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-gray-600">Weight</div>
-                          <div className="font-semibold text-gray-900">
-                            {formatNumber(similar.budget?.totalWeight || 0, 0)} lbs
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <Link
-                      href={`/projects/${similar.id}/reports`}
-                      className="ml-4 px-3 py-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
-                    >
-                      View
-                    </Link>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Cost Breakdown */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <BarChart3 className="w-5 h-5 text-blue-600" />
-            Cost Breakdown
-          </CardTitle>
+        <CardHeader 
+          className="cursor-pointer hover:bg-gray-50 transition-colors"
+          onClick={() => toggleSection("costBreakdown")}
+        >
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 text-blue-600" />
+              Cost Breakdown
+            </CardTitle>
+            <div>
+              {expandedSections.costBreakdown ? (
+                <ChevronUp className="w-5 h-5 text-gray-600" />
+              ) : (
+                <ChevronDown className="w-5 h-5 text-gray-600" />
+              )}
+            </div>
+          </div>
         </CardHeader>
-        <CardContent className="space-y-6">
+        {!expandedSections.costBreakdown ? (
+          <CardContent className="p-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <div className="bg-white rounded-lg p-3 border border-gray-200">
+                <div className="text-xs text-gray-600 mb-1">Material</div>
+                <div className="text-xl font-bold text-gray-900">
+                  {formatCurrency(financials.materialCost)}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  {formatNumber((financials.materialCost / financials.subtotal) * 100, 1)}% of subtotal
+                </div>
+              </div>
+              <div className="bg-white rounded-lg p-3 border border-gray-200">
+                <div className="text-xs text-gray-600 mb-1">Labor</div>
+                <div className="text-xl font-bold text-green-600">
+                  {formatCurrency(financials.laborCost)}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  {formatNumber((financials.laborCost / financials.subtotal) * 100, 1)}% of subtotal
+                </div>
+              </div>
+              <div className="bg-white rounded-lg p-3 border border-gray-200">
+                <div className="text-xs text-gray-600 mb-1">Coating</div>
+                <div className="text-xl font-bold text-blue-600">
+                  {formatCurrency(financials.coatingCost)}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  {formatNumber((financials.coatingCost / financials.subtotal) * 100, 1)}% of subtotal
+                </div>
+              </div>
+              <div className="bg-white rounded-lg p-3 border border-gray-200">
+                <div className="text-xs text-gray-600 mb-1">Hardware</div>
+                <div className="text-xl font-bold text-amber-600">
+                  {formatCurrency(financials.hardwareCost)}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  {formatNumber((financials.hardwareCost / financials.subtotal) * 100, 1)}% of subtotal
+                </div>
+              </div>
+              <div className="bg-white rounded-lg p-3 border border-gray-200">
+                <div className="text-xs text-gray-600 mb-1">Buyouts</div>
+                <div className="text-xl font-bold text-purple-600">
+                  {formatCurrency(financials.buyouts)}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  {formatNumber((financials.buyouts / financials.subtotal) * 100, 1)}% of subtotal
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        ) : (
+          <CardContent className="space-y-6">
           {/* Visual Cost Breakdown Charts */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
             {/* Cost Distribution Stacked Bar */}
@@ -1955,25 +1975,10 @@ export default function ProjectReportsView({ companyId, projectId, project, onDa
                 </div>
               </div>
 
-              {/* Total Cost */}
-              <div className="p-4 bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg text-white">
-                <div className="flex items-center justify-between">
-                  <span className="text-lg font-semibold">Total Project Cost</span>
-                  <div className="text-3xl font-bold">
-                    {formatCurrency(financials.totalCost)}
-                  </div>
-                </div>
-                <div className="mt-2 text-sm text-blue-100">
-                  Margin: {formatNumber(metrics.margin, 1)}%
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Waste Factors */}
-          <div className="pt-4 border-t border-gray-200">
-            <h3 className="text-sm font-semibold text-gray-900 mb-4">Waste Factors</h3>
-            <div className="grid grid-cols-2 gap-4">
+              {/* Waste Factors - Moved above Total Cost */}
+              <div className="pb-4 mb-4 border-b border-gray-200">
+                <h3 className="text-sm font-semibold text-gray-900 mb-4">Waste Factors</h3>
+                <div className="grid grid-cols-2 gap-4">
               <div className="p-3 bg-gray-50 rounded-lg">
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-xs font-medium text-gray-700">Material Waste Factor</label>
@@ -2062,23 +2067,243 @@ export default function ProjectReportsView({ companyId, projectId, project, onDa
                   <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">%</span>
                 </div>
               </div>
+                </div>
+              </div>
+
+              {/* Total Cost */}
+              <div className="p-4 bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg text-white">
+                <div className="flex items-center justify-between">
+                  <span className="text-lg font-semibold">Total Project Cost</span>
+                  <div className="text-3xl font-bold">
+                    {formatCurrency(financials.totalCost)}
+                  </div>
+                </div>
+                <div className="mt-2 text-sm text-blue-100">
+                  Margin: {formatNumber(metrics.margin, 1)}%
+                </div>
+              </div>
             </div>
           </div>
         </CardContent>
+        )}
       </Card>
+
+      {/* Similar Projects Comparison */}
+      {project.projectType && (
+        <Card className="border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-white">
+          <CardHeader 
+            className="bg-purple-600 text-white rounded-t-lg cursor-pointer hover:bg-purple-700 transition-colors" 
+            onClick={() => toggleSection("similarProjects")}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <CardTitle className="flex items-center gap-2 text-xl">
+                  <BarChart3 className="w-6 h-6" />
+                  Similar Projects Comparison
+                </CardTitle>
+                <p className="text-sm text-purple-100 mt-1">
+                  Compare this estimate with similar {project.projectType} projects for strategic advantage
+                </p>
+              </div>
+              <div className="ml-4">
+                {expandedSections.similarProjects ? (
+                  <ChevronUp className="w-5 h-5" />
+                ) : (
+                  <ChevronDown className="w-5 h-5" />
+                )}
+              </div>
+            </div>
+          </CardHeader>
+          {!expandedSections.similarProjects ? (
+            <CardContent className="p-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-white rounded-lg p-3 border border-gray-200">
+                  <div className="text-xs text-gray-600 mb-1">Similar Projects</div>
+                  <div className="text-2xl font-bold text-gray-900">
+                    {similarProjects.length}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">Found for comparison</div>
+                </div>
+                {similarProjects.length > 0 && (
+                  <>
+                    <div className="bg-white rounded-lg p-3 border border-gray-200">
+                      <div className="text-xs text-gray-600 mb-1">Avg Cost per Lb</div>
+                      <div className="text-2xl font-bold text-purple-600">
+                        {formatCurrency(
+                          similarProjects.reduce((sum, p) => {
+                            const cost = p.budget?.totalCost || 0;
+                            const weight = p.budget?.totalWeight || 0;
+                            return sum + (weight > 0 ? cost / weight : 0);
+                          }, 0) / (similarProjects.length || 1)
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">Average across projects</div>
+                    </div>
+                    <div className="bg-white rounded-lg p-3 border border-gray-200">
+                      <div className="text-xs text-gray-600 mb-1">Avg Man Hrs/Ton</div>
+                      <div className="text-2xl font-bold text-purple-600">
+                        {formatNumber(
+                          similarProjects.reduce((sum, p) => {
+                            const hours = p.budget?.totalLaborHours || 0;
+                            const weight = p.budget?.totalWeight || 0;
+                            return sum + (weight > 0 ? (hours / weight) * 2000 : 0);
+                          }, 0) / (similarProjects.length || 1),
+                          1
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">Average across projects</div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </CardContent>
+          ) : (
+            <CardContent className="p-6">
+            <div className="space-y-4">
+              {similarProjects.map((similar) => (
+                <div
+                  key={similar.id}
+                  className="p-4 bg-white rounded-lg border border-gray-200 hover:border-purple-300 transition-colors"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <h4 className="font-semibold text-gray-900">
+                          {similar.projectNumber || ""} {similar.projectNumber && similar.projectName ? "- " : ""}
+                          {similar.projectName}
+                        </h4>
+                        {similar.projectTypeSubCategory && (
+                          <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded">
+                            {similar.projectTypeSubCategory}
+                          </span>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div>
+                          <div className="text-xs text-gray-600">Budget Total</div>
+                          <div className="font-semibold text-gray-900">
+                            {formatCurrency(similar.budget?.totalCost || 0)}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-gray-600">Cost per Pound</div>
+                          <div className="font-semibold text-gray-900">
+                            {similar.budget?.totalWeight && similar.budget.totalWeight > 0
+                              ? formatCurrency((similar.budget.totalCost || 0) / similar.budget.totalWeight)
+                              : "-"}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-gray-600">Man Hours per Ton</div>
+                          <div className="font-semibold text-gray-900">
+                            {similar.budget?.totalWeight && similar.budget.totalWeight > 0
+                              ? formatNumber(((similar.budget.totalLaborHours || 0) / similar.budget.totalWeight) * 2000, 2)
+                              : "-"}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-gray-600">Weight</div>
+                          <div className="font-semibold text-gray-900">
+                            {formatNumber(similar.budget?.totalWeight || 0, 0)} lbs
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <Link
+                      href={`/projects/${similar.id}/reports`}
+                      className="ml-4 px-3 py-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
+                    >
+                      View
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+          )}
+        </Card>
+      )}
 
       {/* Sanity Checks - Critical Estimator Validation Metrics */}
       <Card className="border-2 border-green-200 bg-gradient-to-br from-green-50 to-white">
-        <CardHeader className="bg-green-600 text-white rounded-t-lg">
-          <CardTitle className="flex items-center gap-2 text-xl">
-            <CheckCircle2 className="w-6 h-6" />
-            Sanity Checks & Validation Metrics
-          </CardTitle>
-          <p className="text-sm text-green-100 mt-1">
-            Critical metrics used by estimators to validate estimate accuracy
-          </p>
+        <CardHeader 
+          className="bg-green-600 text-white rounded-t-lg cursor-pointer hover:bg-green-700 transition-colors"
+          onClick={() => toggleSection("sanityChecks")}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <CardTitle className="flex items-center gap-2 text-xl">
+                <CheckCircle2 className="w-6 h-6" />
+                Sanity Checks & Validation Metrics
+              </CardTitle>
+              <p className="text-sm text-green-100 mt-1">
+                Critical metrics used by estimators to validate estimate accuracy
+              </p>
+            </div>
+            <div className="ml-4">
+              {expandedSections.sanityChecks ? (
+                <ChevronUp className="w-5 h-5" />
+              ) : (
+                <ChevronDown className="w-5 h-5" />
+              )}
+            </div>
+          </div>
         </CardHeader>
-        <CardContent className="p-6 space-y-6">
+        {!expandedSections.sanityChecks ? (
+          <CardContent className="p-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-white rounded-lg p-3 border-2 border-green-200">
+                <div className="text-xs text-gray-600 mb-1">Cost per Pound</div>
+                <div className="text-2xl font-bold text-gray-900">
+                  {formatCurrency(metrics.costPerPound)}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  {formatCurrency(metrics.costPerTon)} per ton
+                </div>
+                <div className="text-xs text-green-600 mt-1 font-medium">
+                  Range: $1.50 - $3.50/lb
+                </div>
+              </div>
+              <div className="bg-white rounded-lg p-3 border-2 border-green-200">
+                <div className="text-xs text-gray-600 mb-1">Cost per Ton</div>
+                <div className="text-2xl font-bold text-gray-900">
+                  {formatCurrency(metrics.costPerTon)}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  {formatCurrency(metrics.costPerPound)} per lb
+                </div>
+                <div className="text-xs text-green-600 mt-1 font-medium">
+                  Range: $3,000 - $7,000/ton
+                </div>
+              </div>
+              <div className="bg-white rounded-lg p-3 border-2 border-green-200">
+                <div className="text-xs text-gray-600 mb-1">Man Hours per Lb</div>
+                <div className="text-2xl font-bold text-gray-900">
+                  {formatNumber(metrics.manHoursPerPound, 4)}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  {formatNumber(metrics.manHoursPerTon, 1)} hrs per ton
+                </div>
+                <div className="text-xs text-green-600 mt-1 font-medium">
+                  Range: 0.001 - 0.005 hrs/lb
+                </div>
+              </div>
+              <div className="bg-white rounded-lg p-3 border-2 border-green-200">
+                <div className="text-xs text-gray-600 mb-1">Man Hours per Ton</div>
+                <div className="text-2xl font-bold text-gray-900">
+                  {formatNumber(metrics.manHoursPerTon, 1)}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  {formatNumber(metrics.manHoursPerPound, 4)} hrs per lb
+                </div>
+                <div className="text-xs text-green-600 mt-1 font-medium">
+                  Range: 2 - 10 hrs/ton
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        ) : (
+          <CardContent className="p-6 space-y-6">
           {/* Primary Sanity Checks */}
           <div>
             <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
@@ -2291,20 +2516,71 @@ export default function ProjectReportsView({ companyId, projectId, project, onDa
             </div>
           </div>
         </CardContent>
+        )}
       </Card>
 
       {/* Strategic Financial Analysis */}
       <Card className="border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-white">
-        <CardHeader className="bg-purple-600 text-white rounded-t-lg">
-          <CardTitle className="flex items-center gap-2 text-xl">
-            <TrendingUp className="w-6 h-6" />
-            Strategic Financial Analysis
-          </CardTitle>
-          <p className="text-sm text-purple-100 mt-1">
-            Competitive advantage metrics for bidding strategy
-          </p>
+        <CardHeader 
+          className="bg-purple-600 text-white rounded-t-lg cursor-pointer hover:bg-purple-700 transition-colors"
+          onClick={() => toggleSection("strategicAnalysis")}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <CardTitle className="flex items-center gap-2 text-xl">
+                <TrendingUp className="w-6 h-6" />
+                Strategic Financial Analysis
+              </CardTitle>
+              <p className="text-sm text-purple-100 mt-1">
+                Competitive advantage metrics for bidding strategy
+              </p>
+            </div>
+            <div className="ml-4">
+              {expandedSections.strategicAnalysis ? (
+                <ChevronUp className="w-5 h-5" />
+              ) : (
+                <ChevronDown className="w-5 h-5" />
+              )}
+            </div>
+          </div>
         </CardHeader>
-        <CardContent className="p-6 space-y-6">
+        {!expandedSections.strategicAnalysis ? (
+          <CardContent className="p-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="bg-white rounded-lg p-3 border border-gray-200">
+                <div className="text-xs text-gray-600 mb-1">Break-Even Price</div>
+                <div className="text-xl font-bold text-gray-900">
+                  {formatCurrency(metrics.breakEvenPrice)}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">Minimum to cover costs</div>
+              </div>
+              <div className="bg-white rounded-lg p-3 border border-gray-200">
+                <div className="text-xs text-gray-600 mb-1">Discount Capacity</div>
+                <div className="text-xl font-bold text-green-600">
+                  {formatCurrency(metrics.discountCapacity)}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  {formatNumber(metrics.discountCapacityPercent, 1)}% of total
+                </div>
+              </div>
+              <div className="bg-white rounded-lg p-3 border border-gray-200">
+                <div className="text-xs text-gray-600 mb-1">ROI Potential</div>
+                <div className="text-xl font-bold text-blue-600">
+                  {formatNumber(metrics.roi, 1)}%
+                </div>
+                <div className="text-xs text-gray-500 mt-1">If won at estimate</div>
+              </div>
+              <div className="bg-white rounded-lg p-3 border border-gray-200">
+                <div className="text-xs text-gray-600 mb-1">Expected Value</div>
+                <div className="text-xl font-bold text-purple-600">
+                  {formatCurrency(metrics.expectedValue)}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">Risk-adjusted profit</div>
+              </div>
+            </div>
+          </CardContent>
+        ) : (
+          <CardContent className="p-6 space-y-6">
           {/* Pricing Strategy */}
           <div>
             <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
@@ -2481,114 +2757,39 @@ export default function ProjectReportsView({ companyId, projectId, project, onDa
             </div>
           </div>
         </CardContent>
+        )}
       </Card>
 
-      {/* Project Summary Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-semibold text-gray-700">Project Summary</CardTitle>
-          </CardHeader>
-          <CardContent className="p-6">
-            <div className="space-y-4">
-              <div>
-                <div className="text-xs text-gray-600 mb-2">Total Weight</div>
-                <div className="text-2xl font-bold text-gray-900">
-                  {formatNumber(metrics.totalWeight, 0)} lbs
-                </div>
-                <div className="text-xs text-gray-500 mt-1">
-                  {formatNumber(metrics.totalWeight / 2000, 2)} tons
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-gray-600 mb-2">Total Labor Hours</div>
-                <div className="text-2xl font-bold text-gray-900">
-                  {formatNumber(metrics.totalLaborHours, 1)} hrs
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-gray-600 mb-2">Total Surface Area</div>
-                <div className="text-2xl font-bold text-gray-900">
-                  {formatNumber(metrics.totalSurfaceArea, 0)} SF
-                </div>
-              </div>
-              <div className="pt-3 border-t border-gray-200">
-                <div className="text-xs text-gray-600 mb-2">Line Items</div>
-                <div className="text-xl font-bold text-gray-900">
-                  {metrics.lineItemCount}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-semibold text-gray-700">Risk & Probability</CardTitle>
-          </CardHeader>
-          <CardContent className="p-6 space-y-3">
-            <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
-              <div className="flex items-center gap-2">
-                <Target className="w-4 h-4 text-blue-600" />
-                <span className="text-xs text-gray-700">Win Probability</span>
-              </div>
-              <span className="text-lg font-bold text-blue-700">
-                {project.probabilityOfWin || 0}%
-              </span>
-            </div>
-            <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg border border-purple-200">
-              <div className="flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-purple-600" />
-                <span className="text-xs text-gray-700">Expected Value</span>
-              </div>
-              <span className="text-lg font-bold text-purple-700">
-                {formatCurrency(metrics.expectedValue)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-green-600" />
-                <span className="text-xs text-gray-700">Estimate Status</span>
-              </div>
-              <span className="text-sm font-semibold text-green-700 capitalize">
-                {project.status || "Draft"}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-semibold text-gray-700">Key Assumptions</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-xs text-gray-600">
-            <div className="flex items-start gap-2">
-              <FileCheck className="w-3 h-3 mt-0.5 text-gray-400" />
-              <span>Material waste factor: {formatNumber(financials.materialWasteFactor, 1)}%</span>
-            </div>
-            <div className="flex items-start gap-2">
-              <FileCheck className="w-3 h-3 mt-0.5 text-gray-400" />
-              <span>Labor waste factor: {formatNumber(financials.laborWasteFactor, 1)}%</span>
-            </div>
-            <div className="flex items-start gap-2">
-              <FileCheck className="w-3 h-3 mt-0.5 text-gray-400" />
-              <span>Overhead: {formatNumber(financials.overheadPercentage, 1)}%</span>
-            </div>
-            <div className="flex items-start gap-2">
-              <FileCheck className="w-3 h-3 mt-0.5 text-gray-400" />
-              <span>Profit margin: {formatNumber(financials.profitPercentage, 1)}%</span>
-            </div>
-            <div className="flex items-start gap-2">
-              <FileCheck className="w-3 h-3 mt-0.5 text-gray-400" />
-              <span>Based on {metrics.lineItemCount} active line items</span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
       {/* AI Spec Review Summary */}
-      <div className="mt-6">
-        <SpecReviewSummary companyId={companyId} projectId={projectId} />
-      </div>
+      <Card className="mt-6">
+        <CardHeader 
+          className="bg-indigo-600 text-white rounded-t-lg cursor-pointer hover:bg-indigo-700 transition-colors"
+          onClick={() => toggleSection("specReview")}
+        >
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2 text-xl">
+              <FileCheck className="w-6 h-6" />
+              AI Spec Review Summary
+            </CardTitle>
+            <div className="ml-4">
+              {expandedSections.specReview ? (
+                <ChevronUp className="w-5 h-5" />
+              ) : (
+                <ChevronDown className="w-5 h-5" />
+              )}
+            </div>
+          </div>
+        </CardHeader>
+        {expandedSections.specReview ? (
+          <CardContent className="p-6">
+            <SpecReviewSummary companyId={companyId} projectId={projectId} />
+          </CardContent>
+        ) : (
+          <CardContent className="p-4">
+            <SpecReviewSummary companyId={companyId} projectId={projectId} compact={true} />
+          </CardContent>
+        )}
+      </Card>
     </div>
   );
 }

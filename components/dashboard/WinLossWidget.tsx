@@ -7,6 +7,7 @@ import Button from "@/components/ui/Button";
 import { subscribeToCollection } from "@/lib/firebase/firestore";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
 import WinLossModal from "./WinLossModal";
+import { cn } from "@/lib/utils/cn";
 
 interface WinLossRecord {
   id?: string;
@@ -28,9 +29,10 @@ interface WinLossRecord {
 
 interface WinLossWidgetProps {
   companyId: string;
+  className?: string;
 }
 
-export default function WinLossWidget({ companyId }: WinLossWidgetProps) {
+export default function WinLossWidget({ companyId, className }: WinLossWidgetProps) {
   const [records, setRecords] = useState<WinLossRecord[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -104,47 +106,53 @@ export default function WinLossWidget({ companyId }: WinLossWidgetProps) {
 
   return (
     <>
-      <Card className="border-0 shadow-sm bg-white/80 backdrop-blur-sm">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <CardTitle className="text-base font-semibold flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-green-600" />
+      <Card className={cn("border border-gray-200 shadow-lg hover:shadow-xl transition-all duration-300 bg-white h-full", className)}>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-5">
+          <CardTitle className="text-lg font-semibold flex items-center gap-2">
+            <TrendingUp className="w-5 h-5 text-green-600" />
             Win/Loss
           </CardTitle>
-          <Button variant="outline" size="sm" onClick={() => setIsModalOpen(true)}>
+          <Button variant="outline" size="sm" onClick={() => setIsModalOpen(true)} className="border-2">
             View Full
           </Button>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Key Metrics - Even Grid */}
-          <div className="grid grid-cols-2 gap-2">
-            <div className="p-4 bg-green-50 rounded-lg border border-green-200 text-center">
-              <div className="text-2xl font-bold text-green-700">{stats.wins}</div>
-              <div className="text-xs text-gray-600 mt-1">Wins</div>
-            </div>
-            <div className="p-4 bg-red-50 rounded-lg border border-red-200 text-center">
-              <div className="text-2xl font-bold text-red-700">{stats.losses}</div>
-              <div className="text-xs text-gray-600 mt-1">Losses</div>
-            </div>
-            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200 text-center">
-              <div className="text-2xl font-bold text-blue-700">{stats.winRate.toFixed(1)}%</div>
-              <div className="text-xs text-gray-600 mt-1">Win Rate</div>
-            </div>
-            <div className="p-4 bg-purple-50 rounded-lg border border-purple-200 text-center">
-              <div className="text-2xl font-bold text-purple-700">
-                {stats.averageMargin > 0 ? `${stats.averageMargin.toFixed(1)}%` : "-"}
+        <CardContent className="space-y-5">
+          {records.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-100 flex items-center justify-center">
+                <TrendingUp className="w-8 h-8 text-green-400" />
               </div>
-              <div className="text-xs text-gray-600 mt-1">Avg Margin</div>
-            </div>
-          </div>
-
-          {/* Empty State or Quick Action */}
-          {records.length === 0 && (
-            <div className="text-center py-4">
-              <Button variant="outline" size="sm" onClick={() => setIsModalOpen(true)} className="w-full">
-                <Plus className="w-3 h-3 mr-1" />
+              <h3 className="text-base font-semibold text-gray-900 mb-2">No Win/Loss Records</h3>
+              <p className="text-sm text-gray-500 mb-6">Start tracking your wins and losses to analyze performance</p>
+              <Button variant="outline" size="md" onClick={() => setIsModalOpen(true)} className="w-full border-2">
+                <Plus className="w-4 h-4 mr-2" />
                 Log First Record
               </Button>
             </div>
+          ) : (
+            <>
+              {/* Key Metrics - Even Grid */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-5 bg-green-50 rounded-xl border-2 border-green-200 text-center hover:shadow-md transition-shadow">
+                  <div className="text-3xl font-bold text-green-700 mb-1 tracking-tight">{stats.wins}</div>
+                  <div className="text-sm text-gray-600 font-medium">Wins</div>
+                </div>
+                <div className="p-5 bg-red-50 rounded-xl border-2 border-red-200 text-center hover:shadow-md transition-shadow">
+                  <div className="text-3xl font-bold text-red-700 mb-1 tracking-tight">{stats.losses}</div>
+                  <div className="text-sm text-gray-600 font-medium">Losses</div>
+                </div>
+                <div className="p-5 bg-blue-50 rounded-xl border-2 border-blue-200 text-center hover:shadow-md transition-shadow">
+                  <div className="text-3xl font-bold text-blue-700 mb-1 tracking-tight">{stats.winRate.toFixed(1)}%</div>
+                  <div className="text-sm text-gray-600 font-medium">Win Rate</div>
+                </div>
+                <div className="p-5 bg-purple-50 rounded-xl border-2 border-purple-200 text-center hover:shadow-md transition-shadow">
+                  <div className="text-3xl font-bold text-purple-700 mb-1 tracking-tight">
+                    {stats.averageMargin > 0 ? `${stats.averageMargin.toFixed(1)}%` : "-"}
+                  </div>
+                  <div className="text-sm text-gray-600 font-medium">Avg Margin</div>
+                </div>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

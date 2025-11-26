@@ -18,6 +18,14 @@ export interface CompanyInfo {
   taxId?: string;
 }
 
+export interface Estimator {
+  id: string;
+  name: string;
+  weeklyCapacityHours: number;
+  email?: string;
+  active?: boolean;
+}
+
 export interface CompanySettings {
   companyInfo?: CompanyInfo;
   materialGrades: Array<{ grade: string; costPerPound: number }>;
@@ -37,6 +45,25 @@ export interface CompanySettings {
     stockRounding: number;
     defaultEstimator?: string;
     autoSave: boolean;
+  };
+  // Executive Dashboard Settings
+  estimators?: Estimator[];
+  fabricationBurnRateMonthly?: number; // Legacy: Monthly shop capacity in dollars (deprecated)
+  shopCapacityHoursMonthly?: number; // Legacy: monthly capacity in hours (deprecated)
+  // Hours-based backlog calculation
+  shopCapacityHoursPerWeek?: number; // e.g. 800 hrs/week
+  shopCapacityHoursPerDay?: number; // e.g. 100 hrs/day
+  backlogForecastWeeks?: number; // e.g. 24 (≈ 6 months)
+  underUtilizedThreshold?: number; // e.g. 0.7 → weeks < 70% used are "gaps"
+  workingDays?: string[]; // e.g. ["mon","tue",...]
+  holidays?: string[]; // ISO YYYY-MM-DD strings
+  // Pipeline Distribution Settings
+  pipelineRanges?: {
+    small: { min: number; max: number }; // 0-50K
+    medium: { min: number; max: number }; // 50K-100K
+    large: { min: number; max: number }; // 100K-250K
+    xlarge: { min: number; max: number }; // 250K-500K
+    xxlarge: { min: number; max: number }; // 500K+
   };
 }
 
@@ -81,6 +108,19 @@ const DEFAULT_SETTINGS: CompanySettings = {
     salesTaxRate: 0,
     useTaxRate: 0,
   },
+  shopCapacityHoursPerWeek: 0,
+  shopCapacityHoursPerDay: 0,
+  backlogForecastWeeks: 24,
+  underUtilizedThreshold: 0.7,
+  workingDays: ["mon", "tue", "wed", "thu", "fri"],
+  holidays: [],
+  pipelineRanges: {
+    small: { min: 0, max: 50000 },
+    medium: { min: 50000, max: 100000 },
+    large: { min: 100000, max: 250000 },
+    xlarge: { min: 250000, max: 500000 },
+    xxlarge: { min: 500000, max: 999999999 },
+  },
 };
 
 /**
@@ -101,14 +141,25 @@ export async function loadCompanySettings(companyId: string): Promise<CompanySet
       return {
         ...DEFAULT_SETTINGS,
         ...company.settings,
+        workingDays:
+          company.settings.workingDays && company.settings.workingDays.length > 0
+            ? company.settings.workingDays
+            : DEFAULT_SETTINGS.workingDays,
+        holidays: company.settings.holidays ?? DEFAULT_SETTINGS.holidays,
         companyInfo: {
           ...DEFAULT_SETTINGS.companyInfo,
           ...company.settings.companyInfo,
         },
-        laborRates: {
-          ...DEFAULT_SETTINGS.laborRates,
-          ...company.settings.laborRates,
-        },
+        // Ensure arrays remain arrays (don't spread them as objects)
+        materialGrades: Array.isArray(company.settings.materialGrades) && company.settings.materialGrades.length > 0
+          ? company.settings.materialGrades
+          : DEFAULT_SETTINGS.materialGrades,
+        laborRates: Array.isArray(company.settings.laborRates) && company.settings.laborRates.length > 0
+          ? company.settings.laborRates
+          : DEFAULT_SETTINGS.laborRates,
+        coatingTypes: Array.isArray(company.settings.coatingTypes) && company.settings.coatingTypes.length > 0
+          ? company.settings.coatingTypes
+          : DEFAULT_SETTINGS.coatingTypes,
         markupSettings: {
           ...DEFAULT_SETTINGS.markupSettings,
           ...company.settings.markupSettings,
@@ -174,6 +225,11 @@ export function getLaborRate(
   trade?: string,
   companySettings: CompanySettings
 ): number {
+  // Ensure laborRates is an array
+  if (!Array.isArray(companySettings.laborRates) || companySettings.laborRates.length === 0) {
+    return 50; // Default rate
+  }
+
   if (trade) {
     const laborRate = companySettings.laborRates.find(
       (r) => r.trade.toLowerCase() === trade.toLowerCase()
@@ -254,6 +310,21 @@ export function calculateTotalCostWithMarkup(
 /**
  * Save company settings to Firestore
  */
+function removeUndefined<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((item) => removeUndefined(item)) as T;
+  }
+  if (value && typeof value === "object") {
+    const cleaned: Record<string, any> = {};
+    Object.entries(value as Record<string, any>).forEach(([key, val]) => {
+      if (val === undefined) return;
+      cleaned[key] = removeUndefined(val);
+    });
+    return cleaned as T;
+  }
+  return value;
+}
+
 export async function saveCompanySettings(
   companyId: string,
   settings: CompanySettings
@@ -264,8 +335,16 @@ export async function saveCompanySettings(
   }
 
   try {
-    const settingsPath = `companies/${companyId}/settings`;
-    await setDocument(settingsPath, settings, true);
+    const companyDocPath = `companies/${companyId}`;
+    const cleanedSettings = removeUndefined(settings);
+
+    await setDocument(
+      companyDocPath,
+      {
+        settings: cleanedSettings,
+      },
+      true
+    );
   } catch (error) {
     console.error("Failed to save company settings:", error);
     throw error;

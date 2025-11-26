@@ -5,8 +5,9 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import { Save, BookOpen, ChevronDown, ChevronUp, AlertTriangle, Plus, Trash2, Users, Building2, MapPin, Phone, Mail, Edit } from "lucide-react";
-import { getDocument, updateDocument, setDocument } from "@/lib/firebase/firestore";
+import { getDocument, updateDocument, setDocument, getDocRef } from "@/lib/firebase/firestore";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
+import { onSnapshot } from "firebase/firestore";
 
 interface Contact {
   id: string;
@@ -37,28 +38,43 @@ export default function CompanyAddressBook({ companyId, compact = false }: Compa
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [isAddingNew, setIsAddingNew] = useState(false);
 
-  // Load contacts from Firestore
+  // Load contacts from Firestore with real-time updates
   useEffect(() => {
-    const loadContacts = async () => {
-      if (!isFirebaseConfigured()) {
-        setIsLoading(false);
-        return;
-      }
+    if (!isFirebaseConfigured()) {
+      setIsLoading(false);
+      return;
+    }
 
-      try {
-        const companyPath = `companies/${companyId}`;
-        const companyDoc = await getDocument(companyPath);
-        if (companyDoc && companyDoc.contacts) {
-          setContacts(companyDoc.contacts as Contact[]);
+    try {
+      const companyPath = `companies/${companyId}`;
+      const companyDocRef = getDocRef(companyPath);
+      
+      const unsubscribe = onSnapshot(
+        companyDocRef,
+        (snapshot) => {
+          if (snapshot.exists()) {
+            const data = snapshot.data();
+            if (data && data.contacts) {
+              setContacts(data.contacts as Contact[]);
+            } else {
+              setContacts([]);
+            }
+          } else {
+            setContacts([]);
+          }
+          setIsLoading(false);
+        },
+        (error) => {
+          console.error("Error loading contacts:", error);
+          setIsLoading(false);
         }
-        setIsLoading(false);
-      } catch (error) {
-        console.error("Error loading contacts:", error);
-        setIsLoading(false);
-      }
-    };
+      );
 
-    loadContacts();
+      return () => unsubscribe();
+    } catch (error) {
+      console.error("Error setting up contacts subscription:", error);
+      setIsLoading(false);
+    }
   }, [companyId]);
 
   const handleSave = async () => {
@@ -291,7 +307,7 @@ export default function CompanyAddressBook({ companyId, compact = false }: Compa
                         <Input
                           value={editingContact.phone || ""}
                           onChange={(e) => handleContactChange("phone", e.target.value)}
-                          placeholder="(555) 123-4567"
+                          placeholder="Phone number"
                         />
                       </div>
                       <div>
@@ -303,7 +319,7 @@ export default function CompanyAddressBook({ companyId, compact = false }: Compa
                           type="email"
                           value={editingContact.email || ""}
                           onChange={(e) => handleContactChange("email", e.target.value)}
-                          placeholder="contact@example.com"
+                          placeholder="email@company.com"
                         />
                       </div>
                       <div className="md:col-span-2">

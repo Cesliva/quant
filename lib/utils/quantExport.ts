@@ -36,7 +36,7 @@ export interface QuantEstimateFile {
 export async function exportToQuant(
   lines: EstimatingLine[],
   projectId: string,
-  companyId: string = "default",
+  companyId: string,
   projectName?: string,
   companyName?: string
 ): Promise<void> {

@@ -27,7 +27,8 @@ import {
   getThicknessLabelFromInches,
 } from "@/lib/utils/plateDatabase";
 import { 
-  downloadCSVTemplate, 
+  downloadCSVTemplate,
+  exportLinesToCSV, 
   parseCSVFile, 
   type CSVValidationError 
 } from "@/lib/utils/csvImport";
@@ -42,6 +43,7 @@ import {
   type CompanySettings,
   type ProjectSettings,
 } from "@/lib/utils/settingsLoader";
+import { detectConflicts, resolveConflicts, smartMerge } from "@/lib/utils/conflictResolution";
 
 // Expanded Estimating Line Interface
 export interface EstimatingLine {
@@ -569,18 +571,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
         calculated.totalWeight = (calculated.weightPerFoot || 0) * lengthInFeet * qty;
         calculated.totalSurfaceArea = (calculated.surfaceAreaPerFoot || 0) * lengthInFeet * qty;
         
-        // Debug logging (remove in production)
-        if (calculated.sizeDesignation === "W10x19") {
-          console.log("Weight Calculation Debug:", {
-            sizeDesignation: calculated.sizeDesignation,
-            weightPerFoot: calculated.weightPerFoot,
-            lengthFt,
-            lengthIn,
-            lengthInFeet,
-            qty,
-            totalWeight: calculated.totalWeight
-          });
-        }
+        // Weight calculation complete
         } catch (error) {
           console.warn("Error calculating weight for size:", calculated.sizeDesignation, error);
           // Keep existing values if calculation fails
@@ -789,7 +780,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
         const mergedLine = { ...currentLine, ...editingLine };
         
         // Build data to save, filtering out undefined values
-        const dataToSave: any = {};
+        let dataToSave: any = {};
         
         // Copy all fields from mergedLine, but skip undefined values
         Object.keys(mergedLine).forEach((key) => {
@@ -819,6 +810,26 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
           // Preserve existing parentLineId if not being changed
           // Always include it to ensure it's persisted
           dataToSave.parentLineId = currentLine.parentLineId;
+        }
+        
+        // Check for conflicts before saving
+        if (editingLine.lineId) {
+          const conflict = await detectConflicts(
+            companyId,
+            projectId,
+            editingLine.lineId,
+            dataToSave,
+            lines // Pass current lines for efficiency
+          );
+          
+          if (conflict && conflict.conflicts.length > 0) {
+            // Resolve conflicts using smart merge
+            const remoteLine = lines.find(l => l.lineId === editingLine.lineId);
+            if (remoteLine) {
+              dataToSave = smartMerge(dataToSave, remoteLine);
+              console.log("Resolved conflicts using smart merge:", conflict.conflicts);
+            }
+          }
         }
         
         await updateDocument(linePath, editingId, dataToSave);
@@ -1208,10 +1219,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-gray-900">
-          {isManualMode ? "Manual Entry Mode" : "Voice Input Mode"}
-        </h2>
+      <div className="flex items-center justify-end">
         <div className="flex gap-3 items-center">
           <input
             type="file"
@@ -1233,6 +1241,17 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
           <Button variant="outline" size="sm" onClick={handleImportCSV} className="flex items-center justify-center">
             <Upload className="w-4 h-4 mr-2" />
             Import CSV
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => exportLinesToCSV(lines.filter(l => l.status !== "void"))} 
+            className="flex items-center justify-center"
+            title="Export active lines to CSV"
+            disabled={lines.filter(l => l.status !== "void").length === 0}
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Export CSV
           </Button>
           {isManualMode && (
             <>

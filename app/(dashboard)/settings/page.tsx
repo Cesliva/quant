@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
-import { Save, Building2, DollarSign, Package, Paintbrush, Settings2, Plus, Trash2, Info, AlertCircle } from "lucide-react";
+import { Save, Building2, DollarSign, Package, Paintbrush, Settings2, Plus, Trash2, Info, AlertCircle, TrendingUp, BookOpen } from "lucide-react";
+import CompanyAddressBook from "@/components/settings/CompanyAddressBook";
 import { 
   loadCompanySettings, 
   saveCompanySettings, 
@@ -13,8 +15,9 @@ import {
   type CompanyInfo 
 } from "@/lib/utils/settingsLoader";
 import { validateCompanySettings, getFieldError, type ValidationError } from "@/lib/utils/validation";
+import { useCompanyId } from "@/lib/hooks/useCompanyId";
 
-type TabType = "company" | "labor" | "material" | "coating" | "markup" | "advanced";
+type TabType = "company" | "labor" | "material" | "coating" | "markup" | "advanced" | "executive" | "addressbook";
 
 interface LaborRate {
   id: string;
@@ -34,11 +37,11 @@ interface CoatingType {
   costPerSF: number;
 }
 
-import { useCompanyId } from "@/lib/hooks/useCompanyId";
-
-export default function SettingsPage() {
+function SettingsPageContent() {
   const companyId = useCompanyId();
-  const [activeTab, setActiveTab] = useState<TabType>("company");
+  const searchParams = useSearchParams();
+  const tabParam = searchParams?.get("tab") as TabType | null;
+  const [activeTab, setActiveTab] = useState<TabType>(tabParam && ["company", "labor", "material", "coating", "markup", "advanced", "executive", "addressbook"].includes(tabParam) ? tabParam : "company");
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved">("unsaved");
@@ -93,9 +96,33 @@ export default function SettingsPage() {
     autoSave: true,
   });
 
-  useEffect(() => {
-    loadSettings();
-  }, []);
+  const DEFAULT_WORKING_DAYS = ["mon", "tue", "wed", "thu", "fri"];
+  const DAY_OPTIONS = [
+    { key: "sun", label: "Sun" },
+    { key: "mon", label: "Mon" },
+    { key: "tue", label: "Tue" },
+    { key: "wed", label: "Wed" },
+    { key: "thu", label: "Thu" },
+    { key: "fri", label: "Fri" },
+    { key: "sat", label: "Sat" },
+  ];
+
+  const [executiveSettings, setExecutiveSettings] = useState({
+    shopCapacityHoursPerWeek: 0,
+    shopCapacityHoursPerDay: 0,
+    backlogForecastWeeks: 24,
+    underUtilizedThreshold: 0.7,
+    workingDays: DEFAULT_WORKING_DAYS,
+    holidays: [] as string[],
+  });
+
+  const [pipelineRanges, setPipelineRanges] = useState({
+    small: { min: 0, max: 50000 },
+    medium: { min: 50000, max: 100000 },
+    large: { min: 100000, max: 250000 },
+    xlarge: { min: 250000, max: 500000 },
+    xxlarge: { min: 500000, max: 999999999 },
+  });
 
   const loadSettings = async () => {
     setIsLoading(true);
@@ -159,12 +186,48 @@ export default function SettingsPage() {
       if (settings.advancedSettings) {
         setAdvancedSettings(settings.advancedSettings);
       }
+      
+      // Load pipeline ranges
+      if (settings.pipelineRanges) {
+        setPipelineRanges(settings.pipelineRanges);
+      }
+
+      // Load executive dashboard settings
+      setExecutiveSettings({
+        shopCapacityHoursPerWeek: settings.shopCapacityHoursPerWeek ?? 0,
+        shopCapacityHoursPerDay:
+          settings.shopCapacityHoursPerDay ??
+          (settings.shopCapacityHoursPerWeek
+            ? Math.round((settings.shopCapacityHoursPerWeek || 0) / 5)
+            : 0),
+        backlogForecastWeeks: settings.backlogForecastWeeks ?? 24,
+        underUtilizedThreshold: settings.underUtilizedThreshold ?? 0.7,
+        workingDays:
+          (settings.workingDays && settings.workingDays.length > 0
+            ? settings.workingDays
+            : DEFAULT_WORKING_DAYS),
+        holidays: settings.holidays || [],
+      });
     } catch (error) {
       console.error("Failed to load settings:", error);
     } finally {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (companyId) {
+      loadSettings();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyId]);
+
+  // Update active tab when URL parameter changes
+  useEffect(() => {
+    if (tabParam && ["company", "labor", "material", "coating", "markup", "advanced", "executive", "addressbook"].includes(tabParam)) {
+      setActiveTab(tabParam as TabType);
+    }
+  }, [tabParam]);
 
   const handleSave = async () => {
     // Validate settings
@@ -220,6 +283,17 @@ export default function SettingsPage() {
         coatingTypes: coatingTypes.map(({ id, ...rest }) => rest),
         markupSettings,
         advancedSettings,
+        shopCapacityHoursPerWeek: executiveSettings.shopCapacityHoursPerWeek || undefined,
+        shopCapacityHoursPerDay: executiveSettings.shopCapacityHoursPerDay || undefined,
+        backlogForecastWeeks: executiveSettings.backlogForecastWeeks || undefined,
+        underUtilizedThreshold: executiveSettings.underUtilizedThreshold || undefined,
+        workingDays:
+          executiveSettings.workingDays && executiveSettings.workingDays.length > 0
+            ? executiveSettings.workingDays
+            : undefined,
+        holidays:
+          executiveSettings.holidays?.filter((date) => date && date.trim() !== "") || undefined,
+        pipelineRanges: pipelineRanges,
       };
 
       await saveCompanySettings(companyId, settingsToSave);
@@ -252,6 +326,48 @@ export default function SettingsPage() {
         rate.id === id ? { ...rate, [field]: value } : rate
       )
     );
+  };
+
+  const toggleWorkingDay = (dayKey: string) => {
+    setExecutiveSettings((prev) => {
+      const current = new Set(prev.workingDays || []);
+      if (current.has(dayKey)) {
+        current.delete(dayKey);
+      } else {
+        current.add(dayKey);
+      }
+      const ordered = DAY_OPTIONS.map((day) => (current.has(day.key) ? day.key : null)).filter(
+        Boolean
+      ) as string[];
+      return {
+        ...prev,
+        workingDays: ordered,
+      };
+    });
+  };
+
+  const handleHolidayChange = (index: number, value: string) => {
+    setExecutiveSettings((prev) => {
+      const next = [...(prev.holidays || [])];
+      next[index] = value;
+      return { ...prev, holidays: next };
+    });
+  };
+
+  const handleAddHoliday = () => {
+    const todayStr = new Date().toISOString().split("T")[0];
+    setExecutiveSettings((prev) => ({
+      ...prev,
+      holidays: [...(prev.holidays || []), todayStr],
+    }));
+  };
+
+  const handleRemoveHoliday = (index: number) => {
+    setExecutiveSettings((prev) => {
+      const next = [...(prev.holidays || [])];
+      next.splice(index, 1);
+      return { ...prev, holidays: next };
+    });
   };
 
   const addMaterialGrade = () => {
@@ -302,6 +418,8 @@ export default function SettingsPage() {
     { id: "material" as TabType, label: "Material Costs", icon: Package },
     { id: "coating" as TabType, label: "Coating Rates", icon: Paintbrush },
     { id: "markup" as TabType, label: "Markup & Fees", icon: DollarSign },
+    { id: "addressbook" as TabType, label: "Address Book", icon: BookOpen },
+    { id: "executive" as TabType, label: "Executive Dashboard", icon: TrendingUp },
     { id: "advanced" as TabType, label: "Advanced", icon: Settings2 },
   ];
 
@@ -907,6 +1025,372 @@ export default function SettingsPage() {
           </Card>
         )}
 
+        {/* Executive Dashboard Tab */}
+        {activeTab === "executive" && (
+          <div className="space-y-6">
+            <Card>
+            <CardHeader>
+              <CardTitle>Shop Capacity & Backlog Settings</CardTitle>
+              <p className="text-sm text-gray-500 mt-2">
+                Configure shop capacity for hours-based backlog calculation and capacity gap detection
+              </p>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Shop Capacity (Hours/Week) <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    type="number"
+                    step="1"
+                    min="0"
+                    value={executiveSettings.shopCapacityHoursPerWeek}
+                    onChange={(e) =>
+                      setExecutiveSettings({
+                        ...executiveSettings,
+                        shopCapacityHoursPerWeek: parseInt(e.target.value) || 0,
+                      })
+                    }
+                    placeholder="800"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Total shop fabrication hours available per week (e.g., 800 hrs/week)
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Daily Capacity (Hours/Day)
+                  </label>
+                  <Input
+                    type="number"
+                    step="1"
+                    min="0"
+                    value={executiveSettings.shopCapacityHoursPerDay}
+                    onChange={(e) =>
+                      setExecutiveSettings({
+                        ...executiveSettings,
+                        shopCapacityHoursPerDay: parseInt(e.target.value) || 0,
+                      })
+                    }
+                    placeholder={
+                      executiveSettings.shopCapacityHoursPerWeek
+                        ? Math.round(executiveSettings.shopCapacityHoursPerWeek / 5).toString()
+                        : "100"
+                    }
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Used for daily scheduling and capacity colors (e.g., 100 hrs/day)
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Backlog Forecast Weeks
+                  </label>
+                  <Input
+                    type="number"
+                    step="1"
+                    min="1"
+                    max="104"
+                    value={executiveSettings.backlogForecastWeeks}
+                    onChange={(e) =>
+                      setExecutiveSettings({
+                        ...executiveSettings,
+                        backlogForecastWeeks: parseInt(e.target.value) || 24,
+                      })
+                    }
+                    placeholder="24"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Number of weeks to forecast for capacity planning (default: 24 weeks ≈ 6 months)
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Under-Utilized Threshold
+                  </label>
+                  <div className="relative">
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="1"
+                      value={executiveSettings.underUtilizedThreshold}
+                      onChange={(e) =>
+                        setExecutiveSettings({
+                          ...executiveSettings,
+                          underUtilizedThreshold: parseFloat(e.target.value) || 0.7,
+                        })
+                      }
+                      placeholder="0.70"
+                    />
+                    <span className="absolute right-3 top-2 text-gray-500">(0-1)</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Weeks below this utilization % are considered "gaps" for aggressive bidding (default: 0.7 = 70%)
+                  </p>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Working Days
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {DAY_OPTIONS.map((day) => {
+                      const isActive = executiveSettings.workingDays?.includes(day.key);
+                      return (
+                        <label
+                          key={day.key}
+                          className={`px-3 py-2 rounded-lg border text-sm cursor-pointer ${
+                            isActive
+                              ? "bg-blue-600 text-white border-blue-600"
+                              : "bg-white text-gray-700 border-gray-300"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            className="sr-only"
+                            checked={isActive}
+                            onChange={() => toggleWorkingDay(day.key)}
+                          />
+                          {day.label}
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Only checked days will be used when auto-scheduling production.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Company Holidays / Shutdowns
+                  </label>
+                  <div className="space-y-2">
+                    {(executiveSettings.holidays || []).length === 0 && (
+                      <p className="text-xs text-gray-500">
+                        No holidays added. Days listed here are skipped entirely in the schedule.
+                      </p>
+                    )}
+                    {(executiveSettings.holidays || []).map((holiday, index) => (
+                      <div key={`${holiday}-${index}`} className="flex items-center gap-2">
+                        <Input
+                          type="date"
+                          value={holiday}
+                          onChange={(e) => handleHolidayChange(index, e.target.value)}
+                        />
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-gray-400 hover:text-red-600"
+                          onClick={() => handleRemoveHoliday(index)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ))}
+                    <Button variant="outline" size="sm" onClick={handleAddHoliday}>
+                      Add Holiday
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <Info className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm text-blue-800">
+                    <p className="font-semibold mb-1">How it works:</p>
+                    <ul className="list-disc list-inside space-y-1 text-xs">
+                      <li>Backlog months = Total remaining shop hours ÷ (weekly capacity × 4.345)</li>
+                      <li>The system allocates project hours forward into weekly buckets</li>
+                      <li>Weeks with utilization below the threshold are flagged as capacity gaps</li>
+                      <li>These gaps indicate when you can bid more aggressively</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+            </Card>
+
+            <Card>
+          <CardHeader>
+            <CardTitle>Pipeline Distribution Ranges</CardTitle>
+            <p className="text-sm text-gray-600 mt-1">
+              Configure bid value ranges for the Pipeline Distribution chart on the dashboard
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Small (Min)
+                  </label>
+                  <Input
+                    type="number"
+                    value={pipelineRanges.small.min}
+                    onChange={(e) =>
+                      setPipelineRanges({
+                        ...pipelineRanges,
+                        small: { ...pipelineRanges.small, min: parseFloat(e.target.value) || 0 },
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Small (Max) - Red
+                  </label>
+                  <Input
+                    type="number"
+                    value={pipelineRanges.small.max}
+                    onChange={(e) =>
+                      setPipelineRanges({
+                        ...pipelineRanges,
+                        small: { ...pipelineRanges.small, max: parseFloat(e.target.value) || 0 },
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Medium (Min) - Orange
+                  </label>
+                  <Input
+                    type="number"
+                    value={pipelineRanges.medium.min}
+                    onChange={(e) =>
+                      setPipelineRanges({
+                        ...pipelineRanges,
+                        medium: { ...pipelineRanges.medium, min: parseFloat(e.target.value) || 0 },
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Medium (Max)
+                  </label>
+                  <Input
+                    type="number"
+                    value={pipelineRanges.medium.max}
+                    onChange={(e) =>
+                      setPipelineRanges({
+                        ...pipelineRanges,
+                        medium: { ...pipelineRanges.medium, max: parseFloat(e.target.value) || 0 },
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Large (Min) - Yellow
+                  </label>
+                  <Input
+                    type="number"
+                    value={pipelineRanges.large.min}
+                    onChange={(e) =>
+                      setPipelineRanges({
+                        ...pipelineRanges,
+                        large: { ...pipelineRanges.large, min: parseFloat(e.target.value) || 0 },
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Large (Max)
+                  </label>
+                  <Input
+                    type="number"
+                    value={pipelineRanges.large.max}
+                    onChange={(e) =>
+                      setPipelineRanges({
+                        ...pipelineRanges,
+                        large: { ...pipelineRanges.large, max: parseFloat(e.target.value) || 0 },
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    X-Large (Min) - Blue
+                  </label>
+                  <Input
+                    type="number"
+                    value={pipelineRanges.xlarge.min}
+                    onChange={(e) =>
+                      setPipelineRanges({
+                        ...pipelineRanges,
+                        xlarge: { ...pipelineRanges.xlarge, min: parseFloat(e.target.value) || 0 },
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    X-Large (Max)
+                  </label>
+                  <Input
+                    type="number"
+                    value={pipelineRanges.xlarge.max}
+                    onChange={(e) =>
+                      setPipelineRanges({
+                        ...pipelineRanges,
+                        xlarge: { ...pipelineRanges.xlarge, max: parseFloat(e.target.value) || 0 },
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    XX-Large (Min) - Green
+                  </label>
+                  <Input
+                    type="number"
+                    value={pipelineRanges.xxlarge.min}
+                    onChange={(e) =>
+                      setPipelineRanges({
+                        ...pipelineRanges,
+                        xxlarge: { ...pipelineRanges.xxlarge, min: parseFloat(e.target.value) || 0 },
+                      })
+                    }
+                    placeholder="500000"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    XX-Large (Max)
+                  </label>
+                  <Input
+                    type="text"
+                    value="No limit"
+                    disabled
+                    className="bg-gray-100"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">No upper limit</p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Address Book Tab */}
+        {activeTab === "addressbook" && (
+          <div className="space-y-6">
+            <CompanyAddressBook companyId={companyId} compact={false} />
+          </div>
+        )}
+
         {/* Advanced Tab */}
         {activeTab === "advanced" && (
           <div className="space-y-6">
@@ -1033,6 +1517,23 @@ export default function SettingsPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={
+      <div className="max-w-7xl mx-auto space-y-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading settings...</p>
+          </div>
+        </div>
+      </div>
+    }>
+      <SettingsPageContent />
+    </Suspense>
   );
 }
 

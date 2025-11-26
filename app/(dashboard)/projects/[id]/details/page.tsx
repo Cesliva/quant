@@ -6,9 +6,10 @@ import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
-import { ArrowLeft, Save, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Save, Plus, Trash2, Upload, Download, FileText } from "lucide-react";
 import { getDocument, createDocument, updateDocument, setDocument, getProjectPath } from "@/lib/firebase/firestore";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
+import { uploadFileToStorage, deleteFileFromStorage } from "@/lib/firebase/storage";
 import { Users, Building2 } from "lucide-react";
 
 interface SpecDivision {
@@ -32,7 +33,23 @@ interface Contact {
   notes?: string;
 }
 
+interface ProjectFile {
+  id: string;
+  name: string;
+  type: "spec" | "drawing";
+  fileName: string;
+  fileSize: number;
+  storagePath: string;
+  downloadURL: string;
+  uploadedAt: Date | string;
+}
+
 import { useCompanyId } from "@/lib/hooks/useCompanyId";
+import { UserPresence } from "@/components/collaboration/UserPresence";
+import { ActivityFeed } from "@/components/collaboration/ActivityFeed";
+import { CommentsPanel } from "@/components/collaboration/CommentsPanel";
+import { ProjectAssignment } from "@/components/projects/ProjectAssignment";
+import { logActivity } from "@/lib/utils/activityLogger";
 
 export default function ProjectDetailsPage() {
   const params = useParams();
@@ -56,6 +73,10 @@ export default function ProjectDetailsPage() {
     bidDueDate: "",
     decisionDate: "",
     deliveryDate: "",
+    projectedStartDate: "",
+    fabHours: undefined as number | undefined,
+    fabWindowStart: "",
+    fabWindowEnd: "",
     estimatedValue: "",
     competitionLevel: "medium",
     probabilityOfWin: 50,
@@ -65,11 +86,14 @@ export default function ProjectDetailsPage() {
       { id: "1", division: "05", value: "" },
       { id: "2", division: "09", value: "" },
     ] as SpecDivision[],
+    projectFiles: [] as ProjectFile[],
   });
 
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(!isNewProject);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved">("unsaved");
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadType, setUploadType] = useState<"spec" | "drawing">("spec");
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [selectedOwnerContact, setSelectedOwnerContact] = useState<string>("");
   const [selectedGCContact, setSelectedGCContact] = useState<string>("");
@@ -93,6 +117,13 @@ export default function ProjectDetailsPage() {
 
     loadContacts();
   }, [companyId]);
+
+  // Log activity when viewing page
+  useEffect(() => {
+    if (!isNewProject && projectId && companyId) {
+      logActivity(companyId, projectId, "viewed_details");
+    }
+  }, [projectId, companyId, isNewProject]);
 
   useEffect(() => {
     if (isNewProject) {
@@ -127,6 +158,13 @@ export default function ProjectDetailsPage() {
             bidDueDate: projectData.bidDueDate || "",
             decisionDate: projectData.decisionDate || "",
             deliveryDate: projectData.deliveryDate || "",
+            projectedStartDate: projectData.projectedStartDate || "",
+            fabHours:
+              typeof projectData.fabHours === "number"
+                ? projectData.fabHours
+                : undefined,
+            fabWindowStart: projectData.fabWindowStart || "",
+            fabWindowEnd: projectData.fabWindowEnd || "",
             estimatedValue: projectData.estimatedValue || "",
             competitionLevel: projectData.competitionLevel || "medium",
             probabilityOfWin: projectData.probabilityOfWin || 50,
@@ -136,6 +174,7 @@ export default function ProjectDetailsPage() {
               { id: "1", division: "05", value: "" },
               { id: "2", division: "09", value: "" },
             ],
+            projectFiles: (projectData.projectFiles || []) as ProjectFile[],
           });
           setOriginalProjectNumber(projectData.projectNumber || "");
         }
@@ -313,6 +352,9 @@ export default function ProjectDetailsPage() {
         const projectPath = getProjectPath(companyId, projectId);
         await updateDocument(`companies/${companyId}/projects`, projectId, projectData);
         
+        // Log activity
+        await logActivity(companyId, projectId, "updated_project");
+        
         setSaveStatus("saved");
         setTimeout(() => setSaveStatus("unsaved"), 3000);
       }
@@ -355,6 +397,109 @@ export default function ProjectDetailsPage() {
     });
   };
 
+  const handleFileUpload = async (file: File, type: "spec" | "drawing") => {
+    if (!isFirebaseConfigured()) {
+      alert("Firebase is not configured. Please set up your Firebase credentials.");
+      return;
+    }
+
+    if (isNewProject) {
+      alert("Please save the project first before uploading files.");
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      // Create storage path
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
+      const storagePath = `projects/${companyId}/${projectId}/${type}s/${timestamp}_${sanitizedFileName}`;
+      
+      // Upload file to Firebase Storage
+      const downloadURL = await uploadFileToStorage(file, storagePath);
+      
+      // Log activity
+      await logActivity(companyId, projectId, "uploaded_file", {
+        fileName: file.name,
+        fileType: type,
+      });
+      
+      // Create file record
+      const newFile: ProjectFile = {
+        id: `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        name: file.name,
+        type,
+        fileName: file.name,
+        fileSize: file.size,
+        storagePath,
+        downloadURL,
+        uploadedAt: new Date(),
+      };
+      
+      // Update project with new file
+      setProject({
+        ...project,
+        projectFiles: [...project.projectFiles, newFile],
+      });
+      
+      setSaveStatus("unsaved");
+    } catch (error: any) {
+      console.error("Error uploading file:", error);
+      alert(`Failed to upload file: ${error.message || "Please try again."}`);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleFileDelete = async (fileId: string) => {
+    if (!isFirebaseConfigured()) {
+      alert("Firebase is not configured.");
+      return;
+    }
+
+    const file = project.projectFiles.find(f => f.id === fileId);
+    if (!file) return;
+
+    if (!confirm(`Are you sure you want to delete "${file.name}"?`)) {
+      return;
+    }
+
+    try {
+      // Delete from Firebase Storage
+      await deleteFileFromStorage(file.storagePath);
+      
+      // Log activity
+      await logActivity(companyId, projectId, "deleted_file", {
+        fileName: file.name,
+      });
+      
+      // Remove from project files
+      setProject({
+        ...project,
+        projectFiles: project.projectFiles.filter(f => f.id !== fileId),
+      });
+      
+      setSaveStatus("unsaved");
+    } catch (error: any) {
+      console.error("Error deleting file:", error);
+      alert(`Failed to delete file: ${error.message || "Please try again."}`);
+      // Still remove from UI even if storage delete fails
+      setProject({
+        ...project,
+        projectFiles: project.projectFiles.filter(f => f.id !== fileId),
+      });
+      setSaveStatus("unsaved");
+    }
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return "0 Bytes";
+    const k = 1024;
+    const sizes = ["Bytes", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + " " + sizes[i];
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "draft": return "bg-gray-100 text-gray-800";
@@ -378,6 +523,13 @@ export default function ProjectDetailsPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
+      {/* User Presence */}
+      {!isNewProject && (
+        <div className="flex items-center justify-end">
+          <UserPresence projectId={projectId} currentPage="details" />
+        </div>
+      )}
+      
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -642,7 +794,7 @@ export default function ProjectDetailsPage() {
             <CardTitle>Dates & Deadlines</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Bid Due Date <span className="text-red-500">*</span>
@@ -684,6 +836,63 @@ export default function ProjectDetailsPage() {
                   }
                 />
                 <p className="text-xs text-gray-500 mt-1">When project needs to be completed</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Projected Shop Start
+                </label>
+                <Input
+                  type="date"
+                  value={project.projectedStartDate}
+                  onChange={(e) =>
+                    setProject({ ...project, projectedStartDate: e.target.value })
+                  }
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Drives shop capacity planning in the Bid-Production Schedule.
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Fabrication Hours
+                </label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={project.fabHours ?? ""}
+                  onChange={(e) => {
+                    const value = parseFloat(e.target.value);
+                    setProject({ ...project, fabHours: isNaN(value) ? undefined : value });
+                  }}
+                  placeholder="e.g., 1200"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Total shop hours expected for this project.
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Fab Window Start
+                </label>
+                <Input
+                  type="date"
+                  value={project.fabWindowStart || ""}
+                  onChange={(e) =>
+                    setProject({ ...project, fabWindowStart: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Fab Window End
+                </label>
+                <Input
+                  type="date"
+                  value={project.fabWindowEnd || ""}
+                  onChange={(e) =>
+                    setProject({ ...project, fabWindowEnd: e.target.value })
+                  }
+                />
               </div>
             </div>
           </CardContent>
@@ -770,67 +979,161 @@ export default function ProjectDetailsPage() {
           </CardContent>
         </Card>
 
-        {/* Specifications */}
+        {/* Project Files - Specs and Drawings */}
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Specifications</CardTitle>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleAddSpecDivision}
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Add Division
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {project.specDivisions.map((spec, index) => (
-                <div key={spec.id} className="flex items-center gap-3">
-                  <div className="flex-1">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Spec Division {spec.division || "(number)"}
-                    </label>
-                    <div className="flex gap-2">
-                      <Input
-                        value={spec.division}
-                        onChange={(e) =>
-                          handleSpecDivisionChange(spec.id, "division", e.target.value)
-                        }
-                        placeholder="05"
-                        className="w-20"
-                      />
-                      <Input
-                        value={spec.value}
-                        onChange={(e) =>
-                          handleSpecDivisionChange(spec.id, "value", e.target.value)
-                        }
-                        placeholder="Enter specification details"
-                      />
-                    </div>
-                  </div>
-                  {project.specDivisions.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveSpecDivision(spec.id)}
-                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      title="Remove division"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-            <p className="text-xs text-gray-500 mt-4">
-              Add specification divisions as needed (e.g., 05, 09, 06, etc.)
+            <CardTitle>Project Files</CardTitle>
+            <p className="text-sm text-gray-600 mt-1">
+              Upload specifications and drawings to be saved with this project
             </p>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Upload Section */}
+            {!isNewProject && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Upload File
+                  </label>
+                  <div className="flex gap-2 mb-2">
+                    <Button
+                      type="button"
+                      variant={uploadType === "spec" ? "primary" : "outline"}
+                      size="sm"
+                      onClick={() => setUploadType("spec")}
+                    >
+                      <FileText className="w-4 h-4 mr-2" />
+                      Specification
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={uploadType === "drawing" ? "primary" : "outline"}
+                      size="sm"
+                      onClick={() => setUploadType("drawing")}
+                    >
+                      <FileText className="w-4 h-4 mr-2" />
+                      Drawing
+                    </Button>
+                  </div>
+                  <input
+                    type="file"
+                    accept=".pdf,.doc,.docx,.dwg,.dxf,.txt"
+                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        handleFileUpload(file, uploadType);
+                      }
+                      // Reset input
+                      e.target.value = "";
+                    }}
+                    disabled={isUploading}
+                  />
+                  <p className="text-xs text-gray-500 mt-2">
+                    Supported formats: PDF, DOC, DOCX, DWG, DXF, TXT
+                  </p>
+                </div>
+                {isUploading && (
+                  <div className="flex items-center gap-2 text-sm text-blue-600">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                    Uploading file...
+                  </div>
+                )}
+              </div>
+            )}
+
+            {isNewProject && (
+              <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <p className="text-sm text-yellow-800">
+                  Please save the project first before uploading files.
+                </p>
+              </div>
+            )}
+
+            {/* Files List */}
+            {project.projectFiles.length > 0 && (
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">
+                  Uploaded Files ({project.projectFiles.length})
+                </h3>
+                <div className="space-y-2">
+                  {project.projectFiles.map((file) => (
+                    <div
+                      key={file.id}
+                      className="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
+                    >
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <FileText className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-medium text-gray-900 truncate">
+                              {file.name}
+                            </p>
+                            <span className={`text-xs px-2 py-0.5 rounded ${
+                              file.type === "spec" 
+                                ? "bg-blue-100 text-blue-700" 
+                                : "bg-purple-100 text-purple-700"
+                            }`}>
+                              {file.type === "spec" ? "Spec" : "Drawing"}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {formatFileSize(file.fileSize)} • {new Date(file.uploadedAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <a
+                          href={file.downloadURL}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="Download file"
+                        >
+                          <Download className="w-4 h-4" />
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => handleFileDelete(file.id)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Delete file"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {project.projectFiles.length === 0 && !isNewProject && (
+              <div className="text-center py-8 text-gray-500">
+                <FileText className="w-12 h-12 mx-auto mb-2 text-gray-400" />
+                <p className="text-sm">No files uploaded yet</p>
+                <p className="text-xs mt-1">Upload specifications and drawings to get started</p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </form>
+
+      {/* Project Assignment (Admin Only) */}
+      {!isNewProject && (
+        <ProjectAssignment projectId={projectId} />
+      )}
+
+      {/* Activity Feed and Comments */}
+      {!isNewProject && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2">
+            <CommentsPanel projectId={projectId} section="details" />
+          </div>
+          <div>
+            <ActivityFeed projectId={projectId} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

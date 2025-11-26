@@ -21,6 +21,7 @@ import { SpecReviewResult } from "@/lib/openai/gpt4";
 interface SpecReviewSummaryProps {
   companyId: string;
   projectId: string;
+  compact?: boolean;
 }
 
 type AnalysisType = "structural" | "misc" | "finishes" | "aess" | "div01" | "div03";
@@ -46,7 +47,7 @@ const ANALYSIS_TYPES: Array<{
   { key: "div03", label: "Division 03", description: "Concrete, anchor bolts, embeds, grouting" },
 ];
 
-export default function SpecReviewSummary({ companyId, projectId }: SpecReviewSummaryProps) {
+export default function SpecReviewSummary({ companyId, projectId, compact = false }: SpecReviewSummaryProps) {
   const [analyses, setAnalyses] = useState<Record<AnalysisType, SavedAnalysis | null>>({
     structural: null,
     misc: null,
@@ -122,6 +123,15 @@ export default function SpecReviewSummary({ companyId, projectId }: SpecReviewSu
 
   const analyzedCount = Object.values(analyses).filter(a => a !== null).length;
   const totalCount = ANALYSIS_TYPES.length;
+  
+  // Calculate risk grades summary
+  const riskGrades = Object.values(analyses)
+    .filter(a => a !== null && a.result.summary?.overallRiskGrade)
+    .map(a => a!.result.summary!.overallRiskGrade!);
+  
+  const highRiskCount = riskGrades.filter(g => g === "D" || g === "F").length;
+  const mediumRiskCount = riskGrades.filter(g => g === "C").length;
+  const lowRiskCount = riskGrades.filter(g => g === "A" || g === "B").length;
 
   if (loading) {
     return (
@@ -136,6 +146,39 @@ export default function SpecReviewSummary({ companyId, projectId }: SpecReviewSu
           <div className="text-center text-gray-500 py-8">Loading analyses...</div>
         </CardContent>
       </Card>
+    );
+  }
+
+  // Compact view for collapsed state
+  if (compact) {
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="bg-white rounded-lg p-3 border border-gray-200">
+          <div className="text-xs text-gray-600 mb-1">Analyzed Sections</div>
+          <div className="text-2xl font-bold text-gray-900">
+            {analyzedCount}/{totalCount}
+          </div>
+          <div className="text-xs text-gray-500 mt-1">Complete</div>
+        </div>
+        {riskGrades.length > 0 && (
+          <>
+            <div className="bg-white rounded-lg p-3 border border-gray-200">
+              <div className="text-xs text-gray-600 mb-1">High Risk (D/F)</div>
+              <div className="text-2xl font-bold text-red-600">
+                {highRiskCount}
+              </div>
+              <div className="text-xs text-gray-500 mt-1">Sections</div>
+            </div>
+            <div className="bg-white rounded-lg p-3 border border-gray-200">
+              <div className="text-xs text-gray-600 mb-1">Low Risk (A/B)</div>
+              <div className="text-2xl font-bold text-green-600">
+                {lowRiskCount}
+              </div>
+              <div className="text-xs text-gray-500 mt-1">Sections</div>
+            </div>
+          </>
+        )}
+      </div>
     );
   }
 

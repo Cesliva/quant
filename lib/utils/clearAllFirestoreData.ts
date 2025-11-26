@@ -69,6 +69,11 @@ export async function deleteProjectFromFirestore(
   return { deletedLines: lineCount, deletedLogs: logCount };
 }
 
+/**
+ * Clear all Firestore data for a company
+ * @param companyId - Company ID (should be obtained from useCompanyId() hook in components)
+ *                    Default "default" is for backward compatibility and script usage only
+ */
 export async function clearAllFirestoreData(
   companyId: string = "default"
 ): Promise<{

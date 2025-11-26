@@ -5,17 +5,19 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, FileText, Download, Printer } from "lucide-react";
 import Button from "@/components/ui/Button";
-import { getDocument } from "@/lib/firebase/firestore";
-import { getProjectPath } from "@/lib/firebase/firestore";
+import { getDocument, getProjectPath, getDocRef } from "@/lib/firebase/firestore";
+import { onSnapshot } from "firebase/firestore";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
 import ProjectReportsView from "@/components/reports/ProjectReportsView";
 import { exportReportsToPDF } from "@/lib/utils/export";
+import { loadCompanySettings } from "@/lib/utils/settingsLoader";
 
 interface Project {
   id?: string;
   projectNumber?: string;
   projectName?: string;
   projectType?: string;
+  projectTypeSubCategory?: string;
   status?: string;
   owner?: string;
   generalContractor?: string;
@@ -23,6 +25,7 @@ interface Project {
   bidDueDate?: string;
   estimatedValue?: string | number;
   probabilityOfWin?: number;
+  [key: string]: any; // Allow any other fields from Firestore
 }
 
 import { useCompanyId } from "@/lib/hooks/useCompanyId";
@@ -40,14 +43,35 @@ export default function ProjectReportsPage() {
     metrics: any;
     buyouts: any[];
   } | null>(null);
+  const [companyName, setCompanyName] = useState("Company");
 
   useEffect(() => {
     if (projectId && projectId !== "new") {
       loadProject();
+      const unsubscribe = subscribeToProject();
+      return () => {
+        if (unsubscribe) unsubscribe();
+      };
     } else {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, companyId]);
+
+  // Load company name
+  useEffect(() => {
+    const loadCompanyName = async () => {
+      if (!isFirebaseConfigured() || !companyId) return;
+      try {
+        const settings = await loadCompanySettings(companyId);
+        if (settings?.companyInfo?.companyName) {
+          setCompanyName(settings.companyInfo.companyName);
+        }
+      } catch (error) {
+        console.error("Failed to load company name:", error);
+      }
+    };
+    loadCompanyName();
+  }, [companyId]);
 
   const loadProject = async () => {
     if (!isFirebaseConfigured()) {
@@ -65,6 +89,32 @@ export default function ProjectReportsPage() {
       console.error("Failed to load project:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const subscribeToProject = () => {
+    if (!isFirebaseConfigured()) {
+      return () => {};
+    }
+
+    try {
+      const projectPath = getProjectPath(companyId, projectId);
+      const projectDocRef = getDocRef(projectPath);
+
+      return onSnapshot(
+        projectDocRef,
+        (snapshot) => {
+          if (snapshot.exists()) {
+            setProject({ id: snapshot.id, ...snapshot.data() } as Project);
+          }
+        },
+        (error) => {
+          console.error("Error subscribing to project:", error);
+        }
+      );
+    } catch (error) {
+      console.error("Failed to subscribe to project:", error);
+      return () => {};
     }
   };
 
@@ -140,7 +190,7 @@ export default function ProjectReportsPage() {
                     reportsData.metrics,
                     project.projectName || "Untitled Project",
                     project.projectNumber || "",
-                    "Company", // TODO: Get from company settings
+                    companyName,
                     reportsData.buyouts,
                     {
                       projectType: project.projectType,

@@ -16,6 +16,13 @@ import { voiceCommandHistory } from "@/lib/utils/voiceCommandHistory";
 import { createLineFromStructuredData } from "@/lib/utils/structuredVoiceParser";
 import { FileText, ArrowRight, Save, Upload } from "lucide-react";
 import { exportToQuant, importFromQuant } from "@/lib/utils/quantExport";
+import {
+  loadCompanySettings,
+  getMaterialRateForGrade,
+  getLaborRate,
+  getCoatingRate,
+  type CompanySettings,
+} from "@/lib/utils/settingsLoader";
 
 import { useCompanyId } from "@/lib/hooks/useCompanyId";
 
@@ -28,9 +35,19 @@ function EstimatingContent() {
   const [selectedProject, setSelectedProject] = useState<string>(projectIdFromQuery);
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
   const [lines, setLines] = useState<EstimatingLine[]>([]);
+  const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const firebaseReady = isFirebaseConfigured();
+
+  // Load company settings
+  useEffect(() => {
+    if (!firebaseReady) {
+      setCompanySettings(null);
+      return;
+    }
+    loadCompanySettings(companyId).then(setCompanySettings);
+  }, [companyId, firebaseReady]);
 
   useEffect(() => {
     if (!firebaseReady) {
@@ -89,9 +106,15 @@ function EstimatingContent() {
       // Check if we need to create a new blank line
       if (createNewLine || (data.lineId && !lines.find(l => l.lineId === data.lineId))) {
         // Create a new blank line immediately
-        const defaultMaterialRate = 0.85;
-        const defaultLaborRate = 50;
-        const defaultCoatingRate = 2.50;
+        const defaultMaterialRate = companySettings 
+          ? getMaterialRateForGrade(undefined, companySettings)
+          : 0.85;
+        const defaultLaborRate = companySettings 
+          ? getLaborRate(undefined, companySettings)
+          : 50;
+        const defaultCoatingRate = companySettings 
+          ? getCoatingRate(undefined, companySettings)
+          : 2.50;
         
         const lineId = data.lineId || `L${lines.length + 1}`;
         
@@ -147,9 +170,15 @@ function EstimatingContent() {
           }
         } else {
           // Line doesn't exist yet - create it
-          const defaultMaterialRate = 0.85;
-          const defaultLaborRate = 50;
-          const defaultCoatingRate = 2.50;
+          const defaultMaterialRate = companySettings 
+            ? getMaterialRateForGrade(undefined, companySettings)
+            : 0.85;
+          const defaultLaborRate = companySettings 
+            ? getLaborRate(undefined, companySettings)
+            : 50;
+          const defaultCoatingRate = companySettings 
+            ? getCoatingRate(undefined, companySettings)
+            : 2.50;
           
           const blankLine: Partial<EstimatingLine> = {
             lineId: data.lineId,
@@ -189,9 +218,15 @@ function EstimatingContent() {
     }
 
     try {
-      const defaultMaterialRate = 0.85;
-      const defaultLaborRate = 50;
-      const defaultCoatingRate = 2.50;
+      const defaultMaterialRate = companySettings 
+        ? getMaterialRateForGrade(undefined, companySettings)
+        : 0.85;
+      const defaultLaborRate = companySettings 
+        ? getLaborRate(undefined, companySettings)
+        : 50;
+      const defaultCoatingRate = companySettings 
+        ? getCoatingRate(undefined, companySettings)
+        : 2.50;
       
       // Use the line ID from data, or generate next one
       const lineId = data.lineId || `L${lines.length + 1}`;
@@ -369,9 +404,15 @@ function EstimatingContent() {
 
         // Now process the new lines
         if (newLines.length > 0) {
-          const defaultMaterialRate = 0.85;
-          const defaultLaborRate = 50;
-          const defaultCoatingRate = 2.50;
+          const defaultMaterialRate = companySettings 
+            ? getMaterialRateForGrade(undefined, companySettings)
+            : 0.85;
+          const defaultLaborRate = companySettings 
+            ? getLaborRate(undefined, companySettings)
+            : 50;
+          const defaultCoatingRate = companySettings 
+            ? getCoatingRate(undefined, companySettings)
+            : 2.50;
           const linesPath = getProjectPath(companyId, selectedProject, "lines");
           
           for (const parsedLine of newLines) {
@@ -483,10 +524,16 @@ function EstimatingContent() {
       
       console.log(`Processing ${parsedLines.length} line(s) for creation`);
 
-      // Default rates (TODO: Load from company settings)
-      const defaultMaterialRate = 0.85;
-      const defaultLaborRate = 50;
-      const defaultCoatingRate = 2.50;
+      // Load rates from company settings
+      const defaultMaterialRate = companySettings 
+        ? getMaterialRateForGrade(undefined, companySettings)
+        : 0.85;
+      const defaultLaborRate = companySettings 
+        ? getLaborRate(undefined, companySettings)
+        : 50;
+      const defaultCoatingRate = companySettings 
+        ? getCoatingRate(undefined, companySettings)
+        : 2.50;
 
       // Create line items in Firestore
       const linesPath = getProjectPath(companyId, selectedProject, "lines");

@@ -7,7 +7,8 @@ import { Save, Upload, ArrowLeft } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Button from "@/components/ui/Button";
-import { subscribeToCollection, createDocument, updateDocument, deleteDocument, getDocument } from "@/lib/firebase/firestore";
+import { subscribeToCollection, createDocument, updateDocument, deleteDocument, getDocument, getDocRef } from "@/lib/firebase/firestore";
+import { onSnapshot } from "firebase/firestore";
 import { getProjectPath } from "@/lib/firebase/firestore";
 import { EstimatingLine } from "@/components/estimating/EstimatingGrid";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
@@ -15,8 +16,19 @@ import { parseVoiceTranscription, createEstimatingLineFromParsed, ParsedEditComm
 import { voiceCommandHistory, VoiceAction } from "@/lib/utils/voiceCommandHistory";
 import { createLineFromStructuredData } from "@/lib/utils/structuredVoiceParser";
 import { exportToQuant, importFromQuant } from "@/lib/utils/quantExport";
+import {
+  loadCompanySettings,
+  getMaterialRateForGrade,
+  getLaborRate,
+  getCoatingRate,
+  type CompanySettings,
+} from "@/lib/utils/settingsLoader";
 
 import { useCompanyId } from "@/lib/hooks/useCompanyId";
+import { UserPresence } from "@/components/collaboration/UserPresence";
+import { ActivityFeed } from "@/components/collaboration/ActivityFeed";
+import { CommentsPanel } from "@/components/collaboration/CommentsPanel";
+import { logActivity } from "@/lib/utils/activityLogger";
 
 export default function EstimatingPage() {
   const params = useParams();
@@ -28,7 +40,17 @@ export default function EstimatingPage() {
   const [lines, setLines] = useState<EstimatingLine[]>([]);
   const [projectName, setProjectName] = useState<string>("");
   const [projectNumber, setProjectNumber] = useState<string>("");
+  const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Load company settings
+  useEffect(() => {
+    if (!isFirebaseConfigured() || !companyId) {
+      setCompanySettings(null);
+      return;
+    }
+    loadCompanySettings(companyId).then(setCompanySettings);
+  }, [companyId]);
 
   const handleImportEstimate = async () => {
     // Trigger file input click
@@ -82,7 +104,7 @@ export default function EstimatingPage() {
     }
   };
 
-  // Load project name and number
+  // Load project name and number with real-time subscription
   useEffect(() => {
     if (!isFirebaseConfigured() || !projectId) {
       setProjectName("");
@@ -90,6 +112,7 @@ export default function EstimatingPage() {
       return;
     }
 
+    // Initial load
     const loadProject = async () => {
       try {
         const projectPath = getProjectPath(companyId, projectId);
@@ -109,6 +132,26 @@ export default function EstimatingPage() {
     };
 
     loadProject();
+
+    // Real-time subscription
+    const projectPath = getProjectPath(companyId, projectId);
+    const projectDocRef = getDocRef(projectPath);
+
+    const unsubscribe = onSnapshot(
+      projectDocRef,
+      (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          setProjectName(data.projectName || projectId);
+          setProjectNumber(data.projectNumber || "");
+        }
+      },
+      (error) => {
+        console.error("Error subscribing to project:", error);
+      }
+    );
+
+    return () => unsubscribe();
   }, [companyId, projectId]);
 
   useEffect(() => {
@@ -133,9 +176,15 @@ export default function EstimatingPage() {
       // Check if we need to create a new blank line
       if (createNewLine || (data.lineId && !lines.find(l => l.lineId === data.lineId))) {
         // Create a new blank line immediately
-        const defaultMaterialRate = 0.85;
-        const defaultLaborRate = 50;
-        const defaultCoatingRate = 2.50;
+        const defaultMaterialRate = companySettings 
+          ? getMaterialRateForGrade(undefined, companySettings)
+          : 0.85;
+        const defaultLaborRate = companySettings 
+          ? getLaborRate(undefined, companySettings)
+          : 50;
+        const defaultCoatingRate = companySettings 
+          ? getCoatingRate(undefined, companySettings)
+          : 2.50;
         
         // Use proper line ID manager to ensure sequential format (L1, L2, L3, etc.)
         // and prevent duplicates
@@ -176,6 +225,9 @@ export default function EstimatingPage() {
           const documentId = await createDocument(linesPath, blankLine);
           console.log(`Created new blank line ${lineId}`);
           
+          // Log activity
+          await logActivity(companyId, projectId, "created_line", { lineId });
+          
           // Track create action for undo
           if (documentId) {
             voiceCommandHistory.addAction({
@@ -202,14 +254,25 @@ export default function EstimatingPage() {
             const linesPath = getProjectPath(companyId, projectId, "lines");
             await updateDocument(linesPath, existingLine.id, updatedLine);
             console.log(`Real-time update to line ${data.lineId}:`, data);
+            
+            // Log activity (debounced - only log significant updates)
+            if (Object.keys(data).length > 1) {
+              await logActivity(companyId, projectId, "updated_line", { lineId: data.lineId });
+            }
           } catch (error: any) {
             console.error("Failed to update line in real-time:", error);
           }
         } else {
           // Line doesn't exist yet - create it
-          const defaultMaterialRate = 0.85;
-          const defaultLaborRate = 50;
-          const defaultCoatingRate = 2.50;
+          const defaultMaterialRate = companySettings 
+            ? getMaterialRateForGrade(undefined, companySettings)
+            : 0.85;
+          const defaultLaborRate = companySettings 
+            ? getLaborRate(undefined, companySettings)
+            : 50;
+          const defaultCoatingRate = companySettings 
+            ? getCoatingRate(undefined, companySettings)
+            : 2.50;
           
           const blankLine: Partial<EstimatingLine> = {
             lineId: data.lineId,
@@ -249,9 +312,15 @@ export default function EstimatingPage() {
     }
 
     try {
-      const defaultMaterialRate = 0.85;
-      const defaultLaborRate = 50;
-      const defaultCoatingRate = 2.50;
+      const defaultMaterialRate = companySettings 
+        ? getMaterialRateForGrade(undefined, companySettings)
+        : 0.85;
+      const defaultLaborRate = companySettings 
+        ? getLaborRate(undefined, companySettings)
+        : 50;
+      const defaultCoatingRate = companySettings 
+        ? getCoatingRate(undefined, companySettings)
+        : 2.50;
       
       // Use the line ID from data, or generate next one
       const lineId = data.lineId || `L${lines.length + 1}`;
@@ -429,9 +498,15 @@ export default function EstimatingPage() {
 
         // Now process the new lines
         if (newLines.length > 0) {
-          const defaultMaterialRate = 0.85;
-          const defaultLaborRate = 50;
-          const defaultCoatingRate = 2.50;
+          const defaultMaterialRate = companySettings 
+            ? getMaterialRateForGrade(undefined, companySettings)
+            : 0.85;
+          const defaultLaborRate = companySettings 
+            ? getLaborRate(undefined, companySettings)
+            : 50;
+          const defaultCoatingRate = companySettings 
+            ? getCoatingRate(undefined, companySettings)
+            : 2.50;
           const linesPath = getProjectPath(companyId, projectId, "lines");
           
           for (const parsedLine of newLines) {
@@ -548,10 +623,16 @@ export default function EstimatingPage() {
       
       console.log(`Processing ${parsedLines.length} line(s) for creation`);
 
-      // Default rates (TODO: Load from company settings)
-      const defaultMaterialRate = 0.85;
-      const defaultLaborRate = 50;
-      const defaultCoatingRate = 2.50;
+      // Load rates from company settings
+      const defaultMaterialRate = companySettings 
+        ? getMaterialRateForGrade(undefined, companySettings)
+        : 0.85;
+      const defaultLaborRate = companySettings 
+        ? getLaborRate(undefined, companySettings)
+        : 50;
+      const defaultCoatingRate = companySettings 
+        ? getCoatingRate(undefined, companySettings)
+        : 2.50;
 
       // Create line items in Firestore
       const linesPath = getProjectPath(companyId, projectId, "lines");
@@ -609,8 +690,20 @@ export default function EstimatingPage() {
     }
   };
 
+  // Log activity when viewing page
+  useEffect(() => {
+    if (projectId && companyId) {
+      logActivity(companyId, projectId, "viewed_estimating");
+    }
+  }, [projectId, companyId]);
+
   return (
     <div className="space-y-6 pb-24">
+        {/* User Presence */}
+        <div className="flex items-center justify-end">
+          <UserPresence projectId={projectId} currentPage="estimating" />
+        </div>
+        
         {/* Header */}
         <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -686,6 +779,16 @@ export default function EstimatingPage() {
         isManualMode={true}
         highlightLineId={lineIdFromUrl}
       />
+
+      {/* Activity Feed and Comments */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div className="lg:col-span-2">
+          <CommentsPanel projectId={projectId} section="estimating" />
+        </div>
+        <div className="lg:col-span-2">
+          <ActivityFeed projectId={projectId} maxItems={10} />
+        </div>
+      </div>
     </div>
   );
 }

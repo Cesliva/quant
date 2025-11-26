@@ -12,6 +12,11 @@ interface Project {
   archived?: boolean;
 }
 
+/**
+ * Fix projects with undefined archived status
+ * @param companyId - Company ID (should be obtained from useCompanyId() hook in components)
+ *                    Default "default" is for backward compatibility and script usage only
+ */
 export async function fixArchivedStatus(companyId: string = "default"): Promise<{
   fixed: number;
   errors: string[];

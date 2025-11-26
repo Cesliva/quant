@@ -17,12 +17,15 @@ interface WinLossRecord {
   id?: string;
   projectId?: string;
   projectName: string;
+  gcId?: string; // Reference to GC contact ID for exact matching
+  projectType?: string; // For project-type win rate calculation
   bidDate: string;
   decisionDate: string;
   bidAmount: number;
   actualCost?: number;
   projectValue?: number;
-  margin?: number;
+  margin?: number; // actual margin (for won bids)
+  estimatedMargin?: number; // submitted margin (for all bids, won + lost)
   status: "won" | "lost";
   reason?: string;
   competitor?: string;
@@ -36,10 +39,22 @@ interface WinLossModalProps {
   onClose: () => void;
 }
 
+interface Project {
+  id?: string;
+  projectName?: string;
+  projectNumber?: string;
+  gcId?: string; // Reference to contact ID for exact matching
+  projectType?: string; // For project-type win rate calculation
+  status?: string;
+  archived?: boolean;
+}
+
 export default function WinLossModal({ companyId, onClose }: WinLossModalProps) {
   const [records, setRecords] = useState<WinLossRecord[]>([]);
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<WinLossRecord | null>(null);
+  const [activeProjects, setActiveProjects] = useState<Project[]>([]);
+  const [showCustomProjectInput, setShowCustomProjectInput] = useState(false);
   const [formData, setFormData] = useState<Partial<WinLossRecord>>({
     projectName: "",
     bidDate: "",
@@ -48,6 +63,7 @@ export default function WinLossModal({ companyId, onClose }: WinLossModalProps) 
     actualCost: 0,
     projectValue: 0,
     margin: 0,
+    estimatedMargin: 0,
     status: "won",
     reason: "",
     competitor: "",
@@ -66,6 +82,29 @@ export default function WinLossModal({ companyId, onClose }: WinLossModalProps) 
           new Date(b.decisionDate).getTime() - new Date(a.decisionDate).getTime()
         );
         setRecords(sorted);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [companyId]);
+
+  // Load active projects from Firestore
+  useEffect(() => {
+    if (!isFirebaseConfigured()) return;
+
+    const projectsPath = `companies/${companyId}/projects`;
+    const unsubscribe = subscribeToCollection<Project>(
+      projectsPath,
+      (data) => {
+        // Filter for active, non-archived projects
+        const active = data.filter(
+          (p) => !p.archived && (p.status === "active" || p.status === "Active" || !p.status)
+        );
+        // Sort by project name
+        const sorted = active.sort((a, b) => 
+          (a.projectName || "").localeCompare(b.projectName || "")
+        );
+        setActiveProjects(sorted);
       }
     );
 
@@ -131,6 +170,7 @@ export default function WinLossModal({ companyId, onClose }: WinLossModalProps) 
 
   const handleAdd = () => {
     setEditingRecord(null);
+    setShowCustomProjectInput(false);
     setFormData({
       projectName: "",
       bidDate: "",
@@ -149,6 +189,9 @@ export default function WinLossModal({ companyId, onClose }: WinLossModalProps) 
 
   const handleEdit = (record: WinLossRecord) => {
     setEditingRecord(record);
+    // Check if the project name exists in active projects
+    const projectExists = activeProjects.some(p => p.projectName === record.projectName);
+    setShowCustomProjectInput(!projectExists);
     setFormData({
       projectName: record.projectName,
       bidDate: record.bidDate,
@@ -157,6 +200,7 @@ export default function WinLossModal({ companyId, onClose }: WinLossModalProps) 
       actualCost: record.actualCost || 0,
       projectValue: record.projectValue || 0,
       margin: record.margin || 0,
+      estimatedMargin: record.estimatedMargin || 0,
       status: record.status,
       reason: record.reason || "",
       competitor: record.competitor || "",
@@ -184,6 +228,15 @@ export default function WinLossModal({ companyId, onClose }: WinLossModalProps) 
         margin = ((formData.projectValue - formData.actualCost) / formData.projectValue) * 100;
       }
 
+      // Calculate estimated margin if not provided (for both won and lost bids)
+      let estimatedMargin = formData.estimatedMargin || 0;
+      if (estimatedMargin === 0 && formData.bidAmount > 0) {
+        // If estimated margin not provided, try to calculate from bid amount
+        // This is a placeholder - in real scenario, estimator would input this
+        // For now, we'll use the margin field if it exists, otherwise leave as 0
+        estimatedMargin = formData.margin || 0;
+      }
+
       const recordData: Omit<WinLossRecord, "id"> = {
         projectName: formData.projectName!,
         bidDate: formData.bidDate!,
@@ -192,6 +245,7 @@ export default function WinLossModal({ companyId, onClose }: WinLossModalProps) 
         actualCost: formData.actualCost || undefined,
         projectValue: formData.projectValue || undefined,
         margin: margin > 0 ? margin : undefined,
+        estimatedMargin: estimatedMargin > 0 ? estimatedMargin : undefined,
         status: formData.status!,
         reason: formData.reason || undefined,
         competitor: formData.competitor || undefined,
@@ -461,12 +515,60 @@ export default function WinLossModal({ companyId, onClose }: WinLossModalProps) 
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Project Name <span className="text-red-500">*</span>
                       </label>
-                      <Input
-                        value={formData.projectName || ""}
-                        onChange={(e) => setFormData({ ...formData, projectName: e.target.value })}
-                        placeholder="Enter project name"
-                        required
-                      />
+                      {!showCustomProjectInput ? (
+                        <div className="relative">
+                          <select
+                            value={formData.projectName || ""}
+                            onChange={(e) => {
+                              if (e.target.value === "__custom__") {
+                                setShowCustomProjectInput(true);
+                                setFormData({ ...formData, projectName: "" });
+                              } else {
+                                setFormData({ ...formData, projectName: e.target.value });
+                              }
+                            }}
+                            className="w-full px-4 py-2 rounded-lg border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none pr-8"
+                            required={!showCustomProjectInput}
+                          >
+                            <option value="">Select a project...</option>
+                            {activeProjects.map((project) => (
+                              <option key={project.id} value={project.projectName || ""}>
+                                {project.projectName || "Untitled Project"}
+                                {project.projectNumber ? ` (${project.projectNumber})` : ""}
+                              </option>
+                            ))}
+                            <option value="__custom__">+ Enter custom project name</option>
+                          </select>
+                          <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <Input
+                            value={formData.projectName || ""}
+                            onChange={(e) => setFormData({ ...formData, projectName: e.target.value })}
+                            placeholder="Enter project name"
+                            required
+                            autoFocus
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowCustomProjectInput(false);
+                              setFormData({ ...formData, projectName: "" });
+                            }}
+                            className="text-xs text-blue-600 hover:text-blue-800"
+                          >
+                            ← Back to project list
+                          </button>
+                        </div>
+                      )}
+                      {activeProjects.length === 0 && !showCustomProjectInput && (
+                        <p className="text-xs text-gray-500 mt-1">No active projects found. Select "+ Enter custom project name" to add one.</p>
+                      )}
                     </div>
 
                     <div>
@@ -522,6 +624,23 @@ export default function WinLossModal({ companyId, onClose }: WinLossModalProps) 
                           required
                         />
                       </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Estimated Margin (%)
+                      </label>
+                      <div className="relative">
+                        <Input
+                          type="number"
+                          value={formData.estimatedMargin || 0}
+                          onChange={(e) => setFormData({ ...formData, estimatedMargin: parseFloat(e.target.value) || 0 })}
+                          placeholder="0.00"
+                          step="0.1"
+                        />
+                        <span className="absolute right-3 top-2 text-gray-500">%</span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">Margin submitted with bid (for won & lost bids)</p>
                     </div>
 
                     {formData.status === "won" && (

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
-import { Save, Settings2, ChevronDown, ChevronUp, AlertTriangle, Plus, Trash2, Users, Building2, MapPin, Phone, Mail } from "lucide-react";
+import { Save, Settings2, ChevronDown, ChevronUp, AlertTriangle, Plus, Trash2, Users, Building2, MapPin, Phone, Mail, Clock } from "lucide-react";
 import { 
   loadProjectSettings, 
   saveProjectSettings, 
@@ -31,6 +31,7 @@ interface Project {
   status?: string;
   owner?: string;
   generalContractor?: string;
+  gcId?: string; // Reference to contact ID for exact matching
   gcContact?: string;
   gcPhone?: string;
   gcEmail?: string;
@@ -41,7 +42,24 @@ interface Project {
   deliveryDate?: string;
   estimatedValue?: string | number;
   competitionLevel?: string;
-  probabilityOfWin?: number;
+  probabilityOfWin?: number; // Legacy field, kept for compatibility
+  winProbability?: number; // New field (0-1)
+  assignedEstimator?: string; // user ID
+  estimatedHoursToCompletion?: number;
+  estimatedStartDate?: string;
+  estimatedCompletionDate?: string;
+  projectedStartDate?: string;
+  fabHours?: number;
+  fabWindowStart?: string;
+  fabWindowEnd?: string;
+  awardValue?: number; // for won projects
+  actualHoursFabrication?: number;
+  actualHoursWelding?: number;
+  actualHoursPrepPaint?: number;
+  actualHoursField?: number;
+  actualTotalHours?: number;
+  redFlags?: string[];
+  opportunityScore?: number; // calculated
   notes?: string;
 }
 
@@ -103,6 +121,10 @@ export default function ProjectSettingsPanel({ companyId, projectId, compact = f
     bidDueDate: "",
     decisionDate: "",
     deliveryDate: "",
+    projectedStartDate: "",
+    fabHours: undefined,
+    fabWindowStart: "",
+    fabWindowEnd: "",
     estimatedValue: "",
     competitionLevel: "medium",
     probabilityOfWin: 50,
@@ -170,12 +192,20 @@ export default function ProjectSettingsPanel({ companyId, projectId, compact = f
             setSelectedOwnerContact(ownerMatch.id);
           }
         }
-        if (currentProject.generalContractor) {
+        // Match GC using gcId (exact match) or name (fallback for backward compatibility)
+        if (currentProject.gcId) {
+          const gcMatch = loadedContacts.find(c => c.id === currentProject.gcId);
+          if (gcMatch) {
+            setSelectedGCContact(gcMatch.id);
+          }
+        } else if (currentProject.generalContractor) {
           const gcMatch = loadedContacts.find(
             c => c.name.toLowerCase() === currentProject.generalContractor.toLowerCase()
           );
           if (gcMatch) {
             setSelectedGCContact(gcMatch.id);
+            // Update project to include gcId for future exact matching
+            setProject({ ...currentProject, gcId: gcMatch.id });
           }
         }
       }
@@ -693,6 +723,7 @@ export default function ProjectSettingsPanel({ companyId, projectId, compact = f
                         setProject({
                           ...project,
                           generalContractor: "",
+                          gcId: undefined, // Clear GC ID when contact is deselected
                           gcContact: "",
                           gcPhone: "",
                           gcEmail: "",
@@ -761,7 +792,7 @@ export default function ProjectSettingsPanel({ companyId, projectId, compact = f
           {/* Dates & Deadlines */}
           <div>
             <h3 className="text-sm font-semibold text-gray-900 mb-3">Dates & Deadlines</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
                   Bid Due Date
@@ -791,6 +822,82 @@ export default function ProjectSettingsPanel({ companyId, projectId, compact = f
                   value={project.deliveryDate || ""}
                   onChange={(e) => setProject({ ...project, deliveryDate: e.target.value })}
                 />
+              </div>
+            </div>
+          </div>
+
+          {/* Shop Schedule */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <Clock className="w-4 h-4" />
+              Shop Schedule
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Projected Shop Start
+                </label>
+                <Input
+                  type="date"
+                  value={project.projectedStartDate || ""}
+                  onChange={(e) =>
+                    setProject({ ...project, projectedStartDate: e.target.value })
+                  }
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Controls when this project appears in the Bid-Production Schedule.
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Fabrication Hours (Total)
+                </label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={project.fabHours ?? ""}
+                  onChange={(e) => {
+                    const value = parseFloat(e.target.value);
+                    setProject({
+                      ...project,
+                      fabHours: isNaN(value) ? undefined : value,
+                    });
+                  }}
+                  placeholder="e.g., 1200"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Total shop hours the project is expected to consume.
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Fab Window Start
+                </label>
+                <Input
+                  type="date"
+                  value={project.fabWindowStart || ""}
+                  onChange={(e) =>
+                    setProject({ ...project, fabWindowStart: e.target.value })
+                  }
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Optional override. Leave blank to let Quant infer from award date/today.
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Fab Window End
+                </label>
+                <Input
+                  type="date"
+                  value={project.fabWindowEnd || ""}
+                  onChange={(e) =>
+                    setProject({ ...project, fabWindowEnd: e.target.value })
+                  }
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Optional override. Quant will estimate using fab hours if missing.
+                </p>
               </div>
             </div>
           </div>

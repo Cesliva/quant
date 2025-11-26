@@ -21,9 +21,11 @@ export default function ProjectDefaultsPage() {
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved">("unsaved");
 
   useEffect(() => {
-    loadDefaults();
+    if (companyId) {
+      loadDefaults();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [companyId]);
 
   const loadDefaults = async () => {
     if (!isFirebaseConfigured()) {
@@ -57,35 +59,53 @@ export default function ProjectDefaultsPage() {
       return;
     }
 
+    if (!companyId) {
+      alert("Company ID is missing. Please refresh the page and try again.");
+      return;
+    }
+
     setIsSaving(true);
     setSaveStatus("saving");
 
     try {
       const companyPath = `companies/${companyId}`;
+      
+      // Prepare project defaults - remove empty strings, keep undefined for fields to clear
+      const projectDefaults: {
+        stockRounding?: string;
+        defaultGrade?: string;
+        coatingOptions?: string;
+      } = {};
+      
+      if (defaults.stockRounding.trim()) {
+        projectDefaults.stockRounding = defaults.stockRounding.trim();
+      }
+      if (defaults.defaultGrade.trim()) {
+        projectDefaults.defaultGrade = defaults.defaultGrade.trim();
+      }
+      if (defaults.coatingOptions.trim()) {
+        projectDefaults.coatingOptions = defaults.coatingOptions.trim();
+      }
+
+      // Check if company document exists
       const companyDoc = await getDocument(companyPath);
       
-      const projectDefaults = {
-        stockRounding: defaults.stockRounding || undefined,
-        defaultGrade: defaults.defaultGrade || undefined,
-        coatingOptions: defaults.coatingOptions || undefined,
-      };
-
       if (companyDoc) {
-        // Document exists, update it
+        // Document exists, update it - updateDocument uses updateDoc which merges fields
         await updateDocument("companies", companyId, {
-          projectDefaults,
+          projectDefaults: Object.keys(projectDefaults).length > 0 ? projectDefaults : {},
         });
       } else {
-        // Document doesn't exist, create it
+        // Document doesn't exist, create it with merge: true to preserve any future fields
         await setDocument(companyPath, {
-          projectDefaults,
+          projectDefaults: Object.keys(projectDefaults).length > 0 ? projectDefaults : {},
         }, true);
       }
 
       setSaveStatus("saved");
       setTimeout(() => {
         setSaveStatus("unsaved");
-      }, 2000);
+      }, 3000);
     } catch (error: any) {
       console.error("Error saving project defaults:", error);
       alert(`Failed to save project defaults: ${error.message || "Please try again."}`);

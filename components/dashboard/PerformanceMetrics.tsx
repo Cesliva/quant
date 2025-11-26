@@ -5,9 +5,11 @@ import { TrendingUp, DollarSign, FileText, Target, Percent, Calendar } from "luc
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import { subscribeToCollection } from "@/lib/firebase/firestore";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
+import { cn } from "@/lib/utils/cn";
 
 interface PerformanceMetricsProps {
   companyId: string;
+  className?: string;
 }
 
 interface ProjectDocument {
@@ -25,7 +27,7 @@ interface WinLossRecord {
   status: "won" | "lost";
 }
 
-export default function PerformanceMetrics({ companyId }: PerformanceMetricsProps) {
+export default function PerformanceMetrics({ companyId, className }: PerformanceMetricsProps) {
   const [projects, setProjects] = useState<ProjectDocument[]>([]);
   const [winLossRecords, setWinLossRecords] = useState<WinLossRecord[]>([]);
 
@@ -165,9 +167,9 @@ export default function PerformanceMetrics({ companyId }: PerformanceMetricsProp
   }, [projects, winLossRecords]);
 
   return (
-    <Card className="border-0 shadow-sm bg-white/80 backdrop-blur-sm">
-      <CardHeader className="pb-4">
-        <CardTitle className="flex items-center gap-2 text-base">
+    <Card className={cn("border border-gray-200 shadow-lg hover:shadow-xl transition-all duration-300 bg-white h-full", className)}>
+      <CardHeader className="pb-5">
+        <CardTitle className="flex items-center gap-2 text-lg font-semibold">
           <Target className="w-5 h-5 text-blue-600" />
           Bid Pipeline & Activity
         </CardTitle>
@@ -175,29 +177,29 @@ export default function PerformanceMetrics({ companyId }: PerformanceMetricsProp
       <CardContent className="space-y-6">
         {/* Estimates Created Trend Chart */}
         <div>
-          <div className="flex items-center justify-between mb-2">
-            <h4 className="text-sm font-semibold text-gray-700">Estimates Created (6 Months)</h4>
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-semibold text-gray-800">Estimates Created (6 Months)</h4>
             <div className="flex items-center gap-2">
-              <span className={`text-xs font-medium ${metrics.estimatesChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              <span className={`text-sm font-semibold ${metrics.estimatesChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                 {metrics.estimatesChange >= 0 ? '+' : ''}{metrics.estimatesChange.toFixed(1)}%
               </span>
               <TrendingUp className={`w-4 h-4 ${metrics.estimatesChange >= 0 ? 'text-green-600' : 'text-red-600 rotate-180'}`} />
             </div>
           </div>
-          <div className="relative h-32 bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-4">
-            <div className="flex items-end justify-between h-full gap-1">
+          <div className="relative h-36 bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl p-5 border-2 border-blue-100">
+            <div className="flex items-end justify-between h-full gap-2">
               {metrics.estimatesPerMonth.map((value, index) => {
                 const height = metrics.maxEstimates > 0 ? (value / metrics.maxEstimates) * 100 : 0;
                 return (
-                  <div key={index} className="flex-1 flex flex-col items-center gap-1 h-full">
+                  <div key={index} className="flex-1 flex flex-col items-center gap-2 h-full">
                     <div className="w-full flex items-end justify-center">
                       <div
-                        className="w-full bg-gradient-to-t from-blue-500 to-purple-500 rounded-t transition-all hover:from-blue-600 hover:to-purple-600"
+                        className="w-full bg-gradient-to-t from-blue-500 to-purple-500 rounded-t-lg transition-all duration-200 hover:from-blue-600 hover:to-purple-600 hover:shadow-md"
                         style={{ height: `${height}%`, minHeight: height > 0 ? '4px' : '0' }}
                         title={`${metrics.monthLabels[index]}: ${value} estimates`}
                       />
                     </div>
-                    <div className="text-[10px] text-gray-600 mt-1">{metrics.monthLabels[index]}</div>
+                    <div className="text-xs text-gray-600 font-medium mt-1">{metrics.monthLabels[index]}</div>
                   </div>
                 );
               })}
@@ -207,57 +209,57 @@ export default function PerformanceMetrics({ companyId }: PerformanceMetricsProp
 
         {/* Key Metrics */}
         <div className="grid grid-cols-2 gap-4">
-          <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg border border-green-200">
-            <div className="flex items-center gap-2 mb-1">
-              <DollarSign className="w-4 h-4 text-green-600" />
-              <span className="text-xs text-gray-600">Pipeline Value</span>
+          <div className="p-5 bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl border-2 border-green-200 hover:shadow-md transition-shadow">
+            <div className="flex items-center gap-2 mb-2">
+              <DollarSign className="w-5 h-5 text-green-600" />
+              <span className="text-sm font-semibold text-gray-700">Pipeline Value</span>
             </div>
-            <div className="text-lg font-bold text-green-700">
+            <div className="text-2xl font-bold text-green-700 mb-1 tracking-tight">
               ${metrics.totalPipelineValue.toLocaleString("en-US", { maximumFractionDigits: 0 })}
             </div>
-            <div className="text-[10px] text-gray-500 mt-1">
+            <div className="text-xs text-gray-600 font-medium">
               Active bids
             </div>
           </div>
-          <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
-            <div className="flex items-center gap-2 mb-1">
-              <FileText className="w-4 h-4 text-blue-600" />
-              <span className="text-xs text-gray-600">In Progress</span>
+          <div className="p-5 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border-2 border-blue-200 hover:shadow-md transition-shadow">
+            <div className="flex items-center gap-2 mb-2">
+              <FileText className="w-5 h-5 text-blue-600" />
+              <span className="text-sm font-semibold text-gray-700">In Progress</span>
             </div>
-            <div className="text-lg font-bold text-blue-700">
+            <div className="text-2xl font-bold text-blue-700 mb-1 tracking-tight">
               {metrics.estimatesInProgress}
             </div>
-            <div className="text-[10px] text-gray-500 mt-1">
+            <div className="text-xs text-gray-600 font-medium">
               Being estimated
             </div>
           </div>
         </div>
 
         {/* Secondary Metrics */}
-        <div className="grid grid-cols-3 gap-2">
-          <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 text-center">
-            <div className="text-xs text-gray-600 mb-1">Avg Estimate</div>
-            <div className="text-sm font-bold text-gray-900">
+        <div className="grid grid-cols-3 gap-3">
+          <div className="p-4 bg-gray-50 rounded-xl border-2 border-gray-200 text-center hover:shadow-md transition-shadow">
+            <div className="text-xs font-semibold text-gray-600 mb-2">Avg Estimate</div>
+            <div className="text-base font-bold text-gray-900 tracking-tight">
               ${metrics.averageEstimateValue > 0 
                 ? metrics.averageEstimateValue.toLocaleString("en-US", { maximumFractionDigits: 0 })
                 : "-"}
             </div>
           </div>
-          <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 text-center">
-            <div className="flex items-center justify-center gap-1 mb-1">
-              <Calendar className="w-3 h-3 text-gray-500" />
-              <span className="text-xs text-gray-600">This Month</span>
+          <div className="p-4 bg-gray-50 rounded-xl border-2 border-gray-200 text-center hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-center gap-1.5 mb-2">
+              <Calendar className="w-4 h-4 text-gray-500" />
+              <span className="text-xs font-semibold text-gray-600">This Month</span>
             </div>
-            <div className="text-sm font-bold text-gray-900">
+            <div className="text-base font-bold text-gray-900 tracking-tight">
               {metrics.estimatesThisMonth}
             </div>
           </div>
-          <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 text-center">
-            <div className="flex items-center justify-center gap-1 mb-1">
-              <Percent className="w-3 h-3 text-gray-500" />
-              <span className="text-xs text-gray-600">Win Rate</span>
+          <div className="p-4 bg-gray-50 rounded-xl border-2 border-gray-200 text-center hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-center gap-1.5 mb-2">
+              <Percent className="w-4 h-4 text-gray-500" />
+              <span className="text-xs font-semibold text-gray-600">Win Rate</span>
             </div>
-            <div className="text-sm font-bold text-gray-900">
+            <div className="text-base font-bold text-gray-900 tracking-tight">
               {metrics.conversionRate > 0 ? `${metrics.conversionRate.toFixed(1)}%` : "-"}
             </div>
           </div>

@@ -8,6 +8,7 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import { createDocument, subscribeToCollection, deleteDocument } from "@/lib/firebase/firestore";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
+import { uploadFileToStorage, deleteFileFromStorage } from "@/lib/firebase/storage";
 
 interface QuoteDocument {
   id?: string;
@@ -21,6 +22,8 @@ interface QuoteDocument {
   uploadedBy?: string;
   notes?: string;
   status?: "draft" | "reviewing" | "quoted" | "archived";
+  downloadURL?: string;
+  storagePath?: string;
 }
 
 import { useCompanyId } from "@/lib/hooks/useCompanyId";
@@ -35,6 +38,7 @@ export default function ImportQuotesPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [quotes, setQuotes] = useState<QuoteDocument[]>([]);
+  const [viewingPdf, setViewingPdf] = useState<QuoteDocument | null>(null);
   
   const [formData, setFormData] = useState({
     projectName: "",
@@ -63,6 +67,26 @@ export default function ImportQuotesPage() {
 
     return () => unsubscribe();
   }, [companyId]);
+
+  // Handle Escape key to close PDF viewer
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && viewingPdf) {
+        setViewingPdf(null);
+      }
+    };
+
+    if (viewingPdf) {
+      document.addEventListener("keydown", handleEscape);
+      // Prevent body scroll when modal is open
+      document.body.style.overflow = "hidden";
+    }
+
+    return () => {
+      document.removeEventListener("keydown", handleEscape);
+      document.body.style.overflow = "unset";
+    };
+  }, [viewingPdf]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -108,67 +132,66 @@ export default function ImportQuotesPage() {
     setSuccess(null);
 
     try {
-      // Convert PDF to base64 for storage (in production, use Firebase Storage)
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        try {
-          const base64Data = e.target?.result as string;
-          
-          // Store quote document metadata in Firestore
-          const quoteData: Omit<QuoteDocument, "id"> = {
-            projectName: formData.projectName.trim(),
-            projectNumber: formData.projectNumber || undefined,
-            generalContractor: formData.generalContractor || undefined,
-            bidDate: formData.bidDate || undefined,
-            fileName: selectedFile.name,
-            fileSize: selectedFile.size,
-            uploadedAt: new Date(),
-            notes: formData.notes || undefined,
-            status: "draft",
-          };
-
-          const quotesPath = `companies/${companyId}/quoteDocuments`;
-          await createDocument(quotesPath, quoteData);
-
-          // TODO: In production, upload actual PDF to Firebase Storage
-          // For now, we're just storing metadata
-          // const storageRef = ref(storage, `quotes/${companyId}/${quoteId}/${selectedFile.name}`);
-          // await uploadBytes(storageRef, selectedFile);
-
-          setSuccess(`Successfully uploaded "${selectedFile.name}" for project "${formData.projectName}"`);
-          
-          // Reset form
-          setSelectedFile(null);
-          setFormData({
-            projectName: "",
-            projectNumber: "",
-            generalContractor: "",
-            bidDate: "",
-            notes: "",
-          });
-          if (fileInputRef.current) {
-            fileInputRef.current.value = "";
-          }
-        } catch (err: any) {
-          setError(`Failed to upload: ${err.message}`);
-        } finally {
-          setIsUploading(false);
-        }
-      };
+      // Create a unique storage path for the PDF
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const sanitizedFileName = selectedFile.name.replace(/[^a-zA-Z0-9.-]/g, "_");
+      const storagePath = `quotes/${companyId}/${timestamp}_${sanitizedFileName}`;
       
-      reader.onerror = () => {
-        setError("Failed to read file");
-        setIsUploading(false);
-      };
+      // Upload PDF to Firebase Storage
+      let downloadURL: string | undefined;
+      let storagePathUsed: string | undefined;
       
-      reader.readAsDataURL(selectedFile);
+      try {
+        downloadURL = await uploadFileToStorage(selectedFile, storagePath);
+        storagePathUsed = storagePath;
+      } catch (storageError: any) {
+        // If storage upload fails, still save metadata but warn user
+        console.warn("Failed to upload to Firebase Storage:", storageError);
+        setError(`File metadata saved, but PDF upload failed: ${storageError.message}. You may need to re-upload the file.`);
+      }
+      
+      // Store quote document metadata in Firestore
+      const quoteData: Omit<QuoteDocument, "id"> = {
+        projectName: formData.projectName.trim(),
+        projectNumber: formData.projectNumber || undefined,
+        generalContractor: formData.generalContractor || undefined,
+        bidDate: formData.bidDate || undefined,
+        fileName: selectedFile.name,
+        fileSize: selectedFile.size,
+        uploadedAt: new Date(),
+        notes: formData.notes || undefined,
+        status: "draft",
+        downloadURL,
+        storagePath: storagePathUsed,
+      };
+
+      const quotesPath = `companies/${companyId}/quoteDocuments`;
+      await createDocument(quotesPath, quoteData);
+
+      if (downloadURL) {
+        setSuccess(`Successfully uploaded "${selectedFile.name}" for project "${formData.projectName}"`);
+      }
+      
+      // Reset form
+      setSelectedFile(null);
+      setFormData({
+        projectName: "",
+        projectNumber: "",
+        generalContractor: "",
+        bidDate: "",
+        notes: "",
+      });
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
     } catch (err: any) {
       setError(`Failed to upload: ${err.message}`);
+    } finally {
       setIsUploading(false);
     }
   };
 
-  const handleDelete = async (quoteId: string, fileName: string) => {
+  const handleDelete = async (quoteId: string, fileName: string, storagePath?: string) => {
     if (!confirm(`Are you sure you want to delete "${fileName}"?`)) return;
 
     if (!isFirebaseConfigured()) {
@@ -177,8 +200,20 @@ export default function ImportQuotesPage() {
     }
 
     try {
+      // Delete from Firestore
       const quotesPath = `companies/${companyId}/quoteDocuments`;
       await deleteDocument(`${quotesPath}/${quoteId}`);
+      
+      // Delete from Firebase Storage if storage path exists
+      if (storagePath) {
+        try {
+          await deleteFileFromStorage(storagePath);
+        } catch (storageError: any) {
+          // Log but don't fail if storage deletion fails (file might already be deleted)
+          console.warn("Failed to delete file from storage:", storageError);
+        }
+      }
+      
       setSuccess(`Deleted "${fileName}"`);
     } catch (err: any) {
       setError(`Failed to delete: ${err.message}`);
@@ -421,26 +456,47 @@ export default function ImportQuotesPage() {
                         </p>
                       </div>
                       <div className="flex items-center gap-2 ml-4">
+                        {quote.downloadURL ? (
+                          <button
+                            onClick={() => setViewingPdf(quote)}
+                            className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                            title="View PDF"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              alert(
+                                `PDF viewing is not available for this file.\n\n` +
+                                `File: ${quote.fileName}\n` +
+                                `Size: ${(quote.fileSize / 1024).toFixed(2)} KB\n\n` +
+                                `This file was uploaded before PDF viewing was enabled. ` +
+                                `Please re-upload the file to enable viewing.`
+                              );
+                            }}
+                            className="p-2 text-gray-400 hover:bg-gray-50 rounded transition-colors cursor-not-allowed"
+                            title="PDF viewing not available (re-upload required)"
+                            disabled
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                        )}
+                        {quote.downloadURL && (
+                          <button
+                            onClick={() => {
+                              if (quote.downloadURL) {
+                                window.open(quote.downloadURL, "_blank");
+                              }
+                            }}
+                            className="p-2 text-green-600 hover:bg-green-50 rounded transition-colors"
+                            title="Download PDF"
+                          >
+                            <Download className="w-4 h-4" />
+                          </button>
+                        )}
                         <button
-                          onClick={() => {
-                            // Note: PDF viewing requires Firebase Storage integration
-                            // For now, show file information
-                            alert(
-                              `PDF File: ${quote.fileName}\n` +
-                              `Size: ${(quote.fileSize / 1024).toFixed(2)} KB\n\n` +
-                              `To enable PDF viewing, please:\n` +
-                              `1. Set up Firebase Storage\n` +
-                              `2. Upload PDFs to Storage\n` +
-                              `3. Store download URLs in Firestore`
-                            );
-                          }}
-                          className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                          title="View PDF (requires Firebase Storage)"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(quote.id!, quote.fileName)}
+                          onClick={() => handleDelete(quote.id!, quote.fileName, quote.storagePath)}
                           className="p-2 text-red-600 hover:bg-red-50 rounded transition-colors"
                           title="Delete"
                         >
@@ -491,6 +547,58 @@ export default function ImportQuotesPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* PDF Viewer Modal */}
+      {viewingPdf && viewingPdf.downloadURL && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75 p-4"
+          onClick={(e) => {
+            // Close modal when clicking on the backdrop
+            if (e.target === e.currentTarget) {
+              setViewingPdf(null);
+            }
+          }}
+        >
+          <div className="relative w-full h-full max-w-6xl max-h-[90vh] bg-white rounded-lg shadow-xl flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <div className="flex-1 min-w-0">
+                <h2 className="text-lg font-semibold text-gray-900 truncate">
+                  {viewingPdf.projectName}
+                </h2>
+                <p className="text-sm text-gray-500 truncate">{viewingPdf.fileName}</p>
+              </div>
+              <div className="flex items-center gap-2 ml-4">
+                {viewingPdf.downloadURL && (
+                  <button
+                    onClick={() => window.open(viewingPdf.downloadURL!, "_blank")}
+                    className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                    title="Download PDF"
+                  >
+                    <Download className="w-5 h-5" />
+                  </button>
+                )}
+                <button
+                  onClick={() => setViewingPdf(null)}
+                  className="p-2 text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                  title="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            
+            {/* PDF Viewer */}
+            <div className="flex-1 overflow-hidden">
+              <iframe
+                src={viewingPdf.downloadURL}
+                className="w-full h-full border-0"
+                title={viewingPdf.fileName}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

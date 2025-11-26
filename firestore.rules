@@ -14,39 +14,131 @@ service cloud.firestore {
     }
     
     // Helper function to check if user belongs to company
-    function belongsToCompany(companyId) {
+    function isCompanyMember(companyId) {
       return isAuthenticated() && 
-             get(/databases/$(database)/documents/companies/$(companyId)).data.members[request.auth.uid] != null;
+             exists(/databases/$(database)/documents/companies/$(companyId)/members/$(request.auth.uid));
+    }
+    
+    // Helper function to check if user has project access
+    function hasProjectAccess(companyId, projectId) {
+      return isCompanyMember(companyId) && (
+        // User is assigned to project OR
+        request.auth.uid in get(/databases/$(database)/documents/companies/$(companyId)/projects/$(projectId)).data.assignedTo ||
+        // User is the assigned estimator OR
+        request.auth.uid == get(/databases/$(database)/documents/companies/$(companyId)/projects/$(projectId)).data.assignedEstimator ||
+        // User has company-wide edit permission (admin or estimator)
+        get(/databases/$(database)/documents/companies/$(companyId)/members/$(request.auth.uid)).data.role in ['admin', 'estimator']
+      );
+    }
+    
+    // Helper function to check if user can read project (for filtering)
+    function canReadProject(companyId, projectId) {
+      return isCompanyMember(companyId) && (
+        // Admins can always read
+        get(/databases/$(database)/documents/companies/$(companyId)/members/$(request.auth.uid)).data.role == 'admin' ||
+        // User is assigned to project OR
+        request.auth.uid in get(/databases/$(database)/documents/companies/$(companyId)/projects/$(projectId)).data.assignedTo ||
+        // User is the assigned estimator
+        request.auth.uid == get(/databases/$(database)/documents/companies/$(companyId)/projects/$(projectId)).data.assignedEstimator
+      );
+    }
+    
+    // Helper function to check if user can manage users
+    function canManageUsers(companyId) {
+      return isCompanyMember(companyId) && 
+             get(/databases/$(database)/documents/companies/$(companyId)/members/$(request.auth.uid)).data.permissions.canManageUsers == true;
     }
     
     // Companies collection
     match /companies/{companyId} {
       // Company document
       match /{document=**} {
-        allow read, write: if belongsToCompany(companyId);
+        allow read, write: if isCompanyMember(companyId);
+      }
+      
+      // Members collection
+      match /members/{userId} {
+        allow read: if isCompanyMember(companyId);
+        allow write: if canManageUsers(companyId) || request.auth.uid == userId;
+      }
+      
+      // Invitations collection
+      match /invitations/{invitationId} {
+        allow read: if isCompanyMember(companyId);
+        allow write: if canManageUsers(companyId);
+      }
+      
+      // Notifications
+      match /notifications/{userId}/items/{notificationId} {
+        allow read: if request.auth.uid == userId; // Users can only read their own notifications
+        allow write: if isCompanyMember(companyId); // Any member can create notifications for others
       }
       
       // Settings
       match /settings/{settingsId} {
-        allow read, write: if belongsToCompany(companyId);
+        allow read, write: if isCompanyMember(companyId);
       }
       
       // Projects
       match /projects/{projectId} {
-        allow read, write: if belongsToCompany(companyId);
+        allow read: if canReadProject(companyId, projectId);
+        allow create: if isCompanyMember(companyId) && 
+          get(/databases/$(database)/documents/companies/$(companyId)/members/$(request.auth.uid)).data.permissions.canCreateProjects == true;
+        allow update: if hasProjectAccess(companyId, projectId);
+        allow delete: if isCompanyMember(companyId) && 
+          get(/databases/$(database)/documents/companies/$(companyId)/members/$(request.auth.uid)).data.permissions.canDeleteProjects == true;
+        
+        // Active users (presence tracking)
+        match /activeUsers/{userId} {
+          allow read: if isCompanyMember(companyId);
+          allow write: if request.auth.uid == userId; // Users can only update their own presence
+        }
+        
+        // Locks (edit locking)
+        match /locks/{section} {
+          allow read: if isCompanyMember(companyId);
+          allow write: if isCompanyMember(companyId); // Any member can acquire/release locks
+        }
+        
+        // Activities (activity feed)
+        match /activities/{activityId} {
+          allow read: if isCompanyMember(companyId);
+          allow create: if isCompanyMember(companyId) && request.resource.data.userId == request.auth.uid; // Users can only create their own activities
+          allow update, delete: if false; // Activities are immutable
+        }
+        
+        // Comments
+        match /comments/{commentPath=**} {
+          allow read: if isCompanyMember(companyId);
+          allow create: if isCompanyMember(companyId) && request.resource.data.userId == request.auth.uid;
+          allow update, delete: if isCompanyMember(companyId) && request.resource.data.userId == request.auth.uid;
+        }
         
         // Project subcollections
         match /lines/{lineId} {
-          allow read, write: if belongsToCompany(companyId);
+          allow read, write: if hasProjectAccess(companyId, projectId);
         }
         
         match /aiLogs/{logId} {
-          allow read, write: if belongsToCompany(companyId);
+          allow read, write: if hasProjectAccess(companyId, projectId);
         }
         
         match /auditLogs/{auditId} {
-          allow read, write: if belongsToCompany(companyId);
+          allow read, write: if hasProjectAccess(companyId, projectId);
         }
+        
+        // Comments
+        match /comments/{commentPath=**} {
+          allow read: if isCompanyMember(companyId);
+          allow create: if isCompanyMember(companyId) && request.resource.data.userId == request.auth.uid;
+          allow update, delete: if isCompanyMember(companyId) && request.resource.data.userId == request.auth.uid;
+        }
+      }
+      
+      // Notifications
+      match /notifications/{userId}/items/{notificationId} {
+        allow read: if request.auth.uid == userId; // Users can only read their own notifications
+        allow write: if isCompanyMember(companyId); // Any member can create notifications for others
       }
     }
     */

@@ -11,6 +11,9 @@ import { extractTextFromFile } from "@/lib/utils/fileExtractor";
 import { useCompanyId } from "@/lib/hooks/useCompanyId";
 import { setDocument, getDocument } from "@/lib/firebase/firestore";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
+import { uploadFileToStorage } from "@/lib/firebase/storage";
+
+type AnalysisType = "structural" | "misc" | "finishes" | "aess" | "div01" | "div03";
 
 export default function SpecReviewPage() {
   const searchParams = useSearchParams();
@@ -18,20 +21,45 @@ export default function SpecReviewPage() {
   const projectId = searchParams?.get("projectId");
   const viewType = searchParams?.get("view"); // "view" to show saved analysis
   const companyId = useCompanyId();
+  
+  // Get analysisType from URL params, default to "structural"
+  const urlAnalysisType = searchParams?.get("analysisType");
+  const validTypes: AnalysisType[] = ["structural", "misc", "finishes", "aess", "div01", "div03"];
+  const getDefaultAnalysisType = (): AnalysisType => {
+    if (urlAnalysisType && validTypes.includes(urlAnalysisType as AnalysisType)) {
+      return urlAnalysisType as AnalysisType;
+    }
+    return "structural";
+  };
+  
   const [analysisResult, setAnalysisResult] = useState<SpecReviewResult | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [specText, setSpecText] = useState("");
   const [isExtracting, setIsExtracting] = useState(false);
-  const [analysisType, setAnalysisType] = useState<"structural" | "misc" | "finishes" | "aess" | "div01" | "div03">("structural");
+  const [extractionProgress, setExtractionProgress] = useState<{ message?: string; currentPage?: number; totalPages?: number } | null>(null);
+  const [analysisType, setAnalysisType] = useState<AnalysisType>(getDefaultAnalysisType());
+
+  // Update analysisType when URL param changes
+  useEffect(() => {
+    if (urlAnalysisType && validTypes.includes(urlAnalysisType as AnalysisType)) {
+      setAnalysisType(urlAnalysisType as AnalysisType);
+    }
+  }, [urlAnalysisType]);
 
   // Load saved analysis if viewing from summary
   useEffect(() => {
     const loadSavedAnalysis = async () => {
+      // Always set analysisType from URL if present
+      if (urlAnalysisType && validTypes.includes(urlAnalysisType as AnalysisType)) {
+        setAnalysisType(urlAnalysisType as AnalysisType);
+      }
+      
       if (viewType === "view" && projectId && companyId && isFirebaseConfigured()) {
-        const analysisTypeParam = searchParams?.get("analysisType") || "structural";
-        const validTypes = ["structural", "misc", "finishes", "aess", "div01", "div03"];
-        const type = validTypes.includes(analysisTypeParam) ? analysisTypeParam as AnalysisType : "structural";
+        const analysisTypeParam = urlAnalysisType || analysisType;
+        const type = validTypes.includes(analysisTypeParam as AnalysisType) 
+          ? analysisTypeParam as AnalysisType 
+          : analysisType;
         
         setAnalysisType(type);
         
@@ -46,15 +74,15 @@ export default function SpecReviewPage() {
           console.error("Failed to load saved analysis:", error);
         }
       } else {
-        // Load spec text from localStorage if available
+        // Load spec text from localStorage if available (but prioritize URL param for analysisType)
         const savedSpecText = localStorage.getItem(`specText_${projectId || 'default'}`);
         if (savedSpecText) {
           setSpecText(savedSpecText);
         }
-        const savedAnalysisType = localStorage.getItem(`analysisType_${projectId || 'default'}`);
-        if (savedAnalysisType) {
-          const validTypes = ["structural", "misc", "finishes", "aess", "div01", "div03"];
-          if (validTypes.includes(savedAnalysisType)) {
+        // Only use localStorage analysisType if URL doesn't have one
+        if (!urlAnalysisType) {
+          const savedAnalysisType = localStorage.getItem(`analysisType_${projectId || 'default'}`);
+          if (savedAnalysisType && validTypes.includes(savedAnalysisType as AnalysisType)) {
             setAnalysisType(savedAnalysisType as AnalysisType);
           }
         }
@@ -62,9 +90,7 @@ export default function SpecReviewPage() {
     };
 
     loadSavedAnalysis();
-  }, [viewType, projectId, companyId, searchParams]);
-
-  type AnalysisType = "structural" | "misc" | "finishes" | "aess" | "div01" | "div03";
+  }, [viewType, projectId, companyId, searchParams, urlAnalysisType]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -102,7 +128,6 @@ export default function SpecReviewPage() {
     setAnalysisResult(null);
     try {
       const result = await reviewSpecifications(specText, {}, analysisType, companyId, projectId || undefined);
-      console.log("Analysis result:", result); // Debug log
       
       // Ensure complianceItems exists even if AI doesn't return it
       // Try to generate from other fields if needed
@@ -818,10 +843,35 @@ export default function SpecReviewPage() {
                   if (!file) return;
 
                   setIsExtracting(true);
+                  setExtractionProgress({ message: "Starting extraction..." });
                   try {
-                    const extractedText = await extractTextFromFile(file);
+                    // Extract text from file with progress updates
+                    const extractedText = await extractTextFromFile(file, (progress) => {
+                      // Update UI with extraction progress
+                      setExtractionProgress({
+                        message: progress.message,
+                        currentPage: progress.currentPage,
+                        totalPages: progress.totalPages,
+                      });
+                    });
                     setSpecText(extractedText);
+                    setExtractionProgress(null);
+                    
+                    // Upload file to Firebase Storage if configured and projectId exists
+                    if (isFirebaseConfigured() && companyId && projectId) {
+                      try {
+                        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+                        const fileExtension = file.name.split(".").pop() || "pdf";
+                        const storagePath = `specs/${companyId}/${projectId}/${analysisType}/${timestamp}_${file.name.replace(/[^a-zA-Z0-9.-]/g, "_")}`;
+                        await uploadFileToStorage(file, storagePath);
+                        // File uploaded successfully to Firebase Storage
+                      } catch (uploadError: any) {
+                        // Don't fail the whole operation if upload fails, just log it
+                        console.warn("Failed to upload file to storage (text extraction still succeeded):", uploadError.message);
+                      }
+                    }
                   } catch (error: any) {
+                    setExtractionProgress(null);
                     alert(`Failed to extract text: ${error.message}`);
                   } finally {
                     setIsExtracting(false);
@@ -831,8 +881,30 @@ export default function SpecReviewPage() {
                 }}
                 disabled={isExtracting}
               />
-              {isExtracting && (
-                <p className="text-sm text-blue-600 mt-2">Extracting text from file...</p>
+              {isExtracting && extractionProgress && (
+                <div className="mt-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="flex items-center gap-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                    <p className="text-sm text-blue-700 font-medium">
+                      {extractionProgress.message || "Extracting text from file..."}
+                    </p>
+                  </div>
+                  {extractionProgress.totalPages && extractionProgress.currentPage && (
+                    <div className="mt-2">
+                      <div className="w-full bg-blue-200 rounded-full h-2">
+                        <div
+                          className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                          style={{
+                            width: `${(extractionProgress.currentPage / extractionProgress.totalPages) * 100}%`,
+                          }}
+                        ></div>
+                      </div>
+                      <p className="text-xs text-blue-600 mt-1">
+                        Page {extractionProgress.currentPage} of {extractionProgress.totalPages}
+                      </p>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
             <div className="flex items-center gap-2">

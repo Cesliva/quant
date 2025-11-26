@@ -9,10 +9,9 @@ export function Card({ className, children, ...props }: CardProps) {
   return (
     <div
       className={cn(
-        "bg-white rounded-xl shadow-sm border border-gray-200",
+        "bg-white rounded-xl border border-gray-200 p-6",
         className
       )}
-      style={{ padding: "24px", borderRadius: "12px" }}
       {...props}
     >
       {children}
@@ -38,7 +37,7 @@ export function CardTitle({ className, children, ...props }: CardProps) {
 
 export function CardContent({ className, children, ...props }: CardProps) {
   return (
-    <div className={cn("text-gray-600", className)} style={{ padding: 0 }} {...props}>
+    <div className={cn("text-gray-600", className)} {...props}>
       {children}
     </div>
   );

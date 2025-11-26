@@ -18,11 +18,10 @@ import {
 } from "lucide-react";
 
 const navigation = [
-  { name: "Estimating", href: "/estimating?projectId=1", icon: ClipboardList },
+  { name: "Estimating", href: "/estimating", icon: ClipboardList },
   { name: "AI Spec Review", href: "/spec-review", icon: FileCheck, aiIcon: Sparkles },
   { name: "AI Generated Proposal", href: "/proposal", icon: FileEdit, aiIcon: Sparkles },
   { name: "Import Quotes", href: "/import-quotes", icon: Upload },
-  { name: "Material Nesting", href: "/material-nesting", icon: Package },
 ];
 
 export default function Sidebar() {
@@ -40,6 +39,7 @@ export default function Sidebar() {
   const isProjectDashboard = pathname === `/projects/${projectIdFromParams}`;
   const isProjectSubPage = isProjectPage && !isProjectDashboard;
   const isReportsPage = pathname === `/projects/${projectIdFromParams}/reports`;
+  const isProjectDetailsPage = pathname === `/projects/${projectIdFromParams}/details`;
 
   return (
     <div className="w-64 bg-white border-r border-gray-200 min-h-screen p-4">
@@ -67,7 +67,7 @@ export default function Sidebar() {
         {isProjectPage && projectId && (
           <>
             <Link
-              href={projectIdFromParams ? `/projects/${projectId}` : `/projects/${projectId}`}
+              href={`/projects/${projectId}`}
               className={cn(
                 "flex items-center gap-3 px-4 py-3 rounded-lg transition-colors",
                 isProjectDashboard
@@ -77,6 +77,18 @@ export default function Sidebar() {
             >
               <Building2 className="w-5 h-5" />
               <span>Project Dashboard</span>
+            </Link>
+            <Link
+              href={`/projects/${projectId}/details`}
+              className={cn(
+                "flex items-center gap-3 px-4 py-3 rounded-lg transition-colors",
+                isProjectDetailsPage
+                  ? "bg-gray-100 text-blue-600 font-medium"
+                  : "text-gray-700 hover:bg-gray-50"
+              )}
+            >
+              <FileText className="w-5 h-5" />
+              <span>Project Details</span>
             </Link>
             <Link
               href={`/projects/${projectId}/reports`}
@@ -106,16 +118,42 @@ export default function Sidebar() {
               href = `/spec-review?projectId=${projectId}`;
             } else if (item.name === "AI Generated Proposal") {
               href = `/proposal?projectId=${projectId}`;
+            } else if (item.name === "Import Quotes") {
+              href = `/import-quotes?projectId=${projectId}`;
             }
-            // Other items can keep their original href or add projectId query param if needed
           }
           
-          const isActive = pathname?.startsWith(item.href) || 
-            (isProjectPage && projectId && (
-              (item.name === "Estimating" && pathname === `/projects/${projectId}/estimating`) ||
-              (item.name === "AI Spec Review" && pathname === "/spec-review" && projectIdFromQuery === projectId) ||
-              (item.name === "AI Generated Proposal" && pathname === "/proposal" && projectIdFromQuery === projectId)
-            ));
+          // Determine if this navigation item is active
+          const isActive = (() => {
+            // Check exact pathname matches first
+            if (item.name === "Estimating") {
+              if (isProjectPage && projectId) {
+                return pathname === `/projects/${projectId}/estimating`;
+              }
+              return pathname === "/estimating" && !projectIdFromQuery;
+            }
+            if (item.name === "AI Spec Review") {
+              if (isProjectPage && projectId) {
+                return pathname === "/spec-review" && projectIdFromQuery === projectId;
+              }
+              return pathname === "/spec-review" && !projectIdFromQuery;
+            }
+            if (item.name === "AI Generated Proposal") {
+              if (isProjectPage && projectId) {
+                return pathname === "/proposal" && projectIdFromQuery === projectId;
+              }
+              return pathname === "/proposal" && !projectIdFromQuery;
+            }
+            if (item.name === "Import Quotes") {
+              if (isProjectPage && projectId) {
+                return pathname === "/import-quotes" && projectIdFromQuery === projectId;
+              }
+              return pathname === "/import-quotes" && !projectIdFromQuery;
+            }
+            // Fallback: check if pathname starts with the base href (without query params)
+            const baseHref = item.href.split("?")[0];
+            return pathname === baseHref || pathname?.startsWith(baseHref + "/");
+          })();
           
           return (
             <Link

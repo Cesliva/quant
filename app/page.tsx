@@ -2,35 +2,72 @@
 
 import Link from "next/link";
 import Button from "@/components/ui/Button";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
-import { Plus, Calendar, TrendingUp, FileText, Search, Upload, Target, Percent, Archive, Trash2, BarChart3, Brain, Sparkles } from "lucide-react";
-import BidCalendarWidget from "@/components/dashboard/BidCalendarWidget";
-import WinLossWidget from "@/components/dashboard/WinLossWidget";
-import PerformanceMetrics from "@/components/dashboard/PerformanceMetrics";
-import ActivityFeed from "@/components/dashboard/ActivityFeed";
-import CompanyAddressBook from "@/components/settings/CompanyAddressBook";
-import { subscribeToCollection } from "@/lib/firebase/firestore";
+import { subscribeToCollection, getDocRef, getDocument, getProjectPath, setDocument } from "@/lib/firebase/firestore";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
-import { useState, useEffect } from "react";
-import { clearAllFirestoreData } from "@/lib/utils/clearAllFirestoreData";
+import { useState, useEffect, useMemo } from "react";
+import { onSnapshot } from "firebase/firestore";
+import BidProductionScheduleModal from "@/components/dashboard/BidProductionScheduleModal";
+import { useCompanyId } from "@/lib/hooks/useCompanyId";
+import { useUserPermissions } from "@/lib/hooks/useUserPermissions";
+import { useAuth } from "@/lib/hooks/useAuth";
+import { loadCompanySettings } from "@/lib/utils/settingsLoader";
 
 interface Project {
   id: string;
   projectName?: string;
   projectNumber?: string;
   generalContractor?: string;
+  gcId?: string; // Reference to contact ID for exact matching
+  projectType?: string; // For project-type win rate calculation
   bidDueDate?: string;
   status?: string;
   isSampleData?: boolean;
   archived?: boolean;
+  // Executive Dashboard Fields
+  winProbability?: number; // 0-1, default from historical data
+  assignedEstimator?: string; // user ID
+  estimatedHoursToCompletion?: number;
+  estimatedStartDate?: string;
+  estimatedCompletionDate?: string;
+  awardValue?: number; // for won projects
+  actualHoursFabrication?: number;
+  actualHoursWelding?: number;
+  actualHoursPrepPaint?: number;
+  actualHoursField?: number;
+  actualTotalHours?: number; // simple alternative
+  redFlags?: string[];
+  opportunityScore?: number; // calculated
+  estimatedValue?: string | number; // project value
+  projectedStartDate?: string;
+  fabHours?: number;
+  fabWindowStart?: string;
+  fabWindowEnd?: string;
 }
 
 export default function Home() {
-  const companyId = "default"; // TODO: Get from auth context
+  const companyId = useCompanyId();
+  const { user } = useAuth();
+  const { permissions } = useUserPermissions();
   const [winRate, setWinRate] = useState(0);
   const [totalBids, setTotalBids] = useState(0);
   const [activeProjects, setActiveProjects] = useState<Project[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [allProjects, setAllProjects] = useState<Project[]>([]); // Store full project data for KPIs
+  const [contacts, setContacts] = useState<any[]>([]);
+  const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
+  const [specReviews, setSpecReviews] = useState<Record<string, any>>({});
+  const [aggregatedRisk, setAggregatedRisk] = useState({
+    percentage: 0,
+    label: "Low",
+    averageGrade: "A"
+  });
+  const [projectFilter, setProjectFilter] = useState<"all" | "mine">("all"); // Default to "all" to show all active projects
+  const [pipelineRanges, setPipelineRanges] = useState({
+    small: { min: 0, max: 50000 },
+    medium: { min: 50000, max: 100000 },
+    large: { min: 100000, max: 250000 },
+    xlarge: { min: 250000, max: 500000 },
+    xxlarge: { min: 500000, max: 999999999 },
+  });
   
   // Load win/loss data for win rate calculation
   useEffect(() => {
@@ -67,26 +104,11 @@ export default function Home() {
     const unsubscribe = subscribeToCollection<Project>(
       projectsPath,
       (projects) => {
-        // Debug: Log all projects and their archived status
-        console.log("All projects from Firestore:", projects.map(p => ({ 
-          id: p.id, 
-          name: p.projectName, 
-          archived: p.archived,
-          archivedType: typeof p.archived 
-        })));
+        // Process projects from Firestore
         
-        // Filter out archived projects - be explicit about what we're filtering
-        const activeOnly = projects.filter((p) => {
-          // Explicitly check: archived must be exactly true (boolean)
-          const isArchived = p.archived === true;
-          if (isArchived) {
-            console.log(`Filtering out archived project: ${p.id} (${p.projectName})`);
-          }
-          return !isArchived;
-        });
-        
+        // Include all projects (both active and archived)
         // Map Firestore projects to the format expected by the UI
-        const mappedProjects = activeOnly.map((p) => ({
+        const mappedProjects = projects.map((p) => ({
           id: p.id,
           name: p.projectName || "Untitled Project",
           gc: p.generalContractor || "",
@@ -94,6 +116,10 @@ export default function Home() {
           status: p.status || "draft",
           isSampleData: p.isSampleData || false,
           projectNumber: p.projectNumber || "",
+          archived: p.archived === true,
+          estimatedValue: p.estimatedValue,
+          winProbability: p.probabilityOfWin ? p.probabilityOfWin / 100 : p.winProbability,
+          bidDueDate: p.bidDueDate,
         }));
         
         // Deduplicate by ID to prevent duplicate entries
@@ -105,322 +131,835 @@ export default function Home() {
           console.warn(`Found ${mappedProjects.length - uniqueProjects.length} duplicate project(s) in Firestore. Deduplicating...`);
         }
         
-        console.log(`Active projects after filtering and deduplication: ${uniqueProjects.length}`, uniqueProjects.map(p => ({ id: p.id, name: p.name })));
+        // Set deduplicated projects
         setActiveProjects(uniqueProjects);
+        
+        // Store full project data for KPIs (filter out archived for KPI calculations)
+        const activeOnly = projects.filter((p) => p.archived !== true);
+        setAllProjects(activeOnly);
       }
     );
 
     return () => unsubscribe();
   }, [companyId]);
 
-  const upcomingBids = activeProjects
-    .filter(p => p.status === "active")
-    .sort((a, b) => new Date(a.bidDate).getTime() - new Date(b.bidDate).getTime())
-    .slice(0, 3);
+  // Load contacts from Firestore
+  useEffect(() => {
+    if (!isFirebaseConfigured()) {
+      return;
+    }
 
-  const getDaysUntilBid = (bidDate: string) => {
-    const today = new Date();
-    const bid = new Date(bidDate);
-    const diff = Math.ceil((bid.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    return diff;
-  };
+    try {
+      const companyPath = `companies/${companyId}`;
+      const companyDocRef = getDocRef(companyPath);
+      
+      const unsubscribe = onSnapshot(
+        companyDocRef,
+        (snapshot) => {
+          if (snapshot.exists()) {
+            const data = snapshot.data();
+            if (data && data.contacts && Array.isArray(data.contacts)) {
+              // Get top 3 contacts (prioritize contractors/customers)
+              const prioritized = data.contacts
+                .sort((a: any, b: any) => {
+                  const typePriority: any = { contractor: 1, customer: 2, vendor: 3, other: 4 };
+                  const aPriority = typePriority[a.type] || 4;
+                  const bPriority = typePriority[b.type] || 4;
+                  if (aPriority !== bPriority) return aPriority - bPriority;
+                  return (a.name || "").localeCompare(b.name || "");
+                })
+                .slice(0, 3);
+              setContacts(prioritized);
+            } else {
+              setContacts([]);
+            }
+          } else {
+            setContacts([]);
+          }
+        },
+        (error) => {
+          console.error("Error loading contacts:", error);
+          setContacts([]);
+        }
+      );
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "active": return "bg-blue-100 text-blue-800";
-      case "draft": return "bg-gray-100 text-gray-800";
-      case "submitted": return "bg-green-100 text-green-800";
-      default: return "bg-gray-100 text-gray-800";
+      return () => unsubscribe();
+    } catch (error) {
+      console.error("Error setting up contacts subscription:", error);
+    }
+  }, [companyId]);
+
+  const getContactBadge = (type: string) => {
+    switch (type) {
+      case "contractor":
+        return "GC";
+      case "customer":
+        return "Owner";
+      case "vendor":
+        return "Vendor";
+      default:
+        return "Other";
     }
   };
 
+  const getContactRole = (contact: any) => {
+    if (contact.contactPerson) {
+      return contact.contactPerson;
+    }
+    return contact.type === "contractor" ? "General Contractor" : 
+           contact.type === "customer" ? "Owner Rep" : 
+           contact.type === "vendor" ? "Vendor" : "Contact";
+  };
+
+  // Load spec reviews for risk calculation
+  useEffect(() => {
+    if (!isFirebaseConfigured() || activeProjects.length === 0) {
+      setSpecReviews({});
+      return;
+    }
+
+    const loadSpecReviews = async () => {
+      const reviews: Record<string, any> = {};
+      const reviewTypes = ["structural-steel", "misc-metals", "div-01", "div-09", "aess-noma", "div-03"];
+
+      for (const project of activeProjects) {
+        if (!project.id) continue;
+        
+        for (const type of reviewTypes) {
+          try {
+            const reviewPath = `companies/${companyId}/projects/${project.id}/specReviews/${type}`;
+            const review = await getDocument(reviewPath);
+            if (review?.result) {
+              if (!reviews[project.id]) reviews[project.id] = {};
+              reviews[project.id][type] = review.result;
+            }
+          } catch (error) {
+            // Review doesn't exist, skip
+          }
+        }
+      }
+
+      setSpecReviews(reviews);
+    };
+
+    loadSpecReviews();
+  }, [companyId, activeProjects]);
+
+  // Calculate aggregated risk from all spec reviews
+  useEffect(() => {
+    if (!isFirebaseConfigured() || activeProjects.length === 0) {
+      setAggregatedRisk({ percentage: 0, label: "Low", averageGrade: "A" });
+      return;
+    }
+
+    const gradeToScore: Record<string, number> = { A: 1, B: 2, C: 3, D: 4, F: 5 };
+    const scoreToGrade: Record<number, string> = { 1: "A", 2: "B", 3: "C", 4: "D", 5: "F" };
+    
+    const allGrades: number[] = [];
+    
+    // Collect all risk grades from all projects and all spec sections
+    activeProjects
+      .filter((p) => p.status === "active" && !p.archived)
+      .forEach((project) => {
+        const projectReviews = specReviews[project.id];
+        if (!projectReviews) return;
+
+        // Get all grades from all review types for this project
+        Object.values(projectReviews).forEach((review: any) => {
+          const grade = review?.summary?.overallRiskGrade;
+          if (grade && gradeToScore[grade]) {
+            allGrades.push(gradeToScore[grade]);
+          }
+        });
+      });
+
+    // Calculate average
+    const averageScore = allGrades.length > 0
+      ? allGrades.reduce((sum, score) => sum + score, 0) / allGrades.length
+      : 1;
+
+    // Convert average to percentage (1-5 maps to 0-100%)
+    const riskPercentage = ((averageScore - 1) / 4) * 100;
+
+    // Convert to risk label
+    const getRiskLabel = (percentage: number): string => {
+      if (percentage < 30) return "Low";
+      if (percentage < 50) return "Moderate";
+      if (percentage < 70) return "High";
+      return "Very High";
+    };
+
+    const riskLabel = getRiskLabel(riskPercentage);
+    const averageGrade = scoreToGrade[Math.round(averageScore)] || "A";
+
+    setAggregatedRisk({
+      percentage: Math.round(riskPercentage),
+      label: riskLabel,
+      averageGrade
+    });
+  }, [activeProjects, specReviews, companyId]);
+
+  const upcomingBids = activeProjects
+    .filter((p) => p.status === "active" && p.bidDate && !p.archived)
+    .sort((a, b) => new Date(a.bidDate).getTime() - new Date(b.bidDate).getTime())
+    .slice(0, 3);
+
+  // Separate active and archived projects for display
+  const activeProjectsList = activeProjects.filter((p) => !p.archived);
+  const archivedProjectsList = activeProjects.filter((p) => p.archived);
+  
+  const totalProjects = activeProjects.length;
+  const activeBidCount = activeProjectsList.filter((p) => p.status === "active").length;
+  const upcomingBidCount = upcomingBids.length;
+  
+  // Calculate bids due this month
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const bidsDueThisMonth = activeProjectsList.filter((p) => {
+    if (!p.bidDate) return false;
+    const bidDate = new Date(p.bidDate);
+    return bidDate >= startOfMonth && bidDate <= endOfMonth && p.status === "active";
+  }).length;
+
+  // Calculate awarded this month (from win/loss records)
+  const awardedThisMonth = totalBids > 0 ? Math.round((winRate / 100) * totalBids) : 0;
+
+  const weightedPipeline = allProjects
+    .filter((p) => p.status === "active" && !p.archived)
+    .reduce((sum, project) => {
+      const value =
+        typeof project.estimatedValue === "string"
+          ? parseFloat(project.estimatedValue) || 0
+          : project.estimatedValue || 0;
+      const probability = project.winProbability ?? 0.5;
+      return sum + value * probability;
+    }, 0);
+  
+  // Filter projects based on user permissions and assignment
+  const filteredProjects = useMemo(() => {
+    // Start with active projects only (not archived)
+    let projects = [...activeProjectsList];
+    
+    // If filter is "mine", show only assigned projects
+    if (projectFilter === "mine") {
+      if (user?.uid) {
+        return projects.filter(p => 
+          p.assignedEstimator === user.uid || 
+          (p as any).assignedTo?.includes(user.uid)
+        );
+      }
+      return [];
+    }
+    
+    // Default (filter === "all"): show all active projects for everyone
+    return projects;
+  }, [activeProjectsList, projectFilter, user?.uid]);
+
+  // Show top 5 filtered projects
+  const topActiveProjects = filteredProjects.slice(0, 5);
+
+  // Calculate pipeline distribution for next 60 days
+  const pipelineDistribution = useMemo(() => {
+    const now = new Date();
+    const sixtyDaysFromNow = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
+    
+    // Filter projects with bid due dates in next 60 days
+    const upcomingProjects = activeProjectsList.filter((project) => {
+      if (!project.bidDueDate) return false;
+      const bidDate = new Date(project.bidDueDate);
+      return bidDate >= now && bidDate <= sixtyDaysFromNow;
+    });
+
+    // Calculate weighted value for each project
+    const projectsByRange = {
+      small: 0,
+      medium: 0,
+      large: 0,
+      xlarge: 0,
+      xxlarge: 0,
+    };
+
+    upcomingProjects.forEach((project) => {
+      const value =
+        typeof project.estimatedValue === "string"
+          ? parseFloat(project.estimatedValue) || 0
+          : project.estimatedValue || 0;
+      const probability = project.winProbability ?? 0.5;
+      const weightedValue = value * probability;
+
+      if (weightedValue >= pipelineRanges.xxlarge.min) {
+        projectsByRange.xxlarge += weightedValue;
+      } else if (weightedValue >= pipelineRanges.xlarge.min) {
+        projectsByRange.xlarge += weightedValue;
+      } else if (weightedValue >= pipelineRanges.large.min) {
+        projectsByRange.large += weightedValue;
+      } else if (weightedValue >= pipelineRanges.medium.min) {
+        projectsByRange.medium += weightedValue;
+      } else {
+        projectsByRange.small += weightedValue;
+      }
+    });
+
+    // Get max value for scaling
+    const maxValue = Math.max(
+      projectsByRange.small,
+      projectsByRange.medium,
+      projectsByRange.large,
+      projectsByRange.xlarge,
+      projectsByRange.xxlarge
+    );
+
+    return {
+      values: projectsByRange,
+      maxValue,
+      colors: {
+        small: "#ef4444", // Red
+        medium: "#f97316", // Orange
+        large: "#f59e0b", // Yellow
+        xlarge: "#3b82f6", // Blue
+        xxlarge: "#10b981", // Green
+      },
+    };
+  }, [activeProjectsList, pipelineRanges]);
+
+  const primaryCards = [
+    {
+      label: "Total Projects",
+      value: totalProjects.toString(),
+      sublabel: "All time",
+      className: "bg-blue-500",
+      href: "/projects",
+    },
+    {
+      label: "Active Bids",
+      value: activeBidCount.toString(),
+      sublabel: "In progress",
+      className: "bg-emerald-500",
+      href: "/projects",
+    },
+    {
+      label: "Upcoming Bids",
+      value: upcomingBidCount.toString(),
+      sublabel: "Next 7 days",
+      className: "bg-orange-500",
+      href: "/projects",
+    },
+    {
+      label: "Weighted Pipeline",
+      value: weightedPipeline.toLocaleString("en-US", {
+        style: "currency",
+        currency: "USD",
+        maximumFractionDigits: 0,
+      }),
+      sublabel: "Based on win probability",
+      className: "bg-indigo-500",
+      href: "/reports",
+    },
+  ];
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* 12-Column Grid Container */}
-        <div className="grid grid-cols-12 gap-6 items-start">
-          
-          {/* Header Section - Full Width (12 columns) */}
-          <div className="col-span-12 pb-4 border-b border-gray-200/60">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900 mb-2">Dashboard</h1>
-                <p className="text-sm text-gray-500">
-                  Welcome back • {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Link href="/settings">
-                  <Button variant="outline" size="lg" className="gap-2">
-                    <FileText className="w-5 h-5" />
-                    Company Settings
-                  </Button>
-                </Link>
-                <Link href="/projects/new/details">
-                  <Button variant="primary" size="lg" className="gap-2 shadow-md hover:shadow-lg transition-shadow">
-                    <Plus className="w-5 h-5" />
-                    New Project
-                  </Button>
-                </Link>
-              </div>
-            </div>
-          </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 py-6 md:py-10 text-slate-800">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-8 md:mb-10">
+        <div>
+          <h1 className="text-4xl font-semibold tracking-tight mb-1">Company Dashboard</h1>
+          <p className="text-slate-500">
+            Welcome back ·{" "}
+            {new Date().toLocaleDateString("en-US", {
+              weekday: "long",
+              month: "long",
+              day: "numeric",
+            })}
+          </p>
+        </div>
+        <div className="flex gap-3">
+          <Link href="/settings">
+            <Button className="px-5 py-2.5 rounded-2xl border border-slate-200/80 bg-white text-slate-700 text-sm font-medium shadow-[0_1px_2px_0_rgb(0,0,0,0.05),0_2px_4px_0_rgb(0,0,0,0.03)] hover:shadow-[0_2px_4px_0_rgb(0,0,0,0.08),0_4px_8px_0_rgb(0,0,0,0.05)] hover:bg-slate-50 hover:border-slate-300 transition-all duration-200">
+              Company Settings
+            </Button>
+          </Link>
+          <Link href="/projects/new/details">
+            <Button className="px-5 py-2.5 rounded-2xl bg-blue-500 text-white text-sm font-medium shadow-[0_2px_4px_0_rgb(59,130,246,0.3),0_4px_8px_0_rgb(59,130,246,0.2)] hover:shadow-[0_4px_8px_0_rgb(59,130,246,0.4),0_8px_16px_0_rgb(59,130,246,0.25)] hover:bg-blue-600 transition-all duration-200">
+              + New Project
+            </Button>
+          </Link>
+        </div>
+      </div>
 
-          {/* Quick Stats - Full Width (12 columns) */}
-          <div className="col-span-12 grid grid-cols-12 gap-6">
-            <Card className="col-span-6 md:col-span-3 border-0 shadow-sm hover:shadow-md transition-shadow bg-white/80 backdrop-blur-sm">
-              <CardContent>
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Total Projects</p>
-                    <p className="text-3xl font-bold text-gray-900 mb-2">{activeProjects.length || 0}</p>
-                    <p className="text-xs text-gray-500">All time</p>
-                  </div>
-                  <div className="p-2 bg-blue-100 rounded-lg">
-                    <FileText className="w-5 h-5 text-blue-600" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+        {/* Top Row */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8 md:mb-12">
+        {primaryCards.map((card) => (
+          <Link
+            key={card.label}
+            href={card.href}
+            className={`rounded-3xl p-4 md:p-6 text-white border border-white/10 shadow-[0_4px_6px_-1px_rgb(0,0,0,0.2),0_2px_4px_-2px_rgb(0,0,0,0.2),0_12px_24px_0_rgb(0,0,0,0.15)] hover:shadow-[0_8px_12px_-2px_rgb(0,0,0,0.25),0_4px_6px_-3px_rgb(0,0,0,0.25),0_16px_32px_0_rgb(0,0,0,0.2)] transition-all duration-300 hover:-translate-y-1 focus:outline-none focus-visible:ring-4 focus-visible:ring-white/50 ${card.className}`}
+          >
+            <p className="uppercase text-xs tracking-[0.18em] opacity-80 mb-2">{card.label}</p>
+            <p className={`leading-none mb-2 ${card.label === "Weighted Pipeline" ? "text-3xl md:text-4xl" : "text-4xl md:text-5xl"} font-semibold`}>
+              {card.value}
+            </p>
+            <p className="text-sm opacity-85">{card.sublabel}</p>
+          </Link>
+        ))}
+      </div>
 
-            <Card className="col-span-6 md:col-span-3 border-0 shadow-sm hover:shadow-md transition-shadow bg-white/80 backdrop-blur-sm">
-              <CardContent>
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Active Bids</p>
-                    <p className="text-3xl font-bold text-gray-900 mb-2">
-                      {activeProjects.filter(p => p.status === "active").length}
-                    </p>
-                    <p className="text-xs text-green-600 font-medium">In progress</p>
-                  </div>
-                  <div className="p-2 bg-green-100 rounded-lg">
-                    <TrendingUp className="w-5 h-5 text-green-600" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="col-span-6 md:col-span-3 border-0 shadow-sm hover:shadow-md transition-shadow bg-white/80 backdrop-blur-sm">
-              <CardContent>
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Upcoming Bids</p>
-                    <p className="text-3xl font-bold text-gray-900 mb-2">
-                      {upcomingBids.length}
-                    </p>
-                    <p className="text-xs text-orange-600 font-medium">Next 7 days</p>
-                  </div>
-                  <div className="p-2 bg-orange-100 rounded-lg">
-                    <Calendar className="w-5 h-5 text-orange-600" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="col-span-6 md:col-span-3 border-0 shadow-sm hover:shadow-md transition-shadow bg-white/80 backdrop-blur-sm">
-              <CardContent>
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Win Rate</p>
-                    <p className="text-3xl font-bold text-gray-900 mb-2">
-                      {winRate}%
-                    </p>
-                    <p className="text-xs text-purple-600 font-medium">
-                      {totalBids > 0 ? `${totalBids} total bids` : "No data yet"}
-                    </p>
-                  </div>
-                  <div className="p-2 bg-purple-100 rounded-lg">
-                    <Target className="w-5 h-5 text-purple-600" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Company Address Book - Full Width (12 columns) */}
-          <div className="col-span-12">
-            <CompanyAddressBook companyId={companyId} compact={true} />
-          </div>
-
-          {/* LEFT COLUMN - 8 columns */}
-          <div className="col-span-12 lg:col-span-8 space-y-6">
-            {/* Bid Calendar Widget */}
-            <BidCalendarWidget companyId={companyId} />
-            
-            {/* Active Projects */}
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900">Active Projects</h2>
-                  <p className="text-sm text-gray-500 mt-1">
-                    Your current work in progress {(() => {
-                      const uniqueProjects = activeProjects.filter((project, index, self) => 
-                        index === self.findIndex((p) => p.id === project.id)
-                      );
-                      return uniqueProjects.length > 0 && `(${uniqueProjects.length} project${uniqueProjects.length !== 1 ? 's' : ''})`;
-                    })()}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Link href="/projects/archived">
-                    <Button variant="outline" size="sm" className="gap-1">
-                      <Archive className="w-3 h-3" />
-                      Archived
-                    </Button>
-                  </Link>
-                  <Link href="/projects">
-                    <Button variant="outline" size="sm">View All →</Button>
-                  </Link>
-                </div>
-              </div>
-
-              {/* Search/Filter */}
-              <div className="mb-4">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search by project number or name..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        {/* Graph Row */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 lg:gap-8 mb-8 md:mb-12">
+        <div className="bg-white p-4 md:p-6 rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300">
+          <p className="text-sm font-semibold mb-1">Win Rate (Last 90 Days)</p>
+          <p className="text-xs text-slate-400 mb-4">Company-wide</p>
+          <div className="relative w-48 h-32 mx-auto">
+            {/* Semi-circular gauge */}
+            <svg className="w-full h-full" viewBox="0 0 200 100" preserveAspectRatio="xMidYMid meet">
+              {/* Full arc - colored based on win rate */}
+              {(() => {
+                // Determine color based on win rate percentage
+                // Inverted from risk: low win rate = red (bad), high win rate = green (good)
+                const getWinRateColor = (percentage: number) => {
+                  if (percentage < 30) return "#ef4444"; // Red for low win rate (bad)
+                  if (percentage < 50) return "#f97316"; // Orange for moderate
+                  if (percentage < 70) return "#f59e0b"; // Yellow/Amber for good
+                  return "#10b981"; // Green for high win rate (excellent)
+                };
+                
+                const arcColor = getWinRateColor(winRate);
+                
+                return (
+                  <path
+                    d="M 20 80 A 80 80 0 0 1 180 80"
+                    fill="none"
+                    stroke={arcColor}
+                    strokeWidth="8"
+                    strokeLinecap="round"
+                    className="transition-all duration-500"
                   />
-                </div>
-              </div>
-
-              <Card className="border-0 shadow-sm bg-white/80 backdrop-blur-sm">
-                <CardContent>
-                  <div className="divide-y divide-gray-100">
-                    {activeProjects
-                      .filter((project) => {
-                        if (!searchQuery) return true;
-                        const query = searchQuery.toLowerCase();
-                        return (
-                          project.projectNumber?.toLowerCase().includes(query) ||
-                          project.name?.toLowerCase().includes(query) ||
-                          project.gc?.toLowerCase().includes(query)
-                        );
-                      })
-                      .filter((project, index, self) => 
-                        index === self.findIndex((p) => p.id === project.id)
-                      )
-                      .map((project, index) => {
-                      const daysUntil = getDaysUntilBid(project.bidDate);
-                      const isUrgent = daysUntil <= 7 && daysUntil >= 0;
-                      
-                      return (
-                        <Link
-                          key={`${project.id}-${index}`}
-                          href={`/projects/${project.id}`}
-                          className="block p-4 hover:bg-gray-50/80 transition-all group"
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2.5 mb-1.5">
-                                <h3 className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors truncate">
-                                  {project.name}
-                                </h3>
-                                {project.projectNumber && (
-                                  <span className="px-2 py-0.5 rounded-md text-xs font-mono font-medium flex-shrink-0 bg-gray-100 text-gray-700 border border-gray-200">
-                                    {project.projectNumber}
-                                  </span>
-                                )}
-                                {project.isSampleData && (
-                                  <span className="px-2 py-0.5 rounded-md text-xs font-medium flex-shrink-0 bg-orange-100 text-orange-700 border border-orange-200">
-                                    Sample
-                                  </span>
-                                )}
-                                <span className={`px-2 py-0.5 rounded-md text-xs font-medium flex-shrink-0 ${getStatusColor(project.status)}`}>
-                                  {project.status.charAt(0).toUpperCase() + project.status.slice(1)}
-                                </span>
-                              </div>
-                              <p className="text-sm text-gray-600 mb-2">{project.gc}</p>
-                              <div className="flex items-center gap-4 text-xs">
-                                <span className="flex items-center gap-1.5 text-gray-500">
-                                  <Calendar className="w-3.5 h-3.5" />
-                                  {new Date(project.bidDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                                </span>
-                                {isUrgent && (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700">
-                                    {daysUntil === 0 ? "Due Today!" : `${daysUntil} days left`}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            <Button variant="outline" size="sm" className="ml-4 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                              Open →
-                            </Button>
-                          </div>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
+                );
+              })()}
+              {/* Needle indicator - points to the current win rate */}
+              {(() => {
+                // Calculate rotation angle: -90° (pointing left/0%) to +90° (pointing right/100%)
+                const rotationAngle = -90 + (winRate / 100) * 180;
+                
+                // Get color for needle (same as arc)
+                const getWinRateColor = (percentage: number) => {
+                  if (percentage < 30) return "#ef4444";
+                  if (percentage < 50) return "#f97316";
+                  if (percentage < 70) return "#f59e0b";
+                  return "#10b981";
+                };
+                
+                const needleColor = getWinRateColor(winRate);
+                
+                return (
+                  <g
+                    transform={`translate(100, 80) rotate(${rotationAngle}) translate(-100, -80)`}
+                    className="transition-transform duration-500"
+                  >
+                    <line
+                      x1="100"
+                      y1="80"
+                      x2="100"
+                      y2="20"
+                      stroke={needleColor}
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                    />
+                    <circle
+                      cx="100"
+                      cy="80"
+                      r="4"
+                      fill={needleColor}
+                    />
+                  </g>
+                );
+              })()}
+              {/* Win rate percentage text in center */}
+              <text
+                x="100"
+                y="75"
+                textAnchor="middle"
+                className="text-2xl font-semibold fill-slate-700"
+                fontSize="24"
+                fontWeight="600"
+              >
+                {Number(winRate || 0).toFixed(0)}%
+              </text>
+            </svg>
+            {/* Win rate labels */}
+            <div className="absolute bottom-0 left-0 right-0 flex justify-between px-2">
+              <span className="text-[10px] text-slate-400">Low</span>
+              <span className="text-[10px] text-slate-400">High</span>
             </div>
-
-            {/* Win/Loss Widget */}
-            <WinLossWidget companyId={companyId} />
           </div>
+          <p className="text-center text-xs text-slate-400 mt-4">
+            {totalBids === 0 ? "No awarded bids in the last 90 days" : `${totalBids} decisions logged`}
+          </p>
+        </div>
+        <div className="bg-white p-4 md:p-6 rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300">
+          <p className="text-sm font-semibold mb-1">Pipeline Distribution</p>
+          <p className="text-xs text-slate-400 mb-4">By bid value (next 60 days)</p>
+          <div className="flex items-end gap-3 h-44 justify-center">
+            {(() => {
+              const ranges = [
+                { key: "small", label: "Small" },
+                { key: "medium", label: "Medium" },
+                { key: "large", label: "Large" },
+                { key: "xlarge", label: "X-Large" },
+                { key: "xxlarge", label: "XX-Large" },
+              ];
+              
+              const maxHeight = 120; // Max height in pixels
+              const scale = pipelineDistribution.maxValue > 0 
+                ? maxHeight / pipelineDistribution.maxValue 
+                : 0;
 
-          {/* RIGHT COLUMN - 4 columns */}
-          <div className="col-span-12 lg:col-span-4 space-y-6">
-            {/* Performance Metrics Widget */}
-            <PerformanceMetrics companyId={companyId} />
-
-            {/* Activity Feed */}
-            <ActivityFeed companyId={companyId} />
-
-            {/* Reports Widget */}
-            <Link href="/reports">
-              <Card className="border-0 shadow-sm hover:shadow-lg transition-all cursor-pointer group border-2 hover:border-amber-300 bg-gradient-to-br from-amber-50 to-orange-50">
-                <CardContent>
-                  <div className="flex items-center gap-4">
-                    <div className="w-16 h-16 bg-amber-500 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform shadow-lg">
-                      <BarChart3 className="w-8 h-8 text-white" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-lg font-bold text-gray-900 mb-2">
-                        Reports & Analytics
-                      </h3>
-                      <p className="text-sm text-gray-600 mb-2">
-                        Comprehensive company-wide reports and analytics
-                      </p>
-                      <p className="text-xs text-amber-700 font-medium">
-                        Coming soon →
-                      </p>
-                    </div>
+              return ranges.map((range) => {
+                const value = pipelineDistribution.values[range.key as keyof typeof pipelineDistribution.values];
+                const height = Math.max(value * scale, 0);
+                const color = pipelineDistribution.colors[range.key as keyof typeof pipelineDistribution.colors];
+                
+                return (
+                  <div key={range.key} className="flex flex-col items-center gap-1 flex-1">
+                    <div
+                      className="w-full rounded-xl transition-all duration-500"
+                      style={{
+                        height: `${height}px`,
+                        backgroundColor: color,
+                        minHeight: height > 0 ? "4px" : "0",
+                      }}
+                    />
+                    <span className="text-[10px] text-slate-500 font-medium">
+                      {value > 0 
+                        ? `$${Math.round(value / 1000)}K`
+                        : "$0"
+                      }
+                    </span>
                   </div>
-                </CardContent>
-              </Card>
-            </Link>
-
-            {/* AI Post Bid Analysis Widget */}
-            <Link href="/post-bid-analysis">
-              <Card className="border-0 shadow-sm hover:shadow-lg transition-all cursor-pointer group border-2 hover:border-purple-300 bg-gradient-to-br from-purple-50 to-indigo-50">
-                <CardContent>
-                  <div className="flex items-center gap-4">
-                    <div className="w-16 h-16 bg-purple-500 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform shadow-lg relative">
-                      <Brain className="w-8 h-8 text-white" />
-                      <Sparkles className="w-4 h-4 text-yellow-300 absolute -top-1 -right-1 drop-shadow-lg" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-lg font-bold text-gray-900 mb-2 flex items-center gap-2">
-                        AI Post Bid Analysis
-                      </h3>
-                      <p className="text-sm text-gray-600 mb-2">
-                        Input project completion data for AI-powered trend analysis
-                      </p>
-                      <p className="text-xs text-purple-700 font-medium">
-                        Track performance & insights →
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
+                );
+              });
+            })()}
+          </div>
+          <div className="flex justify-between mt-3 text-[11px] text-slate-400">
+            <span>Small</span>
+            <span>Medium</span>
+            <span>Large</span>
+            <span>X-Large</span>
+            <span>XX-Large</span>
           </div>
         </div>
+        <div className="bg-white p-4 md:p-6 rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300">
+          <p className="text-sm font-semibold mb-1">Risk Exposure</p>
+          <p className="text-xs text-slate-400 mb-4">Based on AI spec review</p>
+          <div className="relative w-48 h-32 mx-auto">
+            {/* Semi-circular gauge background */}
+            <svg className="w-full h-full" viewBox="0 0 200 100" preserveAspectRatio="xMidYMid meet">
+              {/* Full arc - colored based on risk level */}
+              {(() => {
+                // Determine color based on risk percentage
+                const getRiskColor = (percentage: number) => {
+                  if (percentage < 30) return "#10b981"; // Green for low
+                  if (percentage < 50) return "#f59e0b"; // Yellow/Amber for moderate
+                  if (percentage < 70) return "#f97316"; // Orange for high
+                  return "#ef4444"; // Red for very high
+                };
+                
+                const arcColor = getRiskColor(aggregatedRisk.percentage);
+                
+                return (
+                  <path
+                    d="M 20 80 A 80 80 0 0 1 180 80"
+                    fill="none"
+                    stroke={arcColor}
+                    strokeWidth="8"
+                    strokeLinecap="round"
+                    className="transition-all duration-500"
+                  />
+                );
+              })()}
+              {/* Needle indicator - points to the current risk level */}
+              {(() => {
+                // Calculate rotation angle: -90° (pointing left/0%) to +90° (pointing right/100%)
+                const rotationAngle = -90 + (aggregatedRisk.percentage / 100) * 180;
+                
+                // Get color for needle (same as arc)
+                const getRiskColor = (percentage: number) => {
+                  if (percentage < 30) return "#10b981";
+                  if (percentage < 50) return "#f59e0b";
+                  if (percentage < 70) return "#f97316";
+                  return "#ef4444";
+                };
+                
+                const needleColor = getRiskColor(aggregatedRisk.percentage);
+                
+                return (
+                  <g
+                    transform={`translate(100, 80) rotate(${rotationAngle}) translate(-100, -80)`}
+                    className="transition-transform duration-500"
+                  >
+                    <line
+                      x1="100"
+                      y1="80"
+                      x2="100"
+                      y2="20"
+                      stroke={needleColor}
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                    />
+                    <circle
+                      cx="100"
+                      cy="80"
+                      r="4"
+                      fill={needleColor}
+                    />
+                  </g>
+                );
+              })()}
+            </svg>
+            {/* Risk labels */}
+            <div className="absolute bottom-0 left-0 right-0 flex justify-between px-2">
+              <span className="text-[10px] text-slate-400">Low</span>
+              <span className="text-[10px] text-slate-400">High</span>
+            </div>
+          </div>
+          <p className="text-center text-sm font-medium text-slate-700 mt-4">
+            {aggregatedRisk.label}
+          </p>
+          <p className="text-center text-xs text-slate-500 mt-1">
+            Grade: {aggregatedRisk.averageGrade} · {aggregatedRisk.percentage}% risk
+          </p>
+        </div>
+      </div>
+
+        {/* Lower Row */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 lg:gap-8">
+        <div className="lg:col-span-2 bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300 p-4 md:p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-sm font-semibold">Projects</p>
+              <p className="text-xs text-slate-400">
+                {filteredProjects.length} active, {archivedProjectsList.length} archived
+              </p>
+            </div>
+            <div className="flex gap-2 items-center">
+              <Button
+                onClick={() => setProjectFilter("all")}
+                variant={projectFilter === "all" ? "primary" : "outline"}
+                size="sm"
+                className="text-xs px-3 py-1.5 rounded-xl"
+              >
+                All Projects
+              </Button>
+              <Button
+                onClick={() => setProjectFilter("mine")}
+                variant={projectFilter === "mine" ? "primary" : "outline"}
+                size="sm"
+                className="text-xs px-3 py-1.5 rounded-xl"
+              >
+                My Projects
+              </Button>
+              <Link href="/projects">
+                <Button className="text-xs px-3 py-1.5 rounded-xl border border-slate-200 text-slate-600 bg-slate-50 hover:bg-slate-100">
+                  View all
+                </Button>
+              </Link>
+            </div>
+          </div>
+          <div className="divide-y divide-slate-100 text-sm">
+            {topActiveProjects.length === 0 ? (
+              <p className="py-4 text-slate-400">No projects yet.</p>
+            ) : (
+              topActiveProjects.map((project) => {
+                const isArchived = project.archived === true;
+                const handleRestore = async (e: React.MouseEvent) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (!confirm(`Restore "${project.name}"? It will appear in your active projects list.`)) {
+                    return;
+                  }
+
+                  try {
+                    const projectPath = getProjectPath(companyId, project.id);
+                    const currentProject = await getDocument(projectPath);
+                    
+                    if (!currentProject) {
+                      alert("Project not found. Cannot restore.");
+                      return;
+                    }
+                    
+                    const projectsPath = `companies/${companyId}/projects`;
+                    const dataToRestore = {
+                      ...currentProject,
+                      archived: false,
+                    };
+                    
+                    await setDocument(projectsPath, project.id, dataToRestore, true);
+                  } catch (error: any) {
+                    console.error("Error restoring project:", error);
+                    alert(`Failed to restore project: ${error?.message || "Please try again."}`);
+                  }
+                };
+
+                return (
+                  <div
+                    key={project.id}
+                    className={`flex items-center py-3 rounded-2xl px-2 -mx-2 transition-all duration-200 ${
+                      isArchived 
+                        ? "opacity-60 bg-slate-50/50" 
+                        : "hover:bg-slate-50/80 hover:shadow-sm"
+                    }`}
+                  >
+                    <Link
+                      href={`/projects/${project.id}`}
+                      className="flex-1 flex items-center"
+                    >
+                      <div className="flex-1">
+                        <p className={`font-medium ${isArchived ? "text-slate-500" : "text-slate-800"}`}>
+                          {project.name}
+                          {isArchived && (
+                            <span className="ml-2 text-xs text-slate-400 font-normal">(Archived)</span>
+                          )}
+                        </p>
+                        <p className="text-xs text-slate-400">
+                          {project.gc || "GC TBD"} ·{" "}
+                          {project.bidDate
+                            ? `Bid due ${new Date(project.bidDate).toLocaleDateString("en-US", {
+                                month: "short",
+                                day: "numeric",
+                              })}`
+                            : "Bid date TBD"}
+                        </p>
+                      </div>
+                      <div className="w-28 text-xs text-right font-medium">
+                        {project.estimatedValue
+                          ? (
+                              <span className={isArchived ? "text-slate-400" : "text-emerald-500"}>
+                                {Number(project.estimatedValue).toLocaleString("en-US", {
+                                  style: "currency",
+                                  currency: "USD",
+                                  maximumFractionDigits: 0,
+                                })}
+                              </span>
+                            )
+                          : "—"}
+                      </div>
+                      <div className="w-24 text-right">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium border capitalize ${
+                          isArchived
+                            ? "bg-slate-100 text-slate-600 border-slate-200"
+                            : "bg-amber-50 text-amber-700 border-amber-100"
+                        }`}>
+                          {project.status || "draft"}
+                        </span>
+                      </div>
+                    </Link>
+                    {isArchived && (
+                      <button
+                        onClick={handleRestore}
+                        className="ml-3 px-3 py-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                        title="Restore project"
+                      >
+                        Restore
+                      </button>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+        <div className="flex flex-col gap-6">
+          <Link href="/settings?tab=addressbook" className="bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] hover:-translate-y-0.5 transition-all duration-300 p-4 md:p-5">
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-sm font-semibold">Company Address Book</p>
+              <span className="text-xs text-slate-400">View all</span>
+            </div>
+            <p className="text-xs text-slate-400 mb-4">Key GC & client contacts</p>
+            <div className="space-y-2 text-xs">
+              {contacts.length === 0 ? (
+                <p className="text-slate-400 py-2">No contacts yet. Add contacts in Settings.</p>
+              ) : (
+                contacts.map((contact) => (
+                  <div key={contact.id} className="flex items-center justify-between hover:bg-slate-50/80 -mx-2 px-2 py-1 rounded-lg transition-all duration-200 hover:shadow-sm">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-slate-700 truncate">{contact.name}</p>
+                      <p className="text-slate-400 truncate">{getContactRole(contact)}</p>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full bg-slate-50 text-slate-400 border border-slate-100 ml-2 flex-shrink-0">
+                      {getContactBadge(contact.type)}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </Link>
+          <button
+            onClick={() => setIsCalendarModalOpen(true)}
+            className="bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] hover:-translate-y-0.5 transition-all duration-300 p-4 md:p-5 text-left w-full"
+          >
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-sm font-semibold">Bid & Production Calendar</p>
+              <span className="text-xs text-slate-400">View calendar</span>
+            </div>
+            <p className="text-xs text-slate-400 mb-3">This month at a glance</p>
+            <div className="grid grid-cols-3 gap-2 text-center text-[11px] mb-3">
+              <div className="rounded-2xl bg-slate-50/60 border border-slate-100/50 shadow-[0_1px_2px_0_rgb(0,0,0,0.03)] py-2">
+                <p className="text-[10px] text-slate-400 mb-1">Bids Due</p>
+                <p className="text-lg font-semibold">{bidsDueThisMonth}</p>
+              </div>
+              <div className="rounded-2xl bg-slate-50/60 border border-slate-100/50 shadow-[0_1px_2px_0_rgb(0,0,0,0.03)] py-2">
+                <p className="text-[10px] text-slate-400 mb-1">Awarded</p>
+                <p className="text-lg font-semibold">{awardedThisMonth}</p>
+              </div>
+              <div className="rounded-2xl bg-slate-50/60 border border-slate-100/50 shadow-[0_1px_2px_0_rgb(0,0,0,0.03)] py-2">
+                <p className="text-[10px] text-slate-400 mb-1">Open Slots</p>
+                <p className="text-lg font-semibold text-emerald-500">
+                  {activeBidCount === 0 ? "High" : activeBidCount < 5 ? "Moderate" : "Low"}
+                </p>
+              </div>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              Use the calendar view to align estimating effort with shop capacity and backlog.
+            </p>
+          </button>
+          <div className="bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300 p-4 md:p-5">
+            <p className="text-sm font-semibold mb-1">Win / Loss Summary</p>
+            <p className="text-xs text-slate-400 mb-4">Last 90 days</p>
+            <div className="flex items-end justify-between mb-3">
+              <div>
+                <p className="text-2xl font-semibold">{Number(winRate || 0).toFixed(0)}%</p>
+                <p className="text-xs text-slate-400">Win rate</p>
+              </div>
+              <div className="flex gap-3 items-end text-xs">
+                <div className="flex flex-col items-center">
+                  <div className="w-2 h-6 bg-emerald-400 rounded-full" />
+                  <span className="mt-1 text-slate-400">Wins</span>
+                  <span className="font-medium text-slate-700">
+                    {totalBids > 0 ? Math.round((winRate / 100) * totalBids) : 0}
+                  </span>
+                </div>
+                <div className="flex flex-col items-center">
+                  <div className="w-2 h-10 bg-rose-300 rounded-full" />
+                  <span className="mt-1 text-slate-400">Losses</span>
+                  <span className="font-medium text-slate-700">
+                    {totalBids > 0 ? totalBids - Math.round((winRate / 100) * totalBids) : 0}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              As you log more decisions, Quant will trend your competitiveness and margin discipline.
+            </p>
+          </div>
+        </div>
+      </div>
+
+        {/* Calendar Modal */}
+        <BidProductionScheduleModal
+          companyId={companyId}
+          isOpen={isCalendarModalOpen}
+          onClose={() => setIsCalendarModalOpen(false)}
+        />
       </div>
     </div>
   );

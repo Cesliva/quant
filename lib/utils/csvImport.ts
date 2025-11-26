@@ -6,6 +6,62 @@
 import { EstimatingLine } from "@/components/estimating/EstimatingGrid";
 
 /**
+ * Export estimating lines to CSV
+ */
+export function exportLinesToCSV(lines: EstimatingLine[]): void {
+  if (lines.length === 0) {
+    alert("No lines to export");
+    return;
+  }
+
+  // Generate header row
+  const headers = CSV_COLUMNS.map(col => col.displayName);
+  
+  // Generate data rows
+  const rows = lines.map(line => {
+    return CSV_COLUMNS.map(col => {
+      const value = line[col.field];
+      
+      // Handle different data types
+      if (value === null || value === undefined) {
+        return "";
+      }
+      
+      if (col.type === "boolean") {
+        return value ? "true" : "false";
+      }
+      
+      if (col.type === "number") {
+        return String(value);
+      }
+      
+      // String values - escape quotes and wrap in quotes if contains comma, quote, or newline
+      const stringValue = String(value);
+      if (stringValue.includes(",") || stringValue.includes('"') || stringValue.includes("\n")) {
+        return `"${stringValue.replace(/"/g, '""')}"`;
+      }
+      
+      return stringValue;
+    });
+  });
+  
+  // Combine headers and rows
+  const csvRows = [headers, ...rows];
+  const csvContent = csvRows.map(row => row.join(",")).join("\n");
+  
+  // Create and download file
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `Quant_Estimate_Export_${new Date().toISOString().split("T")[0]}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+/**
  * CSV Template Column Definitions
  * Maps field names to display names and indicates required fields
  */
