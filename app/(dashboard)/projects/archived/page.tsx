@@ -221,7 +221,7 @@ export default function ArchivedProjectsPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handleRestore(project.id, project.name)}
+                          onClick={() => handleRestore(project.id, project.name || "Untitled Project")}
                           className="border-green-300 text-green-700 hover:bg-green-50"
                         >
                           Restore
