@@ -296,7 +296,7 @@ export default function DashboardPage() {
 
   const upcomingBids = activeProjects
     .filter((p) => p.status === "active" && p.bidDate && !p.archived)
-    .sort((a, b) => new Date(a.bidDate).getTime() - new Date(b.bidDate).getTime())
+    .sort((a, b) => new Date(a.bidDate!).getTime() - new Date(b.bidDate!).getTime())
     .slice(0, 3);
 
   const activeProjectsList = activeProjects.filter((p) => !p.archived);
