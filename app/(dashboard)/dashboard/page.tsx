@@ -777,7 +777,7 @@ export default function DashboardPage() {
                       archived: false,
                     };
                     
-                    await setDocument(projectsPath, project.id, dataToRestore, true);
+                    await setDocument(`${projectsPath}/${project.id}`, dataToRestore, true);
                   } catch (error: any) {
                     console.error("Error restoring project:", error);
                     alert(`Failed to restore project: ${error?.message || "Please try again."}`);

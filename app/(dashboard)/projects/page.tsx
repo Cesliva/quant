@@ -141,7 +141,7 @@ export default function ProjectsPage() {
         archived: false,
       };
 
-      await setDocument(projectsPath, projectId, dataToRestore, true);
+      await setDocument(`${projectsPath}/${projectId}`, dataToRestore, true);
     } catch (error: any) {
       console.error("Error restoring project:", error);
       alert(`Failed to restore project: ${error?.message || "Please try again."}`);

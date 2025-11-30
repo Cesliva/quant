@@ -81,7 +81,7 @@ export default function ArchivedProjectsPage() {
       };
       
       console.log("Restoring project:", projectId, "Data:", dataToRestore);
-      await setDocument(projectsPath, projectId, dataToRestore, true);
+      await setDocument(`${projectsPath}/${projectId}`, dataToRestore, true);
       
       // Wait a moment for Firestore to propagate
       await new Promise(resolve => setTimeout(resolve, 500));
