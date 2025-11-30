@@ -22,6 +22,9 @@ interface Project {
   gcId?: string;
   projectType?: string;
   bidDueDate?: string;
+  bidDate?: string;
+  name?: string;
+  gc?: string;
   status?: string;
   isSampleData?: boolean;
   archived?: boolean;
