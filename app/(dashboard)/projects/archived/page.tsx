@@ -15,6 +15,9 @@ interface Project {
   projectNumber?: string;
   generalContractor?: string;
   bidDueDate?: string;
+  bidDate?: string;
+  name?: string;
+  gc?: string;
   status?: string;
   isSampleData?: boolean;
   archived?: boolean;
