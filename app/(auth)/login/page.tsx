@@ -38,33 +38,36 @@ export default function LoginPage() {
         const { query, collection, where, getDocs } = await import("firebase/firestore");
         const { db } = await import("@/lib/firebase/config");
         
-        // Query all companies to find where this user is a member
-        const companiesRef = collection(db, "companies");
-        const companiesSnapshot = await getDocs(companiesRef);
-        
-        let companyId = "unknown";
-        for (const companyDoc of companiesSnapshot.docs) {
-          const membersRef = collection(db, `companies/${companyDoc.id}/members`);
-          const memberQuery = query(membersRef, where("userId", "==", user.uid));
-          const memberSnapshot = await getDocs(memberQuery);
+        // Only proceed if db is configured
+        if (db) {
+          // Query all companies to find where this user is a member
+          const companiesRef = collection(db, "companies");
+          const companiesSnapshot = await getDocs(companiesRef);
           
-          if (!memberSnapshot.empty) {
-            companyId = companyDoc.id;
-            break;
+          let companyId = "unknown";
+          for (const companyDoc of companiesSnapshot.docs) {
+            const membersRef = collection(db, `companies/${companyDoc.id}/members`);
+            const memberQuery = query(membersRef, where("userId", "==", user.uid));
+            const memberSnapshot = await getDocs(memberQuery);
+            
+            if (!memberSnapshot.empty) {
+              companyId = companyDoc.id;
+              break;
+            }
           }
+          
+          // Log audit trail for login
+          await createAuditLog(
+            companyId,
+            'LOGIN',
+            'USER',
+            user.uid,
+            user,
+            {
+              entityName: user.email || user.uid,
+            }
+          );
         }
-        
-        // Log audit trail for login
-        await createAuditLog(
-          companyId,
-          'LOGIN',
-          'USER',
-          user.uid,
-          user,
-          {
-            entityName: user.email || user.uid,
-          }
-        );
       } catch (auditError) {
         // Don't fail login if audit logging fails
         console.error("Failed to log login audit:", auditError);
