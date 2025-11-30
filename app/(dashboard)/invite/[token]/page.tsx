@@ -61,7 +61,8 @@ export default function InviteAcceptancePage() {
           const invitationsSnapshot = await getDocs(invitationsQuery);
           
           if (!invitationsSnapshot.empty) {
-            const inv = { id: invitationsSnapshot.docs[0].id, ...invitationsSnapshot.docs[0].data() };
+            const docData = invitationsSnapshot.docs[0].data() as { status?: string; expiresAt?: any; [key: string]: any };
+            const inv = { id: invitationsSnapshot.docs[0].id, ...docData };
             
             if (inv.status === "accepted") {
               setError("This invitation has already been accepted");
