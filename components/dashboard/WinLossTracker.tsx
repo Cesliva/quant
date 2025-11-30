@@ -201,7 +201,7 @@ export default function WinLossTracker({ companyId }: WinLossTrackerProps) {
       };
 
       if (editingRecord?.id) {
-        await updateDocument(`${recordsPath}/${editingRecord.id}`, recordData);
+        await updateDocument(recordsPath, editingRecord.id, recordData);
       } else {
         recordData.createdAt = new Date();
         await createDocument(recordsPath, recordData);
@@ -225,7 +225,7 @@ export default function WinLossTracker({ companyId }: WinLossTrackerProps) {
 
     try {
       const recordsPath = `companies/${companyId}/winLossRecords`;
-      await deleteDocument(`${recordsPath}/${recordId}`);
+      await deleteDocument(recordsPath, recordId);
     } catch (error: any) {
       console.error("Failed to delete record:", error);
       alert(`Failed to delete record: ${error.message}`);

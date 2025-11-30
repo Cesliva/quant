@@ -202,7 +202,7 @@ export default function ImportQuotesPage() {
     try {
       // Delete from Firestore
       const quotesPath = `companies/${companyId}/quoteDocuments`;
-      await deleteDocument(`${quotesPath}/${quoteId}`);
+      await deleteDocument(quotesPath, quoteId);
       
       // Delete from Firebase Storage if storage path exists
       if (storagePath) {

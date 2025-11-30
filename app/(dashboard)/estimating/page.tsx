@@ -312,11 +312,11 @@ function EstimatingContent() {
           // Reverse the action
           if (action.type === "create" && action.documentId) {
             // Undo create = delete
-            await deleteDocument(`${linesPath}/${action.documentId}`);
+            await deleteDocument(linesPath, action.documentId);
             console.log(`Undo: Deleted line ${action.lineId}`);
           } else if (action.type === "update" && action.documentId && action.previousState) {
             // Undo update = restore previous state
-            await updateDocument(`${linesPath}/${action.documentId}`, action.previousState);
+            await updateDocument(linesPath, action.documentId, action.previousState);
             console.log(`Undo: Restored line ${action.lineId}`);
           } else if (action.type === "delete" && action.documentId && action.previousState) {
             // Undo delete = recreate
@@ -340,11 +340,11 @@ function EstimatingContent() {
             console.log(`Redo: Recreated line ${action.lineId}`);
           } else if (action.type === "update" && action.documentId && action.newState) {
             // Redo update = re-apply update
-            await updateDocument(`${linesPath}/${action.documentId}`, action.newState);
+            await updateDocument(linesPath, action.documentId, action.newState);
             console.log(`Redo: Re-applied update to line ${action.lineId}`);
           } else if (action.type === "delete" && action.documentId) {
             // Redo delete = delete again
-            await deleteDocument(`${linesPath}/${action.documentId}`);
+            await deleteDocument(linesPath, action.documentId);
             console.log(`Redo: Deleted line ${action.lineId}`);
           }
           return;
@@ -390,7 +390,7 @@ function EstimatingContent() {
           // Store previous state for undo
           const previousState = { ...lineToEdit };
           
-          await updateDocument(`${linesPath}/${lineToEdit.id}`, editCmd.updates);
+          await updateDocument(linesPath, lineToEdit.id, editCmd.updates);
           
           // Track update action for undo
           voiceCommandHistory.addAction({
@@ -492,7 +492,7 @@ function EstimatingContent() {
         // Store previous state for undo
         const previousState = { ...lineToEdit };
         
-        await updateDocument(`${linesPath}/${lineToEdit.id}`, editCmd.updates);
+        await updateDocument(linesPath, lineToEdit.id, editCmd.updates);
         
         // Track update action for undo
         voiceCommandHistory.addAction({

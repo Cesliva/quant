@@ -484,7 +484,7 @@ export default function EstimatingPage() {
           // Store previous state for undo
           const previousState = { ...lineToEdit };
           
-          await updateDocument(`${linesPath}/${lineToEdit.id}`, editCmd.updates);
+          await updateDocument(linesPath, lineToEdit.id, editCmd.updates);
           
           // Track update action for undo
           voiceCommandHistory.addAction({
