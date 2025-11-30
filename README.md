@@ -4,17 +4,18 @@ A Next.js + Firebase + OpenAI web application for steel fabrication estimating w
 
 ## Features
 
-- Voice transcription for estimate input (OpenAI Whisper API)
 - AI-driven spec compliance review (GPT-4)
 - Automated proposal generation from project summaries (GPT-4)
 - Dynamic estimating grid with editable materials, plates, labor, and coatings
+- Real-time multi-user collaboration
+- Comprehensive audit trail system
 - Firestore backend with AI cost tracking and project management
 
 ## Tech Stack
 
 - **Frontend**: Next.js 14+ (App Router), TypeScript, TailwindCSS
 - **Backend**: Firebase (Firestore, Cloud Functions, Storage)
-- **AI Integration**: OpenAI GPT-4, Whisper
+- **AI Integration**: OpenAI GPT-4
 - **Hosting**: Vercel or Firebase Hosting
 
 ## Getting Started
@@ -78,7 +79,7 @@ To use Cloud Functions instead of API routes:
   /(dashboard)          # Protected dashboard routes
     /settings           # Company settings
     /projects/[id]      # Project-specific pages
-      /estimating       # Estimating grid with voice input
+      /estimating       # Estimating grid
       /spec-review      # AI spec compliance review
       /proposal         # Proposal generator
     /reports            # Reports dashboard
@@ -86,6 +87,7 @@ To use Cloud Functions instead of API routes:
   /ui                   # Reusable UI components
   /estimating           # Estimating-specific components
   /layout               # Layout components
+  /collaboration        # Multi-user collaboration components
 /lib
   /firebase             # Firebase configuration
   /openai               # OpenAI service layer
@@ -98,9 +100,13 @@ To use Cloud Functions instead of API routes:
 ## Development Phases
 
 - **Phase 0**: Core UI (Settings, Project Details, Grid, KPI) ✅
-- **Phase 1**: AI Integration (Voice, Spec Review, Proposal) ✅
-- **Phase 2**: Reporting & Audit Trail (Reports ✅, Audit Trail pending)
-- **Phase 3**: Optimization & Advanced Features (PWA, Multi-user, etc.)
+- **Phase 1**: AI Integration (Spec Review, Proposal) ✅
+- **Phase 2**: Reporting & Audit Trail ✅
+  - Reports dashboard ✅
+  - Audit Trail system ✅
+- **Phase 3**: Optimization & Advanced Features
+  - Multi-user collaboration ✅ (See `COLLABORATION_FEATURES.md`)
+  - PWA offline support 🔄 (Pending)
 
 ## Current Status
 
@@ -112,19 +118,32 @@ To use Cloud Functions instead of API routes:
 - Project Details form
 - Estimating Grid with real-time Firestore sync
 - KPI Summary ribbon
-- Voice transcription with Whisper API
 - AI Spec Review with GPT-4
 - Proposal Generator with GPT-4o-mini
 - AI Cost Tracking
 - Reports dashboard
 - Firebase Cloud Functions setup
+- **Audit Trail system** (See `AUDIT_TRAIL_DOCUMENTATION.md`)
+- **Multi-user collaboration** (See `COLLABORATION_FEATURES.md`)
+  - User presence tracking
+  - Edit locking system
+  - Activity feed
+  - Comments system
+  - Real-time notifications
+- CSV/PDF/Excel export functionality
+- Project assignment & permissions system (See `PROJECT_ASSIGNMENT_GUIDE.md`)
 
 🔄 **Pending Features:**
-- Audit Trail system
-- CSV/PDF export functionality
-- File upload and text extraction for spec review
-- Voice transcription line parsing
-- Enhanced authentication flow
-- Multi-user collaboration
 - PWA offline support
+- File upload and text extraction for spec review
+- Advanced audit log filtering and export
+
+## Documentation
+
+- **Quick Setup**: See `QUICK_FIREBASE_SETUP.md`
+- **Development Setup**: See `DEVELOPMENT_SETUP.md`
+- **Deployment Guide**: See `DEPLOYMENT_GUIDE.md`
+- **Audit Trail**: See `AUDIT_TRAIL_DOCUMENTATION.md`
+- **Collaboration Features**: See `COLLABORATION_FEATURES.md`
+- **Project Assignment**: See `PROJECT_ASSIGNMENT_GUIDE.md`
 
