@@ -186,7 +186,7 @@ export default function UsersManagementPage() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Team Members</h1>
           <p className="text-sm text-gray-600 mt-1">
-            Manage who has access to your company's projects
+            Manage who has access to your company&apos;s projects
           </p>
         </div>
         {canManageUsers && (

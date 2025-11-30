@@ -249,7 +249,7 @@ export default function EstimatingRowDetail({
             <option value="">Select...</option>
             {options.map((opt) => (
               <option key={opt} value={opt}>
-                {opt}"
+                {opt}&quot;
               </option>
             ))}
           </select>
@@ -508,9 +508,9 @@ export default function EstimatingRowDetail({
             </div>
             <div className="col-span-2">
               <label className="block text-xs font-medium text-gray-700 mb-1">
-                <span className="text-blue-600 font-bold">{getNumberFromField("itemDescription")}.</span> Item Description
+                <span className="text-blue-600 font-bold">{getNumberFromField("itemDescription")}.</span> Elevation
               </label>
-              {renderField("Item", "itemDescription", "text")}
+              {renderField("Elevation", "itemDescription", "text")}
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">

@@ -161,7 +161,7 @@ export default function InviteAcceptancePage() {
       );
 
       // Redirect to dashboard
-      router.push("/");
+      router.push("/dashboard");
     } catch (error: any) {
       console.error("Failed to accept invitation:", error);
       setError(error.message || "Failed to accept invitation");
@@ -217,7 +217,7 @@ export default function InviteAcceptancePage() {
               <XCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
               <h2 className="text-xl font-bold text-gray-900 mb-2">Invalid Invitation</h2>
               <p className="text-gray-600 mb-4">{error}</p>
-              <Button variant="outline" onClick={() => router.push("/")}>
+              <Button variant="outline" onClick={() => router.push("/dashboard")}>
                 Go to Dashboard
               </Button>
             </div>
@@ -237,7 +237,7 @@ export default function InviteAcceptancePage() {
           <div className="text-center mb-6">
             <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
             <p className="text-gray-600">
-              You've been invited to join as a <strong>{invitation?.role}</strong>
+              You&apos;ve been invited to join as a <strong>{invitation?.role}</strong>
             </p>
             <p className="text-sm text-gray-500 mt-2">{invitation?.email}</p>
           </div>

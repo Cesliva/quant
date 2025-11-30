@@ -449,7 +449,7 @@ export default function ImportQuotesPage() {
                           </div>
                         </div>
                         {quote.notes && (
-                          <p className="text-xs text-gray-600 mt-2 ml-8 italic">"{quote.notes}"</p>
+                          <p className="text-xs text-gray-600 mt-2 ml-8 italic">&quot;{quote.notes}&quot;</p>
                         )}
                         <p className="text-xs text-gray-400 mt-2 ml-8">
                           Uploaded {formatDate(quote.uploadedAt)}

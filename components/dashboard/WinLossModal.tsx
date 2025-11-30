@@ -567,7 +567,7 @@ export default function WinLossModal({ companyId, onClose }: WinLossModalProps) 
                         </div>
                       )}
                       {activeProjects.length === 0 && !showCustomProjectInput && (
-                        <p className="text-xs text-gray-500 mt-1">No active projects found. Select "+ Enter custom project name" to add one.</p>
+                        <p className="text-xs text-gray-500 mt-1">No active projects found. Select &quot;+ Enter custom project name&quot; to add one.</p>
                       )}
                     </div>
 
