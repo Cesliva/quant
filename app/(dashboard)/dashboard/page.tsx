@@ -26,6 +26,7 @@ interface Project {
   isSampleData?: boolean;
   archived?: boolean;
   winProbability?: number;
+  probabilityOfWin?: number;
   assignedEstimator?: string;
   estimatedHoursToCompletion?: number;
   estimatedStartDate?: string;
