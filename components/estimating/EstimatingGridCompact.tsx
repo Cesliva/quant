@@ -45,6 +45,9 @@ interface EstimatingGridCompactProps {
   };
   expandedRowId: string | null;
   onExpandedRowChange: (rowId: string | null) => void;
+  sortBy?: string;
+  sortDirection?: "asc" | "desc";
+  onSortChange?: (field: string) => void;
 }
 
 // Grade Info Tooltip Component
@@ -163,6 +166,9 @@ export default function EstimatingGridCompact({
   totals,
   expandedRowId,
   onExpandedRowChange,
+  sortBy,
+  sortDirection,
+  onSortChange,
 }: EstimatingGridCompactProps) {
   // State for filterable size dropdowns (per row)
   const [sizeFilters, setSizeFilters] = useState<Record<string, string>>({});
@@ -249,11 +255,31 @@ export default function EstimatingGridCompact({
     }
   };
 
-  const getStatusBadge = (status?: string) => {
-    if (status === "Void") {
-      return <span className="px-2 py-0.5 bg-red-100 text-red-800 text-xs rounded-full">Void</span>;
+  const getHashtagsDisplay = (hashtags?: string) => {
+    if (!hashtags || hashtags.trim() === "") {
+      return <span className="text-gray-400 text-xs">-</span>;
     }
-    return <span className="px-2 py-0.5 bg-green-100 text-green-800 text-xs rounded-full">Active</span>;
+    // Display hashtags, highlighting if they contain numbers (like #32)
+    const hashtagParts = hashtags.split(/\s+/).filter(h => h.trim() !== "");
+    return (
+      <div className="flex flex-wrap gap-1">
+        {hashtagParts.map((tag, idx) => {
+          const isNumbered = /#?\d+/.test(tag);
+          return (
+            <span
+              key={idx}
+              className={`px-2 py-0.5 text-xs rounded-full ${
+                isNumbered
+                  ? "bg-blue-100 text-blue-800 font-medium"
+                  : "bg-gray-100 text-gray-700"
+              }`}
+            >
+              {tag.startsWith("#") ? tag : `#${tag}`}
+            </span>
+          );
+        })}
+      </div>
+    );
   };
 
   const getTypeBadge = (type?: string) => {
@@ -282,7 +308,7 @@ export default function EstimatingGridCompact({
             <th className="sticky left-40 z-10 bg-gray-50 border-r-2 border-gray-300 px-3 py-3 text-left font-semibold text-xs uppercase">
               Detail #
             </th>
-            <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700 border-r border-gray-200">Item</th>
+            <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700 border-r border-gray-200">Elevation</th>
             <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700 border-r border-gray-200">Type</th>
             <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700 border-r border-gray-200">Spec</th>
             <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700 border-r border-gray-200">
@@ -299,7 +325,32 @@ export default function EstimatingGridCompact({
             <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700 bg-orange-50 border-r border-gray-200">Hardware ($)</th>
             <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700 bg-green-50 border-r border-gray-200">Labor (hrs)</th>
             <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700 bg-amber-50 border-r border-gray-200">Cost ($)</th>
-            <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700 border-r border-gray-200">Status</th>
+            <th 
+              className={`px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700 border-r border-gray-200 ${
+                lines.some(l => l.hashtags && l.hashtags.trim() !== "")
+                  ? "cursor-pointer hover:bg-gray-100 transition-colors"
+                  : "cursor-not-allowed opacity-60"
+              }`}
+              onClick={() => {
+                // Check if any lines have hashtags before sorting
+                const hasAnyHashtags = lines.some(l => l.hashtags && l.hashtags.trim() !== "");
+                if (hasAnyHashtags && onSortChange) {
+                  onSortChange("hashtags");
+                }
+              }}
+              title={
+                lines.some(l => l.hashtags && l.hashtags.trim() !== "")
+                  ? "Click to sort by hashtags"
+                  : "Add hashtags in the detailed view to enable sorting"
+              }
+            >
+              <div className="flex items-center gap-1">
+                Hashtags
+                {sortBy === "hashtags" && (
+                  <span className="text-blue-600">{sortDirection === "asc" ? "↑" : "↓"}</span>
+                )}
+              </div>
+            </th>
             <th className="sticky right-0 z-10 bg-gray-50 border-l-2 border-gray-300 px-3 py-3 text-center font-semibold text-xs uppercase">
               Actions
             </th>
@@ -382,7 +433,7 @@ export default function EstimatingGridCompact({
                       {line.detailNumber || "-"}
                     </td>
 
-                    {/* Item Description */}
+                    {/* Elevation */}
                     <td className="px-4 py-2 font-medium text-gray-900 border-r border-gray-200">
                       {isEditing ? (
                         <input
@@ -390,7 +441,7 @@ export default function EstimatingGridCompact({
                           value={displayLine.itemDescription || ""}
                           onChange={(e) => onChange("itemDescription", e.target.value, line)}
                           className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          placeholder="Item description"
+                          placeholder="Elevation"
                         />
                       ) : (
                         displayLine.itemDescription || "-"
@@ -591,8 +642,8 @@ export default function EstimatingGridCompact({
                       ${(displayLine.totalCost || 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}
                     </td>
 
-                    {/* Status */}
-                    <td className="px-4 py-2 border-r border-gray-200">{getStatusBadge(line.status)}</td>
+                    {/* Hashtags */}
+                    <td className="px-4 py-2 border-r border-gray-200">{getHashtagsDisplay(displayLine.hashtags)}</td>
 
                     {/* Actions */}
                     <td className="sticky right-0 z-10 bg-white border-l-2 border-gray-300 px-3 py-2">

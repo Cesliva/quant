@@ -12,11 +12,14 @@ import { EstimatingLine } from "@/components/estimating/EstimatingGrid";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
 import { exportToPDF, exportToExcel } from "@/lib/utils/export";
 import { useCompanyId } from "@/lib/hooks/useCompanyId";
+import { useAuth } from "@/lib/hooks/useAuth";
+import { createAuditLog } from "@/lib/utils/auditLog";
 
 function ReportsContent() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { user } = useAuth();
   
   // When accessed from /reports, params will be empty (no dynamic route)
   // params.id only exists if we're at /projects/[id]/reports
@@ -92,25 +95,25 @@ function ReportsContent() {
 
   // Helper functions to get values based on material type
   const getWeight = (line: EstimatingLine) => {
-    return line.materialType === "Rolled" 
+    return line.materialType === "Material" 
       ? (line.totalWeight || 0) 
       : (line.plateTotalWeight || 0);
   };
 
   const getSurfaceArea = (line: EstimatingLine) => {
-    return line.materialType === "Rolled"
+    return line.materialType === "Material"
       ? (line.totalSurfaceArea || 0)
       : (line.plateSurfaceArea || 0);
   };
 
   const getQuantity = (line: EstimatingLine) => {
-    return line.materialType === "Rolled"
+    return line.materialType === "Material"
       ? (line.qty || 0)
       : (line.plateQty || 0);
   };
 
   const getShapeDisplay = (line: EstimatingLine) => {
-    if (line.materialType === "Rolled") {
+    if (line.materialType === "Material") {
       return line.shapeType || "-";
     } else {
       return "Plate";
@@ -118,7 +121,7 @@ function ReportsContent() {
   };
 
   const getSizeDisplay = (line: EstimatingLine) => {
-    if (line.materialType === "Rolled") {
+    if (line.materialType === "Material") {
       return line.sizeDesignation || "-";
     } else {
       return line.thickness && line.width && line.plateLength
@@ -150,14 +153,64 @@ function ReportsContent() {
   const costPerSF = coatingTotal > 0 ? costTotal / coatingTotal : 0;
   const costPerHour = laborTotal > 0 ? costTotal / laborTotal : 0;
 
-  const handleExport = (type: "pdf" | "excel" | string) => {
+  const handleExport = async (type: "pdf" | "excel" | string) => {
       const currentProject = projects.find((p) => p.id === selectedProject);
       const projectName = currentProject?.name || "Project";
       
       if (type === "pdf") {
-        exportToPDF(lines, projectName, "Company");
+        try {
+          await exportToPDF(lines, projectName, "Company");
+          
+          // Log audit trail for PDF export
+          await createAuditLog(
+            companyId,
+            'EXPORT',
+            'EXPORT',
+            selectedProject || 'all',
+            user,
+            {
+              projectId: selectedProject,
+              entityName: `${projectName} - PDF Export`,
+              metadata: {
+                exportType: 'PDF',
+                lineCount: lines.length,
+              },
+            }
+          );
+        } catch (error: any) {
+          if (error.message === 'Save cancelled') {
+            return;
+          }
+          console.error("Failed to export PDF:", error);
+          alert(`Failed to export PDF: ${error.message}`);
+        }
       } else if (type === "excel") {
-        exportToExcel(lines, projectName, "Company");
+        try {
+          await exportToExcel(lines, projectName, "Company");
+          
+          // Log audit trail for Excel export
+          await createAuditLog(
+            companyId,
+            'EXPORT',
+            'EXPORT',
+            selectedProject || 'all',
+            user,
+            {
+              projectId: selectedProject,
+              entityName: `${projectName} - Excel Export`,
+              metadata: {
+                exportType: 'Excel',
+                lineCount: lines.length,
+              },
+            }
+          );
+        } catch (error: any) {
+          if (error.message === 'Save cancelled') {
+            return;
+          }
+          console.error("Failed to export Excel:", error);
+          alert(`Failed to export Excel: ${error.message}`);
+        }
     } else {
       // For category-specific exports, export filtered data as PDF
       let filteredLines = lines;
@@ -184,7 +237,33 @@ function ReportsContent() {
       
       // Export filtered lines as PDF
       if (filteredLines.length > 0) {
-        exportToPDF(filteredLines, `${projectName} - ${type}`, "Company");
+        try {
+          await exportToPDF(filteredLines, `${projectName} - ${type}`, "Company");
+          
+          // Log audit trail for filtered PDF export
+          await createAuditLog(
+            companyId,
+            'EXPORT',
+            'EXPORT',
+            selectedProject || 'all',
+            user,
+            {
+              projectId: selectedProject,
+              entityName: `${projectName} - ${type} PDF Export`,
+              metadata: {
+                exportType: 'PDF',
+                filterType: type,
+                lineCount: filteredLines.length,
+              },
+            }
+          );
+        } catch (error: any) {
+          if (error.message === 'Save cancelled') {
+            return;
+          }
+          console.error("Failed to export PDF:", error);
+          alert(`Failed to export PDF: ${error.message}`);
+        }
     } else {
         alert(`No data available for ${type} export`);
       }

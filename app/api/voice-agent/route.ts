@@ -13,7 +13,7 @@ interface EstimatingLine {
   itemDescription?: string;
   category?: string;
   subCategory?: string;
-  materialType?: "Rolled" | "Plate";
+  materialType?: "Material" | "Plate";
   shapeType?: string;
   sizeDesignation?: string;
   grade?: string;
@@ -332,7 +332,7 @@ Material Rates (optional overrides):
 - Coating Rate: coatingRate
 
 Material types:
-- "Rolled" for shapes like W, HSS, C, L, T
+- "Material" for shapes like W, HSS, C, L, T
 - "Plate" for plate materials
 
 Shape type mappings:
@@ -438,7 +438,7 @@ Always be conversational and natural. Use functions when ready to execute action
                 },
                 materialType: {
                   type: "string",
-                  enum: ["Rolled", "Plate"],
+                  enum: ["Material", "Plate"],
                   description: "Material type - 'Rolled' for shapes (W, HSS, C, L, T), 'Plate' for plates"
                 },
                 shapeType: {
@@ -590,7 +590,7 @@ Always be conversational and natural. Use functions when ready to execute action
                 itemDescription: { type: "string" },
                 category: { type: "string", enum: ["Columns", "Beams", "Misc Metals", "Plates"] },
                 subCategory: { type: "string" },
-                materialType: { type: "string", enum: ["Rolled", "Plate"] },
+                materialType: { type: "string", enum: ["Material", "Plate"] },
                 shapeType: { type: "string" },
                 sizeDesignation: { type: "string" },
                 grade: { type: "string" },

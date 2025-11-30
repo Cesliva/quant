@@ -44,6 +44,8 @@ import {
   type ProjectSettings,
 } from "@/lib/utils/settingsLoader";
 import { detectConflicts, resolveConflicts, smartMerge } from "@/lib/utils/conflictResolution";
+import { createAuditLog, createAuditChanges } from "@/lib/utils/auditLog";
+import { useAuth } from "@/lib/hooks/useAuth";
 
 // Expanded Estimating Line Interface
 export interface EstimatingLine {
@@ -152,6 +154,8 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
   const [editingLine, setEditingLine] = useState<Partial<EstimatingLine>>({});
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
   const [groupByMainMember, setGroupByMainMember] = useState<boolean>(false);
+  const [sortBy, setSortBy] = useState<string | undefined>(undefined);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const highlightedLineRef = useRef<HTMLTableRowElement | null>(null);
   
   // Track if we should add to history (skip for Firestore updates)
@@ -260,8 +264,85 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
     return [...sortedActive, ...sortedVoided];
   };
   
-  // Get display lines (grouped or sorted by line ID)
-  const displayLines = groupByMainMember ? groupLinesByMainMember(lines) : sortLinesByLineId(lines);
+  // Handle sort change
+  const handleSortChange = (field: string) => {
+    if (field === "hashtags") {
+      // Check if any lines have hashtags before sorting
+      const hasAnyHashtags = lines.some(l => l.hashtags && l.hashtags.trim() !== "");
+      if (!hasAnyHashtags) {
+        // No hashtags in any line, don't sort
+        setSortBy(undefined);
+        setSortDirection("asc");
+        return;
+      }
+    }
+    
+    if (sortBy === field) {
+      // Toggle direction if clicking same field
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      // New field, default to ascending
+      setSortBy(field);
+      setSortDirection("asc");
+    }
+  };
+
+  // Sort lines by hashtags
+  const sortLinesByHashtags = (linesToSort: EstimatingLine[]): EstimatingLine[] => {
+    // Separate active and voided lines
+    const activeLines = linesToSort.filter(l => l.status !== "Void");
+    const voidedLines = linesToSort.filter(l => l.status === "Void");
+    
+    // Sort active lines by hashtags
+    const sortedActive = [...activeLines].sort((a, b) => {
+      const aHashtags = (a.hashtags || "").toLowerCase().trim();
+      const bHashtags = (b.hashtags || "").toLowerCase().trim();
+      
+      // Empty hashtags go to the end
+      if (aHashtags === "" && bHashtags !== "") return 1;
+      if (aHashtags !== "" && bHashtags === "") return -1;
+      if (aHashtags === "" && bHashtags === "") return 0;
+      
+      // Compare hashtags
+      const comparison = aHashtags.localeCompare(bHashtags);
+      return sortDirection === "asc" ? comparison : -comparison;
+    });
+    
+    // Sort voided lines by hashtags (same logic)
+    const sortedVoided = [...voidedLines].sort((a, b) => {
+      const aHashtags = (a.hashtags || "").toLowerCase().trim();
+      const bHashtags = (b.hashtags || "").toLowerCase().trim();
+      
+      if (aHashtags === "" && bHashtags !== "") return 1;
+      if (aHashtags !== "" && bHashtags === "") return -1;
+      if (aHashtags === "" && bHashtags === "") return 0;
+      
+      const comparison = aHashtags.localeCompare(bHashtags);
+      return sortDirection === "asc" ? comparison : -comparison;
+    });
+    
+    // Return active lines first, then voided lines
+    return [...sortedActive, ...sortedVoided];
+  };
+
+  // Get display lines (grouped, sorted by line ID, or sorted by hashtags)
+  let displayLines: EstimatingLine[];
+  if (sortBy === "hashtags") {
+    // Only sort by hashtags if there are actually hashtags in the data
+    const hasAnyHashtags = lines.some(l => l.hashtags && l.hashtags.trim() !== "");
+    if (hasAnyHashtags) {
+      displayLines = sortLinesByHashtags(lines);
+    } else {
+      // No hashtags, revert to default sorting
+      displayLines = groupByMainMember ? groupLinesByMainMember(lines) : sortLinesByLineId(lines);
+      // Clear the sort state
+      if (sortBy === "hashtags") {
+        setSortBy(undefined);
+      }
+    }
+  } else {
+    displayLines = groupByMainMember ? groupLinesByMainMember(lines) : sortLinesByLineId(lines);
+  }
   
   // Debounce save operations
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -406,7 +487,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
         const number = parseInt(numberBufferRef.current, 10);
         if (number > 0 && number <= 50) {
           const targetLine = lines.find(l => l.id === (editingId || expandedRowId));
-          const materialType = targetLine?.materialType || editingLine.materialType as "Rolled" | "Plate" | undefined;
+          const materialType = targetLine?.materialType || editingLine.materialType as "Material" | "Plate" | undefined;
           const field = getFieldFromNumber(number, materialType);
           
           if (field && hasActiveRow) {
@@ -724,10 +805,23 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
 
     try {
       const linesPath = getProjectPath(companyId, projectId, "lines");
-      createDocument(linesPath, newLine).then((newId) => {
+      createDocument(linesPath, newLine).then(async (newId) => {
         // Add to local state for immediate UI update
         const addedLine = { ...newLine, id: newId };
         setLines([...lines, addedLine], true); // Add to history
+        
+        // Log audit trail for new line creation
+        await createAuditLog(
+          companyId,
+          'CREATE',
+          'ESTIMATE_LINE',
+          newLine.lineId,
+          user,
+          {
+            projectId,
+            entityName: newLine.itemDescription || newLine.lineId || 'Estimate Line',
+          }
+        );
         
         // In manual mode, automatically start editing the new line
         if (isManualMode && newId) {
@@ -833,6 +927,42 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
         }
         
         await updateDocument(linePath, editingId, dataToSave);
+        
+        // Log audit trail for estimate line update
+        if (currentLine) {
+          const changes = createAuditChanges(currentLine, dataToSave, [
+            'totalCost',
+            'materialCost',
+            'laborCost',
+            'coatingCost',
+            'materialRate',
+            'laborRate',
+            'coatingRate',
+            'qty',
+            'lengthFt',
+            'lengthIn',
+            'status',
+            'itemDescription',
+            'category',
+            'subCategory',
+          ] as (keyof EstimatingLine)[]);
+          
+          if (changes.length > 0) {
+            await createAuditLog(
+              companyId,
+              'UPDATE',
+              'ESTIMATE_LINE',
+              editingLine.lineId || editingId,
+              user,
+              {
+                projectId,
+                entityName: editingLine.itemDescription || editingLine.lineId || 'Estimate Line',
+                changes,
+              }
+            );
+          }
+        }
+        
         // Don't clear editing state in manual mode - keep it editable
         // The line will be updated via Firestore subscription
       } catch (error: any) {
@@ -873,6 +1003,19 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
           return;
         }
         
+        // Log audit trail before deleting
+        await createAuditLog(
+          companyId,
+          'DELETE',
+          'ESTIMATE_LINE',
+          lineToDelete.lineId || lineToDelete.id,
+          user,
+          {
+            projectId,
+            entityName: lineToDelete.itemDescription || lineToDelete.lineId || 'Estimate Line',
+          }
+        );
+        
         // Update local state immediately
         const updatedLines = lines.filter((l) => l.id !== lineId);
         setLines(updatedLines, true); // Add to history
@@ -895,9 +1038,23 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
     
     try {
       const linesPath = getProjectPath(companyId, projectId, "lines");
-      createDocument(linesPath, duplicated).then((newId) => {
+      createDocument(linesPath, duplicated).then(async (newId) => {
         const addedLine = { ...duplicated, id: newId };
         setLines([...lines, addedLine], true); // Add to history
+        
+        // Log audit trail for line duplication
+        await createAuditLog(
+          companyId,
+          'CREATE',
+          'ESTIMATE_LINE',
+          duplicated.lineId,
+          user,
+          {
+            projectId,
+            entityName: duplicated.itemDescription || duplicated.lineId || 'Estimate Line',
+            metadata: { duplicatedFrom: line.lineId },
+          }
+        );
       });
     } catch (error: any) {
       console.error("Failed to duplicate line:", error);
@@ -1007,8 +1164,17 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
     };
   }, [lines]);
 
-  const handleDownloadCSVTemplate = () => {
-    downloadCSVTemplate();
+  const handleDownloadCSVTemplate = async () => {
+    try {
+      await downloadCSVTemplate();
+    } catch (error: any) {
+      if (error.message === 'Save cancelled') {
+        // User cancelled - don't show error
+        return;
+      }
+      console.error("Failed to download CSV template:", error);
+      alert(`Failed to download CSV template: ${error.message}`);
+    }
   };
 
   const handleImportCSV = () => {
@@ -1245,7 +1411,35 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
           <Button 
             variant="outline" 
             size="sm" 
-            onClick={() => exportLinesToCSV(lines.filter(l => l.status !== "void"))} 
+            onClick={async () => {
+              try {
+                await exportLinesToCSV(lines.filter(l => l.status !== "void"));
+                
+                // Log audit trail for CSV export
+                await createAuditLog(
+                  companyId,
+                  'EXPORT',
+                  'EXPORT',
+                  projectId,
+                  user,
+                  {
+                    projectId,
+                    entityName: 'Estimate Lines',
+                    metadata: {
+                      exportType: 'CSV',
+                      lineCount: lines.filter(l => l.status !== "void").length,
+                    },
+                  }
+                );
+              } catch (error: any) {
+                if (error.message === 'Save cancelled') {
+                  // User cancelled - don't show error
+                  return;
+                }
+                console.error("Failed to export CSV:", error);
+                alert(`Failed to export CSV: ${error.message}`);
+              }
+            }} 
             className="flex items-center justify-center"
             title="Export active lines to CSV"
             disabled={lines.filter(l => l.status !== "void").length === 0}
@@ -1368,6 +1562,9 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
           totals={totals}
           expandedRowId={expandedRowId}
           onExpandedRowChange={setExpandedRowId}
+          sortBy={sortBy}
+          sortDirection={sortDirection}
+          onSortChange={handleSortChange}
         />
       </Card>
     </div>

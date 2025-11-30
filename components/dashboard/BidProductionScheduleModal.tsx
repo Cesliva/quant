@@ -82,6 +82,7 @@ interface BidProductionScheduleModalProps {
   companyId: string;
   isOpen: boolean;
   onClose: () => void;
+  asPage?: boolean; // If true, renders as a full page instead of modal
 }
 
 interface DailyTotalsEntry {
@@ -171,6 +172,7 @@ export default function BidProductionScheduleModal({
   companyId,
   isOpen,
   onClose,
+  asPage = false,
 }: BidProductionScheduleModalProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -815,20 +817,26 @@ export default function BidProductionScheduleModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex">
-      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative w-full max-w-6xl h-full ml-auto bg-white shadow-2xl flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+    <div className={asPage ? "min-h-screen bg-white" : "fixed inset-0 z-50 flex"}>
+      {!asPage && (
+        <>
+          <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+        </>
+      )}
+      <div className={asPage ? "w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6" : "relative w-full max-w-6xl h-full ml-auto bg-white shadow-2xl flex flex-col"}>
+        <div className={`flex items-center justify-between ${asPage ? "px-0 py-6 mb-6" : "px-6 py-4"} border-b border-gray-200`}>
           <div>
-            <p className="text-sm uppercase text-gray-500 tracking-wide">Executive Insight</p>
-            <h2 className="text-2xl font-semibold text-gray-900">Bid-Production Schedule</h2>
+            {!asPage && <p className="text-sm uppercase text-gray-500 tracking-wide">Executive Insight</p>}
+            <h2 className={`${asPage ? "text-4xl" : "text-2xl"} font-semibold text-gray-900`}>Bid & Production Schedule</h2>
             <p className="text-xs text-gray-500">
               Visualize awarded work against capacity to spot gaps or overloads before bidding.
             </p>
           </div>
-          <Button variant="ghost" onClick={onClose} className="text-gray-500 hover:text-gray-800">
-            <X className="w-5 h-5" />
-          </Button>
+          {!asPage && (
+            <Button variant="ghost" onClick={onClose} className="text-gray-500 hover:text-gray-800">
+              <X className="w-5 h-5" />
+            </Button>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-6">

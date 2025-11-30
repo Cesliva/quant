@@ -11,11 +11,11 @@ import { EstimatingLine } from "@/components/estimating/EstimatingGrid";
 /**
  * Export estimating lines to PDF
  */
-export function exportToPDF(
+export async function exportToPDF(
   lines: EstimatingLine[],
   projectName: string = "Project",
   companyName: string = "Company"
-) {
+): Promise<void> {
   const doc = new jsPDF();
   
   // Header
@@ -73,7 +73,7 @@ export function exportToPDF(
     weight: lines.reduce(
       (sum, line) =>
         sum +
-        (line.materialType === "Rolled"
+        (line.materialType === "Material"
           ? line.totalWeight || 0
           : line.plateTotalWeight || 0),
       0
@@ -88,18 +88,77 @@ export function exportToPDF(
   doc.text(`Total Labor: ${totals.labor.toFixed(2)} hrs`, 14, finalY + 16);
   doc.text(`Total Cost: $${totals.cost.toFixed(2)}`, 14, finalY + 22);
 
-  // Save PDF
-  doc.save(`${projectName}_Estimate_${new Date().toISOString().split("T")[0]}.pdf`);
+  // Save PDF using save dialog
+  const fileName = `${projectName}_Estimate_${new Date().toISOString().split("T")[0]}.pdf`;
+  const pdfBlob = doc.output('blob');
+  
+  await saveFileWithDialog(pdfBlob, fileName, "application/pdf", "pdf");
+}
+
+/**
+ * Helper function to save file with save dialog
+ */
+async function saveFileWithDialog(
+  content: string | Blob,
+  fileName: string,
+  mimeType: string,
+  fileExtension: string
+): Promise<void> {
+  // Try to use File System Access API (Chrome/Edge) for save dialog
+  if ('showSaveFilePicker' in window) {
+    try {
+      const fileHandle = await (window as any).showSaveFilePicker({
+        suggestedName: fileName,
+        types: [{
+          description: `${fileExtension.toUpperCase()} File`,
+          accept: {
+            [mimeType]: [`.${fileExtension}`],
+          },
+        }],
+      });
+
+      const writable = await fileHandle.createWritable();
+      if (content instanceof Blob) {
+        const buffer = await content.arrayBuffer();
+        await writable.write(buffer);
+      } else {
+        await writable.write(content);
+      }
+      await writable.close();
+      
+      // Success - file was saved to user's chosen location
+      return;
+    } catch (error: any) {
+      // User cancelled or error occurred, fall back to download
+      if (error.name !== 'AbortError') {
+        console.warn('File System Access API failed, falling back to download:', error);
+      } else {
+        // User cancelled - don't proceed with download
+        throw new Error('Save cancelled');
+      }
+    }
+  }
+
+  // Fallback: Standard blob download (will save to Downloads folder)
+  const blob = content instanceof Blob ? content : new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }
 
 /**
  * Export estimating lines to Excel
  */
-export function exportToExcel(
+export async function exportToExcel(
   lines: EstimatingLine[],
   projectName: string = "Project",
   companyName: string = "Company"
-) {
+): Promise<void> {
   // Prepare worksheet data
   const worksheetData = [
     // Header row
@@ -156,7 +215,7 @@ export function exportToExcel(
       lines.reduce(
         (sum, line) =>
           sum +
-          (line.materialType === "Rolled"
+          (line.materialType === "Material"
             ? line.totalWeight || 0
             : line.plateTotalWeight || 0),
         0
@@ -193,17 +252,19 @@ export function exportToExcel(
   // Add worksheet to workbook
   XLSX.utils.book_append_sheet(workbook, worksheet, "Estimate");
 
-  // Generate Excel file
-  XLSX.writeFile(
-    workbook,
-    `${projectName}_Estimate_${new Date().toISOString().split("T")[0]}.xlsx`
-  );
+  // Generate Excel file and save with dialog
+  const fileName = `${projectName}_Estimate_${new Date().toISOString().split("T")[0]}.xlsx`;
+  const excelBlob = new Blob([XLSX.write(workbook, { type: "array", bookType: "xlsx" })], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  
+  await saveFileWithDialog(excelBlob, fileName, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx");
 }
 
 /**
  * Export estimate summary/reports to PDF
  */
-export function exportReportsToPDF(
+export async function exportReportsToPDF(
   financials: {
     materialCost: number;
     laborCost: number;
@@ -881,17 +942,19 @@ export function exportReportsToPDF(
   doc.setTextColor(150, 150, 150);
   doc.text(`Generated: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`, 14, 290);
 
-  // Save PDF
+  // Save PDF using save dialog
   const fileName = projectNumber 
     ? `${projectNumber}_Summary_${new Date().toISOString().split("T")[0]}.pdf`
     : `${projectName}_Summary_${new Date().toISOString().split("T")[0]}.pdf`;
-  doc.save(fileName);
+  const pdfBlob = doc.output('blob');
+  
+  await saveFileWithDialog(pdfBlob, fileName, "application/pdf", "pdf");
 }
 
 /**
  * Export proposal text to PDF
  */
-export function exportProposalToPDF(
+export async function exportProposalToPDF(
   proposalText: string,
   projectName: string = "Project",
   projectNumber: string = "",
@@ -952,10 +1015,12 @@ export function exportProposalToPDF(
   doc.setTextColor(150, 150, 150);
   doc.text(`Generated: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`, 14, 290);
 
-  // Save PDF
+  // Save PDF using save dialog
   const fileName = projectNumber 
     ? `${projectNumber}_Proposal_${new Date().toISOString().split("T")[0]}.pdf`
     : `${projectName}_Proposal_${new Date().toISOString().split("T")[0]}.pdf`;
-  doc.save(fileName);
+  const pdfBlob = doc.output('blob');
+  
+  await saveFileWithDialog(pdfBlob, fileName, "application/pdf", "pdf");
 }
 

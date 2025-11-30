@@ -28,7 +28,24 @@ export function useUserPermissions() {
   const [permissions, setPermissions] = useState<UserPermissions>(DEFAULT_PERMISSIONS);
   const [loading, setLoading] = useState(true);
 
+  // Development bypass - give admin permissions
+  const bypassAuth = process.env.NEXT_PUBLIC_BYPASS_AUTH === "true" && process.env.NODE_ENV === "development";
+
   useEffect(() => {
+    // In bypass mode, give full admin permissions
+    if (bypassAuth) {
+      setPermissions({
+        canCreateProjects: true,
+        canEditProjects: true,
+        canDeleteProjects: true,
+        canViewReports: true,
+        canManageUsers: true,
+        role: "admin",
+      });
+      setLoading(false);
+      return;
+    }
+
     if (!user || !companyId || !isFirebaseConfigured()) {
       setPermissions(DEFAULT_PERMISSIONS);
       setLoading(false);
@@ -62,7 +79,7 @@ export function useUserPermissions() {
     };
 
     loadPermissions();
-  }, [user, companyId]);
+  }, [user, companyId, bypassAuth]);
 
   return { permissions, loading };
 }

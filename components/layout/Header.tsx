@@ -37,10 +37,10 @@ export default function Header() {
   };
 
   return (
-    <header className="bg-white border-b border-gray-200 px-6 py-4">
+    <header className="bg-white border-b border-gray-200 px-6 py-4 header-print-hide">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Link href="/" className="text-xl font-semibold text-gray-900 hover:text-blue-600 transition-colors">
+          <Link href="/dashboard" className="text-xl font-semibold text-gray-900 hover:text-blue-600 transition-colors">
             {getPageTitle()}
           </Link>
           <span className="text-gray-400">|</span>

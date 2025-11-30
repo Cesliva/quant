@@ -4,6 +4,11 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Quant Estimating AI",
   description: "Steel fabrication estimating software with AI integration",
+  icons: {
+    icon: "/graphics/logos/favicon-32x32.png",
+    shortcut: "/graphics/logos/favicon-32x32.png",
+    apple: "/graphics/logos/favicon-32x32.png",
+  },
 };
 
 export default function RootLayout({

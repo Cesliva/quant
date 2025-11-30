@@ -25,11 +25,14 @@ import {
 } from "@/lib/utils/settingsLoader";
 
 import { useCompanyId } from "@/lib/hooks/useCompanyId";
+import { useAuth } from "@/lib/hooks/useAuth";
+import { createAuditLog } from "@/lib/utils/auditLog";
 
 function EstimatingContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const companyId = useCompanyId();
+  const { user } = useAuth();
   
   const projectIdFromQuery = searchParams?.get("projectId") || "";
   const [selectedProject, setSelectedProject] = useState<string>(projectIdFromQuery);
@@ -126,7 +129,7 @@ function EstimatingContent() {
           itemDescription: "",
           category: "Misc Metals",
           subCategory: "",
-          materialType: "Rolled",
+          materialType: "Material",
           status: "Active",
           materialRate: defaultMaterialRate,
           laborRate: defaultLaborRate,
@@ -187,7 +190,7 @@ function EstimatingContent() {
             itemDescription: "",
             category: "Misc Metals",
             subCategory: "",
-            materialType: "Rolled",
+            materialType: "Material",
             status: "Active",
             materialRate: defaultMaterialRate,
             laborRate: defaultLaborRate,
@@ -746,6 +749,25 @@ function EstimatingContent() {
             onClick={async () => {
               try {
                 await exportToQuant(lines, selectedProject, companyId);
+                
+                // Log audit trail for Quant export
+                const currentProject = projects.find(p => p.id === selectedProject);
+                await createAuditLog(
+                  companyId,
+                  'EXPORT',
+                  'EXPORT',
+                  selectedProject || 'all',
+                  user,
+                  {
+                    projectId: selectedProject,
+                    entityName: `${currentProject?.name || selectedProject} - Quant Export`,
+                    metadata: {
+                      exportType: 'Quant',
+                      lineCount: lines.length,
+                    },
+                  }
+                );
+                
                 // Check if browser supports File System Access API
                 const supportsSaveDialog = 'showSaveFilePicker' in window;
                 if (supportsSaveDialog) {

@@ -32,7 +32,7 @@ import { getWeightPerFoot, getSurfaceAreaPerFoot } from "@/lib/utils/aiscShapes"
 export interface ParsedLine {
   lineId?: string; // Optional line ID from voice (e.g., "L4", "L10")
   itemDescription: string;
-  materialType: "Rolled" | "Plate";
+  materialType: "Material" | "Plate";
   shapeType?: string;
   sizeDesignation?: string;
   grade?: string;
@@ -162,7 +162,7 @@ function parseEditCommand(text: string): ParsedEditCommand | null {
     // Try parsing as a complete material description
     const parsed = parseSegment(afterEdit);
     if (parsed) {
-      if (parsed.materialType === "Rolled") {
+      if (parsed.materialType === "Material") {
         if (parsed.shapeType) updates.shapeType = parsed.shapeType as any;
         if (parsed.sizeDesignation) {
           updates.sizeDesignation = parsed.sizeDesignation;
@@ -448,7 +448,7 @@ function parsePlate(text: string): ParsedLine | null {
 function parseRolledMember(text: string): ParsedLine | null {
   const result: ParsedLine = {
     itemDescription: "",
-    materialType: "Rolled",
+    materialType: "Material",
     category: "Structural",
   };
 
@@ -611,7 +611,7 @@ export function createEstimatingLineFromParsed(
     coatingSystem: "None",
   };
 
-  if (parsed.materialType === "Rolled") {
+  if (parsed.materialType === "Material") {
     line.shapeType = parsed.shapeType as any;
     line.sizeDesignation = parsed.sizeDesignation;
     line.grade = parsed.grade || "A992";

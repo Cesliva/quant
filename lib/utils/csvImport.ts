@@ -6,9 +6,65 @@
 import { EstimatingLine } from "@/components/estimating/EstimatingGrid";
 
 /**
+ * Helper function to save file with save dialog
+ */
+async function saveFileWithDialog(
+  content: string | Blob,
+  fileName: string,
+  mimeType: string,
+  fileExtension: string
+): Promise<void> {
+  // Try to use File System Access API (Chrome/Edge) for save dialog
+  if ('showSaveFilePicker' in window) {
+    try {
+      const fileHandle = await (window as any).showSaveFilePicker({
+        suggestedName: fileName,
+        types: [{
+          description: `${fileExtension.toUpperCase()} File`,
+          accept: {
+            [mimeType]: [`.${fileExtension}`],
+          },
+        }],
+      });
+
+      const writable = await fileHandle.createWritable();
+      if (content instanceof Blob) {
+        const buffer = await content.arrayBuffer();
+        await writable.write(buffer);
+      } else {
+        await writable.write(content);
+      }
+      await writable.close();
+      
+      // Success - file was saved to user's chosen location
+      return;
+    } catch (error: any) {
+      // User cancelled or error occurred, fall back to download
+      if (error.name !== 'AbortError') {
+        console.warn('File System Access API failed, falling back to download:', error);
+      } else {
+        // User cancelled - don't proceed with download
+        throw new Error('Save cancelled');
+      }
+    }
+  }
+
+  // Fallback: Standard blob download (will save to Downloads folder)
+  const blob = content instanceof Blob ? content : new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+/**
  * Export estimating lines to CSV
  */
-export function exportLinesToCSV(lines: EstimatingLine[]): void {
+export async function exportLinesToCSV(lines: EstimatingLine[]): Promise<void> {
   if (lines.length === 0) {
     alert("No lines to export");
     return;
@@ -49,16 +105,17 @@ export function exportLinesToCSV(lines: EstimatingLine[]): void {
   const csvRows = [headers, ...rows];
   const csvContent = csvRows.map(row => row.join(",")).join("\n");
   
-  // Create and download file
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `Quant_Estimate_Export_${new Date().toISOString().split("T")[0]}.csv`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  const fileName = `Quant_Estimate_Export_${new Date().toISOString().split("T")[0]}.csv`;
+  
+  try {
+    await saveFileWithDialog(csvContent, fileName, "text/csv;charset=utf-8;", "csv");
+  } catch (error: any) {
+    if (error.message === 'Save cancelled') {
+      // User cancelled - don't show error
+      return;
+    }
+    throw error;
+  }
 }
 
 /**
@@ -208,17 +265,19 @@ export function generateCSVTemplate(): string {
 /**
  * Download CSV template file
  */
-export function downloadCSVTemplate(): void {
+export async function downloadCSVTemplate(): Promise<void> {
   const csvContent = generateCSVTemplate();
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `Quant_Estimate_Template_${new Date().toISOString().split("T")[0]}.csv`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  const fileName = `Quant_Estimate_Template_${new Date().toISOString().split("T")[0]}.csv`;
+  
+  try {
+    await saveFileWithDialog(csvContent, fileName, "text/csv;charset=utf-8;", "csv");
+  } catch (error: any) {
+    if (error.message === 'Save cancelled') {
+      // User cancelled - don't show error
+      return;
+    }
+    throw error;
+  }
 }
 
 /**

@@ -45,17 +45,21 @@ interface ProjectFile {
 }
 
 import { useCompanyId } from "@/lib/hooks/useCompanyId";
+import { useAuth } from "@/lib/hooks/useAuth";
 import { UserPresence } from "@/components/collaboration/UserPresence";
 import { ActivityFeed } from "@/components/collaboration/ActivityFeed";
 import { CommentsPanel } from "@/components/collaboration/CommentsPanel";
 import { ProjectAssignment } from "@/components/projects/ProjectAssignment";
 import { logActivity } from "@/lib/utils/activityLogger";
+import { syncProjectToWinLoss } from "@/lib/utils/syncWinLossRecord";
+import { createAuditLog, createAuditChanges } from "@/lib/utils/auditLog";
 
 export default function ProjectDetailsPage() {
   const params = useParams();
   const router = useRouter();
   const projectId = params.id as string;
   const companyId = useCompanyId();
+  const { user } = useAuth();
   const isNewProject = projectId === "new";
   
   const [project, setProject] = useState({
@@ -98,6 +102,7 @@ export default function ProjectDetailsPage() {
   const [selectedOwnerContact, setSelectedOwnerContact] = useState<string>("");
   const [selectedGCContact, setSelectedGCContact] = useState<string>("");
   const [originalProjectNumber, setOriginalProjectNumber] = useState<string>("");
+  const [originalStatus, setOriginalStatus] = useState<string>("");
 
   // Load company contacts
   useEffect(() => {
@@ -143,11 +148,13 @@ export default function ProjectDetailsPage() {
         const projectData = await getDocument(projectPath);
         
         if (projectData) {
+          const status = projectData.status || "draft";
+          setOriginalStatus(status);
           setProject({
             projectNumber: projectData.projectNumber || "",
             projectName: projectData.projectName || "",
             projectType: projectData.projectType || "",
-            status: projectData.status || "draft",
+            status: status,
             owner: projectData.owner || "",
             generalContractor: projectData.generalContractor || "",
             gcContact: projectData.gcContact || "",
@@ -345,12 +352,67 @@ export default function ProjectDetailsPage() {
         const projectsPath = `companies/${companyId}/projects`;
         const newProjectId = await createDocument(projectsPath, projectData);
         
+        // Log audit trail for project creation
+        await createAuditLog(
+          companyId,
+          'CREATE',
+          'PROJECT',
+          newProjectId,
+          user,
+          {
+            entityName: projectData.projectName || 'New Project',
+          }
+        );
+        
         // Redirect to the new project dashboard
         router.push(`/projects/${newProjectId}`);
       } else {
         // Update existing project
         const projectPath = getProjectPath(companyId, projectId);
+        
+        // Get original project data for audit trail
+        const originalProject = await getDocument(projectPath);
+        
         await updateDocument(`companies/${companyId}/projects`, projectId, projectData);
+        
+        // Log audit trail for project update
+        if (originalProject) {
+          const changes = createAuditChanges(originalProject, projectData, [
+            'projectName',
+            'projectNumber',
+            'status',
+            'estimatedValue',
+            'bidDueDate',
+            'generalContractor',
+            'projectType',
+          ]);
+          
+          if (changes.length > 0) {
+            await createAuditLog(
+              companyId,
+              'UPDATE',
+              'PROJECT',
+              projectId,
+              user,
+              {
+                projectId,
+                entityName: projectData.projectName || projectId,
+                changes,
+              }
+            );
+          }
+        }
+        
+        // Sync to win/loss records if status changed to "won" or "lost"
+        if ((projectData.status === "won" || projectData.status === "lost") && projectData.status !== originalStatus) {
+          await syncProjectToWinLoss(companyId, {
+            ...projectData,
+            id: projectId,
+          }, originalStatus);
+        }
+        
+        // Update original status for next save
+        setOriginalStatus(projectData.status || "draft");
         
         // Log activity
         await logActivity(companyId, projectId, "updated_project");

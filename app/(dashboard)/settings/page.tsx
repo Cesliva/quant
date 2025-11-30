@@ -6,8 +6,7 @@ import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
-import { Save, Building2, DollarSign, Package, Paintbrush, Settings2, Plus, Trash2, Info, AlertCircle, TrendingUp, BookOpen } from "lucide-react";
-import CompanyAddressBook from "@/components/settings/CompanyAddressBook";
+import { Save, Building2, DollarSign, Package, Paintbrush, Settings2, Plus, Trash2, Info, AlertCircle, TrendingUp } from "lucide-react";
 import { 
   loadCompanySettings, 
   saveCompanySettings, 
@@ -16,8 +15,12 @@ import {
 } from "@/lib/utils/settingsLoader";
 import { validateCompanySettings, getFieldError, type ValidationError } from "@/lib/utils/validation";
 import { useCompanyId } from "@/lib/hooks/useCompanyId";
+import { useUserPermissions } from "@/lib/hooks/useUserPermissions";
+import { useAuth } from "@/lib/hooks/useAuth";
+import { useRouter } from "next/navigation";
+import { createAuditLog, createAuditChanges } from "@/lib/utils/auditLog";
 
-type TabType = "company" | "labor" | "material" | "coating" | "markup" | "advanced" | "executive" | "addressbook";
+type TabType = "company" | "labor" | "material" | "coating" | "markup" | "advanced" | "executive";
 
 interface LaborRate {
   id: string;
@@ -34,14 +37,18 @@ interface MaterialGrade {
 interface CoatingType {
   id: string;
   type: string;
-  costPerSF: number;
+  costPerSF?: number;
+  costPerPound?: number;
 }
 
 function SettingsPageContent() {
   const companyId = useCompanyId();
+  const router = useRouter();
+  const { user } = useAuth();
+  const { permissions, loading: permissionsLoading } = useUserPermissions();
   const searchParams = useSearchParams();
   const tabParam = searchParams?.get("tab") as TabType | null;
-  const [activeTab, setActiveTab] = useState<TabType>(tabParam && ["company", "labor", "material", "coating", "markup", "advanced", "executive", "addressbook"].includes(tabParam) ? tabParam : "company");
+  const [activeTab, setActiveTab] = useState<TabType>(tabParam && ["company", "labor", "material", "coating", "markup", "advanced", "executive"].includes(tabParam) ? tabParam : "company");
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved">("unsaved");
@@ -73,7 +80,7 @@ function SettingsPageContent() {
   ]);
 
   const [coatingTypes, setCoatingTypes] = useState<CoatingType[]>([
-    { id: "1", type: "Galvanized", costPerSF: 2.50 },
+    { id: "1", type: "Galvanizing", costPerPound: 0.15 },
     { id: "2", type: "Paint (Primer + Topcoat)", costPerSF: 3.25 },
     { id: "3", type: "Powder Coat", costPerSF: 4.00 },
     { id: "4", type: "None", costPerSF: 0 },
@@ -173,6 +180,7 @@ function SettingsPageContent() {
             id: index.toString(),
             type: coating.type,
             costPerSF: coating.costPerSF,
+            costPerPound: coating.costPerPound,
           }))
         );
       }
@@ -224,7 +232,7 @@ function SettingsPageContent() {
 
   // Update active tab when URL parameter changes
   useEffect(() => {
-    if (tabParam && ["company", "labor", "material", "coating", "markup", "advanced", "executive", "addressbook"].includes(tabParam)) {
+    if (tabParam && ["company", "labor", "material", "coating", "markup", "advanced", "executive"].includes(tabParam)) {
       setActiveTab(tabParam as TabType);
     }
   }, [tabParam]);
@@ -296,7 +304,38 @@ function SettingsPageContent() {
         pipelineRanges: pipelineRanges,
       };
 
+      // Get original settings for audit trail
+      const originalSettings = await loadCompanySettings(companyId);
+      
       await saveCompanySettings(companyId, settingsToSave);
+      
+      // Log audit trail for settings update
+      if (originalSettings) {
+        const changes = createAuditChanges(originalSettings, settingsToSave, [
+          'materialRate',
+          'laborRate',
+          'coatingRate',
+          'overheadPercentage',
+          'profitPercentage',
+          'materialWasteFactor',
+          'laborWasteFactor',
+        ] as (keyof CompanySettings)[]);
+        
+        if (changes.length > 0) {
+          await createAuditLog(
+            companyId,
+            'UPDATE',
+            'SETTINGS',
+            'company',
+            user,
+            {
+              entityName: 'Company Settings',
+              changes,
+            }
+          );
+        }
+      }
+      
       setSaveStatus("saved");
       setTimeout(() => setSaveStatus("unsaved"), 3000);
     } catch (error) {
@@ -418,10 +457,27 @@ function SettingsPageContent() {
     { id: "material" as TabType, label: "Material Costs", icon: Package },
     { id: "coating" as TabType, label: "Coating Rates", icon: Paintbrush },
     { id: "markup" as TabType, label: "Markup & Fees", icon: DollarSign },
-    { id: "addressbook" as TabType, label: "Address Book", icon: BookOpen },
     { id: "executive" as TabType, label: "Executive Dashboard", icon: TrendingUp },
     { id: "advanced" as TabType, label: "Advanced", icon: Settings2 },
   ];
+
+  // Check if user is admin - redirect if not
+  useEffect(() => {
+    if (!permissionsLoading && permissions.role !== "admin") {
+      router.push("/dashboard");
+    }
+  }, [permissions, permissionsLoading, router]);
+
+  if (permissionsLoading || permissions.role !== "admin") {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -833,9 +889,11 @@ function SettingsPageContent() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {coatingTypes.map((coating) => (
+                {coatingTypes.map((coating) => {
+                  const isGalvanizing = coating.type.toLowerCase().includes("galv");
+                  return (
                   <div key={coating.id} className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
-                    <div className="flex-1 grid grid-cols-2 gap-4">
+                    <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                           Coating Type
@@ -845,26 +903,57 @@ function SettingsPageContent() {
                           onChange={(e) =>
                             updateCoatingType(coating.id, "type", e.target.value)
                           }
-                          placeholder="e.g., Galvanized, Paint"
+                          placeholder="e.g., Galvanizing, Paint"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Cost per Square Foot ($/SF)
+                          Cost per Pound ($/lb) {isGalvanizing && <span className="text-blue-600">*</span>}
                         </label>
                         <div className="relative">
                           <span className="absolute left-3 top-2 text-gray-500">$</span>
                           <Input
                             type="number"
                             step="0.01"
-                            value={coating.costPerSF}
+                            value={coating.costPerPound ?? ""}
                             onChange={(e) =>
-                              updateCoatingType(coating.id, "costPerSF", parseFloat(e.target.value) || 0)
+                              updateCoatingType(coating.id, "costPerPound", parseFloat(e.target.value) || undefined)
                             }
                             placeholder="0.00"
                             className="pl-8"
                           />
                         </div>
+                        {isGalvanizing && (
+                          <p className="text-xs text-gray-500 mt-1">Default for galvanizing</p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Cost per Square Foot ($/SF) <span className="text-gray-400 text-xs">(optional)</span>
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-2 text-gray-500">$</span>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={coating.costPerSF ?? ""}
+                            onChange={(e) => {
+                              const value = parseFloat(e.target.value) || undefined;
+                              if (value !== undefined && value > 0) {
+                                // If costPerSF is entered, convert to costPerPound (overwrite)
+                                // Rough conversion: 1 lb ≈ 0.24 SF for typical steel
+                                const costPerPound = value * 0.24;
+                                updateCoatingType(coating.id, "costPerSF", value);
+                                updateCoatingType(coating.id, "costPerPound", costPerPound);
+                              } else {
+                                updateCoatingType(coating.id, "costPerSF", undefined);
+                              }
+                            }}
+                            placeholder="0.00"
+                            className="pl-8"
+                          />
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">Overwrites cost per lb if entered</p>
                       </div>
                     </div>
                     {coatingTypes.length > 1 && (
@@ -877,7 +966,8 @@ function SettingsPageContent() {
                       </button>
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
@@ -1384,12 +1474,6 @@ function SettingsPageContent() {
           </div>
         )}
 
-        {/* Address Book Tab */}
-        {activeTab === "addressbook" && (
-          <div className="space-y-6">
-            <CompanyAddressBook companyId={companyId} compact={false} />
-          </div>
-        )}
 
         {/* Advanced Tab */}
         {activeTab === "advanced" && (

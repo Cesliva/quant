@@ -54,23 +54,32 @@ export default function WinLossWidget({ companyId, className }: WinLossWidgetPro
     return () => unsubscribe();
   }, [companyId]);
 
-  // Calculate statistics
+  // Filter records from last 90 days
+  const ninetyDaysAgo = new Date();
+  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+  
+  const recentRecords = records.filter((r) => {
+    const decisionDate = r.decisionDate ? new Date(r.decisionDate) : null;
+    return decisionDate && decisionDate >= ninetyDaysAgo;
+  });
+
+  // Calculate statistics from last 90 days
   const stats = {
-    totalBids: records.length,
-    wins: records.filter(r => r.status === "won").length,
-    losses: records.filter(r => r.status === "lost").length,
-    winRate: records.length > 0 
-      ? (records.filter(r => r.status === "won").length / records.length) * 100 
+    totalBids: recentRecords.length,
+    wins: recentRecords.filter(r => r.status === "won").length,
+    losses: recentRecords.filter(r => r.status === "lost").length,
+    winRate: recentRecords.length > 0 
+      ? (recentRecords.filter(r => r.status === "won").length / recentRecords.length) * 100 
       : 0,
     averageMargin: (() => {
-      const wonRecords = records.filter(r => r.status === "won" && r.margin);
+      const wonRecords = recentRecords.filter(r => r.status === "won" && r.margin);
       if (wonRecords.length === 0) return 0;
       const totalMargin = wonRecords.reduce((sum, r) => sum + (r.margin || 0), 0);
       return totalMargin / wonRecords.length;
     })(),
   };
 
-  // Get last 6 months of data for mini chart
+  // Get last 6 months of data for mini chart (using recent records)
   const getLast6MonthsData = () => {
     const months: string[] = [];
     const wonData: number[] = [];
@@ -83,7 +92,7 @@ export default function WinLossWidget({ companyId, className }: WinLossWidgetPro
       
       months.push(monthLabel);
       
-      const monthRecords = records.filter(r => {
+      const monthRecords = recentRecords.filter(r => {
         const recordDate = new Date(r.decisionDate);
         return recordDate.getMonth() === date.getMonth() && 
                recordDate.getFullYear() === date.getFullYear();

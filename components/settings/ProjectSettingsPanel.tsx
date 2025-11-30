@@ -1132,7 +1132,13 @@ export default function ProjectSettingsPanel({ companyId, projectId, compact = f
                       }
                     }
                   }}
-                  placeholder={companySettings?.coatingTypes?.[0] ? `Default: $${companySettings.coatingTypes[0].costPerSF}/SF` : "Company default"}
+                  placeholder={companySettings?.coatingTypes?.[0] ? 
+                    (companySettings.coatingTypes[0].costPerPound !== undefined 
+                      ? `Default: $${companySettings.coatingTypes[0].costPerPound}/lb` 
+                      : companySettings.coatingTypes[0].costPerSF !== undefined
+                        ? `Default: $${companySettings.coatingTypes[0].costPerSF}/SF`
+                        : "Company default")
+                    : "Company default"}
                 />
               </div>
             </div>

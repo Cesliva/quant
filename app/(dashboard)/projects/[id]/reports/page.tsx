@@ -183,21 +183,29 @@ export default function ProjectReportsPage() {
             <Button 
               variant="outline" 
               size="sm"
-              onClick={() => {
+              onClick={async () => {
                 if (reportsData && project) {
-                  exportReportsToPDF(
-                    reportsData.financials,
-                    reportsData.metrics,
-                    project.projectName || "Untitled Project",
-                    project.projectNumber || "",
-                    companyName,
-                    reportsData.buyouts,
-                    {
-                      projectType: project.projectType,
-                      projectTypeSubCategory: project.projectTypeSubCategory,
-                      probabilityOfWin: project.probabilityOfWin
+                  try {
+                    await exportReportsToPDF(
+                      reportsData.financials,
+                      reportsData.metrics,
+                      project.projectName || "Untitled Project",
+                      project.projectNumber || "",
+                      companyName,
+                      reportsData.buyouts,
+                      {
+                        projectType: project.projectType,
+                        projectTypeSubCategory: project.projectTypeSubCategory,
+                        probabilityOfWin: project.probabilityOfWin
+                      }
+                    );
+                  } catch (error: any) {
+                    if (error.message === 'Save cancelled') {
+                      return;
                     }
-                  );
+                    console.error("Failed to export PDF:", error);
+                    alert(`Failed to export PDF: ${error.message}`);
+                  }
                 }
               }}
               disabled={!reportsData}

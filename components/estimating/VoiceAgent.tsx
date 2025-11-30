@@ -750,7 +750,7 @@ export default function VoiceAgent({
           lineId: finalLineId,
           itemDescription: "",
           category: "Misc Metals",
-          materialType: "Rolled",
+          materialType: "Material",
           status: "Active",
         };
         
@@ -812,7 +812,7 @@ export default function VoiceAgent({
       // Check for issues
       const warnings: string[] = [];
       if (!accumulatedData.itemDescription) warnings.push("Missing item description");
-      if (!accumulatedData.sizeDesignation && accumulatedData.materialType === "Rolled") warnings.push("Missing size");
+      if (!accumulatedData.sizeDesignation && accumulatedData.materialType === "Material") warnings.push("Missing size");
       if (!accumulatedData.qty || accumulatedData.qty <= 0) warnings.push("Missing quantity");
       
       if (warnings.length > 0) {

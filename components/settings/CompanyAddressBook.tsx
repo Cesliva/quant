@@ -22,6 +22,7 @@ interface Contact {
   state?: string;
   zip?: string;
   notes?: string;
+  usageCount?: number; // Track how many times this contact has been used in projects
 }
 
 interface CompanyAddressBookProps {
@@ -30,7 +31,8 @@ interface CompanyAddressBookProps {
 }
 
 export default function CompanyAddressBook({ companyId, compact = false }: CompanyAddressBookProps) {
-  const [isExpanded, setIsExpanded] = useState(false); // Start collapsed by default
+  const [isExpanded, setIsExpanded] = useState(!compact); // Expanded by default when not compact
+  const [showAllContacts, setShowAllContacts] = useState(false); // Show all or just top 20
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved">("unsaved");
@@ -55,7 +57,12 @@ export default function CompanyAddressBook({ companyId, compact = false }: Compa
           if (snapshot.exists()) {
             const data = snapshot.data();
             if (data && data.contacts) {
-              setContacts(data.contacts as Contact[]);
+              // Ensure all contacts have usageCount initialized
+              const contactsWithUsage = (data.contacts as Contact[]).map(contact => ({
+                ...contact,
+                usageCount: contact.usageCount || 0,
+              }));
+              setContacts(contactsWithUsage);
             } else {
               setContacts([]);
             }
@@ -241,24 +248,65 @@ export default function CompanyAddressBook({ companyId, compact = false }: Compa
             <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
               <Users className="w-4 h-4" />
               Contacts ({contacts.length})
+              {!showAllContacts && contacts.length > 20 && (
+                <span className="text-xs text-gray-500 font-normal">
+                  (Showing top 20 most used)
+                </span>
+              )}
             </h3>
-            <Button variant="outline" size="sm" onClick={handleAddNew}>
-              <Plus className="w-4 h-4 mr-2" />
-              Add Contact
-            </Button>
+            <div className="flex items-center gap-2">
+              {contacts.length > 20 && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setShowAllContacts(!showAllContacts)}
+                >
+                  {showAllContacts ? "Show Top 20" : "View All"}
+                </Button>
+              )}
+              <Button variant="outline" size="sm" onClick={handleAddNew}>
+                <Plus className="w-4 h-4 mr-2" />
+                Add Contact
+              </Button>
+            </div>
           </div>
 
           {/* Contact List */}
-          {contacts.length === 0 && !editingContact && (
-            <div className="text-center py-8 text-gray-500">
-              <BookOpen className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-              <p className="text-sm">No contacts yet. Add your first contact to get started.</p>
-            </div>
-          )}
-
-          {/* Contact Cards */}
-          <div className="space-y-4">
-            {contacts.map((contact) => (
+          {(() => {
+            // Sort contacts by usage count (descending), then by type priority, then by name
+            const sortedContacts = [...contacts].sort((a, b) => {
+              // First sort by usage count (higher is better)
+              const aUsage = a.usageCount || 0;
+              const bUsage = b.usageCount || 0;
+              if (aUsage !== bUsage) {
+                return bUsage - aUsage;
+              }
+              // Then by type priority (contractor > customer > vendor > other)
+              const typePriority: Record<string, number> = { contractor: 1, customer: 2, vendor: 3, other: 4 };
+              const aPriority = typePriority[a.type] || 4;
+              const bPriority = typePriority[b.type] || 4;
+              if (aPriority !== bPriority) {
+                return aPriority - bPriority;
+              }
+              // Finally by name
+              return (a.name || "").localeCompare(b.name || "");
+            });
+            
+            // Show top 20 if not showing all
+            const displayedContacts = showAllContacts ? sortedContacts : sortedContacts.slice(0, 20);
+            
+            if (displayedContacts.length === 0 && !editingContact) {
+              return (
+                <div className="text-center py-8 text-gray-500">
+                  <BookOpen className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                  <p className="text-sm">No contacts yet. Add your first contact to get started.</p>
+                </div>
+              );
+            }
+            
+            return (
+              <div className="space-y-4">
+                {displayedContacts.map((contact) => (
               <div key={contact.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
                 {editingContact?.id === contact.id ? (
                   // Edit Mode
@@ -580,7 +628,9 @@ export default function CompanyAddressBook({ companyId, compact = false }: Compa
                 </div>
               </div>
             )}
-          </div>
+              </div>
+            );
+          })()}
 
           {/* Save All Button */}
           {saveStatus !== "saved" && (

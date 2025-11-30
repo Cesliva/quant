@@ -53,3 +53,53 @@ body {
   }
 }
 
+/* Print styles - Hide sidebar and header when printing */
+@media print {
+  /* Hide sidebar */
+  .sidebar-print-hide,
+  aside,
+  [class*="sidebar"],
+  [class*="Sidebar"] {
+    display: none !important;
+  }
+  
+  /* Hide header */
+  .header-print-hide,
+  header,
+  [class*="header"],
+  [class*="Header"] {
+    display: none !important;
+  }
+  
+  /* Make main content full width */
+  main,
+  [class*="main"] {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  
+  /* Adjust flex containers for print - only for layout containers */
+  .flex.min-h-screen {
+    display: block !important;
+  }
+  
+  /* Make content area full width */
+  .flex-1 {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  
+  /* Remove page margins and padding */
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  
+  /* Ensure content takes full width */
+  [class*="max-w"] {
+    max-width: 100% !important;
+  }
+}
+

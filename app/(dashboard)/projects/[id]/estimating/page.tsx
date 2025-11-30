@@ -25,6 +25,8 @@ import {
 } from "@/lib/utils/settingsLoader";
 
 import { useCompanyId } from "@/lib/hooks/useCompanyId";
+import { useAuth } from "@/lib/hooks/useAuth";
+import { createAuditLog } from "@/lib/utils/auditLog";
 import { UserPresence } from "@/components/collaboration/UserPresence";
 import { ActivityFeed } from "@/components/collaboration/ActivityFeed";
 import { CommentsPanel } from "@/components/collaboration/CommentsPanel";
@@ -35,6 +37,7 @@ export default function EstimatingPage() {
   const searchParams = useSearchParams();
   const projectId = params.id as string;
   const companyId = useCompanyId();
+  const { user } = useAuth();
   const lineIdFromUrl = searchParams.get("lineId");
   
   const [lines, setLines] = useState<EstimatingLine[]>([]);
@@ -212,7 +215,7 @@ export default function EstimatingPage() {
           itemDescription: "",
           category: "Misc Metals",
           subCategory: "",
-          materialType: "Rolled",
+          materialType: "Material",
           status: "Active",
           materialRate: defaultMaterialRate,
           laborRate: defaultLaborRate,
@@ -281,7 +284,7 @@ export default function EstimatingPage() {
             itemDescription: "",
             category: "Misc Metals",
             subCategory: "",
-            materialType: "Rolled",
+            materialType: "Material",
             status: "Active",
             materialRate: defaultMaterialRate,
             laborRate: defaultLaborRate,
@@ -714,7 +717,7 @@ export default function EstimatingPage() {
             </Button>
           </Link>
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Estimating Workspace</h1>
+            <h1 className="text-3xl font-bold text-gray-900">Structural Steel Estimate</h1>
             <p className="text-sm text-gray-600 mt-1">
               {projectNumber ? `${projectNumber} - ` : ""}{projectName || projectId || "N/A"}
             </p>
@@ -743,6 +746,24 @@ export default function EstimatingPage() {
             onClick={async () => {
               try {
                 await exportToQuant(lines, projectId, companyId);
+                
+                // Log audit trail for Quant export
+                await createAuditLog(
+                  companyId,
+                  'EXPORT',
+                  'EXPORT',
+                  projectId,
+                  user,
+                  {
+                    projectId,
+                    entityName: `${projectName || projectId} - Quant Export`,
+                    metadata: {
+                      exportType: 'Quant',
+                      lineCount: lines.length,
+                    },
+                  }
+                );
+                
                 // Check if browser supports File System Access API
                 const supportsSaveDialog = 'showSaveFilePicker' in window;
                 if (supportsSaveDialog) {

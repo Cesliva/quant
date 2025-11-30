@@ -434,7 +434,7 @@ function parseMaterialValue(text: string): Partial<EstimatingLine> | null {
   if (rolledMatch) {
     result.shapeType = rolledMatch[1] as any;
     result.sizeDesignation = `${rolledMatch[1]}${rolledMatch[2]}X${rolledMatch[3]}`.toUpperCase();
-    result.materialType = "Rolled";
+    result.materialType = "Material";
     return result;
   }
 
@@ -443,7 +443,7 @@ function parseMaterialValue(text: string): Partial<EstimatingLine> | null {
   if (hssMatch) {
     result.shapeType = "HSS";
     result.sizeDesignation = `HSS${hssMatch[1]}X${hssMatch[2]}X${hssMatch[3]}`.toUpperCase();
-    result.materialType = "Rolled";
+    result.materialType = "Material";
     return result;
   }
 
@@ -498,7 +498,7 @@ export function createLineFromStructuredData(
     itemDescription: accumulatedData.itemDescription || "",
     category: accumulatedData.category || "Misc Metals",
     subCategory: accumulatedData.subCategory || "",
-    materialType: accumulatedData.materialType || "Rolled",
+    materialType: accumulatedData.materialType || "Material",
     materialRate: defaultMaterialRate,
     laborRate: defaultLaborRate,
     coatingRate: defaultCoatingRate,
@@ -509,7 +509,7 @@ export function createLineFromStructuredData(
   Object.assign(line, accumulatedData);
 
   // Calculate weights if we have size designation
-  if (line.sizeDesignation && line.materialType === "Rolled") {
+  if (line.sizeDesignation && line.materialType === "Material") {
     line.weightPerFoot = getWeightPerFoot(line.sizeDesignation);
     line.surfaceAreaPerFoot = getSurfaceAreaPerFoot(line.sizeDesignation);
     

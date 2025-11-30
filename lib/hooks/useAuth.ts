@@ -12,7 +12,22 @@ export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Development bypass: Set NEXT_PUBLIC_BYPASS_AUTH=true in .env.local to bypass authentication
+  const bypassAuth = process.env.NEXT_PUBLIC_BYPASS_AUTH === "true" && process.env.NODE_ENV === "development";
+
   useEffect(() => {
+    if (bypassAuth) {
+      // Create a mock user object for development
+      const mockUser = {
+        uid: "dev-user",
+        email: "dev@quant.com",
+        displayName: "Dev User",
+      } as User;
+      setUser(mockUser);
+      setLoading(false);
+      return;
+    }
+
     if (!auth) {
       setLoading(false);
       return;
@@ -24,7 +39,7 @@ export function useAuth() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [bypassAuth]);
 
   const signIn = async (email: string, password: string) => {
     if (!auth) {

@@ -30,7 +30,7 @@ export interface CompanySettings {
   companyInfo?: CompanyInfo;
   materialGrades: Array<{ grade: string; costPerPound: number }>;
   laborRates: Array<{ trade: string; rate: number }>;
-  coatingTypes: Array<{ type: string; costPerSF: number }>;
+  coatingTypes: Array<{ type: string; costPerSF?: number; costPerPound?: number }>;
   markupSettings: {
     overheadPercentage: number;
     profitPercentage: number;
@@ -97,7 +97,7 @@ const DEFAULT_SETTINGS: CompanySettings = {
     { type: "Zinc Primer", costPerSF: 1.25 },
     { type: "Paint", costPerSF: 2.50 }, // Cost per gallon × coverage (typically 400 SF/gallon)
     { type: "Powder Coat", costPerSF: 3.50 }, // Cost per gallon × coverage
-    { type: "Galvanizing", costPerSF: 0.15 }, // Cost per pound (converted to SF equivalent for default)
+    { type: "Galvanizing", costPerPound: 0.15 }, // Cost per pound (default for galvanizing)
     { type: "Specialty Coating", costPerSF: 5.00 },
   ],
   markupSettings: {
@@ -248,6 +248,7 @@ export function getLaborRate(
 
 /**
  * Get coating rate for a specific coating type
+ * Prefers costPerPound for galvanizing, falls back to costPerSF
  */
 export function getCoatingRate(
   coatingType: string | undefined,
@@ -261,7 +262,15 @@ export function getCoatingRate(
     (c) => c.type.toLowerCase() === coatingType.toLowerCase()
   );
   
-  return coating?.costPerSF || 0;
+  if (!coating) return 0;
+  
+  // For galvanizing, prefer costPerPound, otherwise use costPerSF
+  const isGalvanizing = coatingType.toLowerCase().includes("galv");
+  if (isGalvanizing && coating.costPerPound !== undefined) {
+    return coating.costPerPound;
+  }
+  
+  return coating.costPerSF || 0;
 }
 
 /**

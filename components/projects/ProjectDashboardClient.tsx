@@ -27,6 +27,7 @@ import {
   AlertCircle,
   Archive,
   Sparkles,
+  Package,
 } from "lucide-react";
 import {
   getDocument,
@@ -40,6 +41,7 @@ import { isFirebaseConfigured } from "@/lib/firebase/config";
 import ProjectSettingsPanel from "@/components/settings/ProjectSettingsPanel";
 import { onSnapshot } from "firebase/firestore";
 import { useCompanyId } from "@/lib/hooks/useCompanyId";
+import { syncProjectToWinLoss } from "@/lib/utils/syncWinLossRecord";
 
 interface Project {
   id?: string;
@@ -148,7 +150,7 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
           totalWeight: activeLines.reduce(
             (sum, line) =>
               sum +
-              (line.materialType === "Rolled"
+              (line.materialType === "Material"
                 ? line.totalWeight || 0
                 : line.plateTotalWeight || 0),
             0
@@ -279,7 +281,7 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
         <div className="text-center py-12">
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Project Not Found</h1>
           <p className="text-gray-600 mb-6">The project you're looking for doesn't exist.</p>
-          <Link href="/">
+          <Link href="/dashboard">
             <Button variant="outline">
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back to Company Dashboard
@@ -297,14 +299,14 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
 
   const quickActions = [
     {
-      name: "Estimating",
+      name: "Structural Steel Estimate",
       href: `/projects/${projectId}/estimating`,
       icon: ClipboardList,
       description: "Build your estimate",
       color: "bg-blue-500 hover:bg-blue-600",
     },
     {
-      name: "Estimating Summary",
+      name: "Structural Steel Estimate Summary",
       href: `/projects/${projectId}/reports`,
       icon: FileText,
       description: "Finalize estimate before proposal",
@@ -711,10 +713,21 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
                       }
 
                       try {
+                        const oldStatus = project.status;
                         const projectPath = getProjectPath(companyId, projectId);
                         await updateDocument(`companies/${companyId}/projects`, projectId, {
                           status: status,
                         });
+                        
+                        // Sync to win/loss records if status is "won" or "lost"
+                        if (status === "won" || status === "lost") {
+                          await syncProjectToWinLoss(companyId, {
+                            ...project,
+                            id: projectId,
+                            status: status,
+                          }, oldStatus);
+                        }
+                        
                         // Status will update via the real-time subscription
                       } catch (error: any) {
                         console.error("Failed to update project status:", error);

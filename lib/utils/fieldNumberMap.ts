@@ -76,7 +76,7 @@ export const FIELD_NUMBER_MAP: FieldNumberMapping[] = [
 /**
  * Get field name from number
  */
-export function getFieldFromNumber(number: number, materialType?: "Rolled" | "Plate"): keyof import("@/components/estimating/EstimatingGrid").EstimatingLine | null {
+export function getFieldFromNumber(number: number, materialType?: "Material" | "Plate"): keyof import("@/components/estimating/EstimatingGrid").EstimatingLine | null {
   // Handle material-specific fields (7-12)
   if (number >= 7 && number <= 12 && materialType === "Plate") {
     const plateMap: Record<number, keyof import("@/components/estimating/EstimatingGrid").EstimatingLine> = {
@@ -154,7 +154,7 @@ function convertNumberWordToDigit(text: string): string {
  * - "number one column"
  * - "number one s 2.0" (for "1. S2.0")
  */
-export function parseNumberFieldFormat(text: string, materialType?: "Rolled" | "Plate"): { field: keyof import("@/components/estimating/EstimatingGrid").EstimatingLine | null; value: string } | null {
+export function parseNumberFieldFormat(text: string, materialType?: "Material" | "Plate"): { field: keyof import("@/components/estimating/EstimatingGrid").EstimatingLine | null; value: string } | null {
   // First, convert number words to digits
   const normalizedText = convertNumberWordToDigit(text);
   
