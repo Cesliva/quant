@@ -200,8 +200,8 @@ export default function ArchivedProjectsPage() {
                               Sample
                             </span>
                           )}
-                          <span className={`px-2 py-0.5 rounded-md text-xs font-medium flex-shrink-0 ${getStatusColor(project.status)}`}>
-                            {project.status.charAt(0).toUpperCase() + project.status.slice(1)}
+                          <span className={`px-2 py-0.5 rounded-md text-xs font-medium flex-shrink-0 ${getStatusColor(project.status || "draft")}`}>
+                            {(project.status || "draft").charAt(0).toUpperCase() + (project.status || "draft").slice(1)}
                           </span>
                           <span className="px-2 py-0.5 rounded-md text-xs font-medium flex-shrink-0 bg-gray-200 text-gray-700">
                             Archived
