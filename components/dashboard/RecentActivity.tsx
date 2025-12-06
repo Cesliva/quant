@@ -29,27 +29,28 @@ export default function RecentActivity({ companyId, projectId, limit = 10 }: Rec
     const unsubscribe = subscribeToCollection<AuditLog>(
       auditLogsPath,
       (logs) => {
-        // Filter by project if specified
-        let filteredLogs = logs;
-        if (projectId) {
-          filteredLogs = logs.filter(log => log.projectId === projectId);
+        try {
+          // Filter by project if specified
+          let filteredLogs = logs;
+          if (projectId) {
+            filteredLogs = logs.filter(log => log.projectId === projectId);
+          }
+          
+          // Sort by timestamp (newest first) and limit
+          const sorted = filteredLogs
+            .sort((a, b) => {
+              const timeA = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();
+              const timeB = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime();
+              return timeB - timeA;
+            })
+            .slice(0, limit);
+          
+          setActivities(sorted);
+          setLoading(false);
+        } catch (error) {
+          console.error("Error processing audit logs:", error);
+          setLoading(false);
         }
-        
-        // Sort by timestamp (newest first) and limit
-        const sorted = filteredLogs
-          .sort((a, b) => {
-            const timeA = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();
-            const timeB = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime();
-            return timeB - timeA;
-          })
-          .slice(0, limit);
-        
-        setActivities(sorted);
-        setLoading(false);
-      },
-      (error) => {
-        console.error("Error loading audit logs:", error);
-        setLoading(false);
       }
     );
 

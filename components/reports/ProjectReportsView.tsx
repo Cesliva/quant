@@ -404,11 +404,11 @@ export default function ProjectReportsView({ companyId, projectId, project, onDa
       // Get rates (use stored or calculate from settings)
       const grade = line.materialType === "Material" ? line.grade : line.plateGrade;
       const materialRate = line.materialRate || 
-        (projectSettings?.materialRate || getMaterialRateForGrade(grade, companySettings));
+        (projectSettings?.materialRate || (companySettings ? getMaterialRateForGrade(grade, companySettings) : 0));
       const laborRate = line.laborRate || 
-        (projectSettings?.laborRate || getLaborRate(undefined, companySettings));
+        (projectSettings?.laborRate || (companySettings ? getLaborRate(undefined, companySettings) : 0));
       const coatingRate = line.coatingRate || 
-        (projectSettings?.coatingRate || getCoatingRate(line.coatingSystem, companySettings));
+        (projectSettings?.coatingRate || (companySettings ? getCoatingRate(line.coatingSystem, companySettings) : 0));
 
       // Calculate total weight
       const totalWeight = line.materialType === "Material" 
@@ -438,12 +438,18 @@ export default function ProjectReportsView({ companyId, projectId, project, onDa
 
       // Calculate line totalCost using the same method as estimating grid
       // This matches what's shown in the estimate summary
+      const defaultSettings: CompanySettings = {
+        materialGrades: [],
+        laborRates: [],
+        coatingTypes: [],
+        markupSettings: { materialWasteFactor: 5, laborWasteFactor: 10, overheadPercentage: 15, profitPercentage: 10, salesTaxRate: 0, useTaxRate: 0 }
+      };
       const lineTotalCost = line.totalCost || calculateTotalCostWithMarkup(
         materialCost,
         laborCost,
         coatingCost,
         hardwareCost,
-        companySettings || { markupSettings: { materialWasteFactor: 5, laborWasteFactor: 10, overheadPercentage: 15, profitPercentage: 10 }, coatingTypes: [] },
+        companySettings || defaultSettings,
         projectSettings || undefined
       );
 
@@ -485,6 +491,7 @@ export default function ProjectReportsView({ companyId, projectId, project, onDa
       laborCost,
       coatingCost,
       hardwareCost,
+      buyouts: financials.buyouts,
       subtotal,
       overheadPercentage: financials.overheadPercentage,
       overheadAmount,

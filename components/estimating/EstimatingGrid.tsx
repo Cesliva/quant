@@ -140,6 +140,9 @@ interface EstimatingGridProps {
 }
 
 export default function EstimatingGrid({ companyId, projectId, isManualMode = false, highlightLineId }: EstimatingGridProps) {
+  // Auth hook for user context
+  const { user } = useAuth();
+  
   // Undo/Redo state management
   const {
     state: lines,
@@ -169,11 +172,11 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
       if (line) {
         // Expand the row if it's not already expanded
         if (expandedRowId !== line.id) {
-          setExpandedRowId(line.id);
+          setExpandedRowId(line.id || null);
         }
         // Set editing state to make it editable
         if (editingId !== line.id) {
-          setEditingId(line.id);
+          setEditingId(line.id || null);
           setEditingLine(line);
         }
         // Scroll to the line after a short delay to allow DOM to update
@@ -1140,7 +1143,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
       totalLabor: activeLines.reduce((sum, line) => sum + (line.totalLabor || 0), 0),
       totalQuantity: activeLines.reduce((sum, line) => {
         // For Material, use qty; for Plate, use plateQty (or qty if plateQty not set)
-        let qty = 0;
+        let qty: number | string = 0;
         if (line.materialType === "Plate") {
           qty = line.plateQty !== undefined && line.plateQty !== null ? line.plateQty : (line.qty !== undefined && line.qty !== null ? line.qty : 0);
         } else {
@@ -1336,14 +1339,16 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
           lineToImport.hardwareCost = importHardwareQty * importHardwareCostPerSet;
 
           // Calculate total cost with markup
-          lineToImport.totalCost = calculateTotalCostWithMarkup(
-            lineToImport.materialCost || 0,
-            lineToImport.laborCost || 0,
-            lineToImport.coatingCost || 0,
-            lineToImport.hardwareCost || 0,
-            companySettings,
-            projectSettings || undefined
-          );
+          if (companySettings) {
+            lineToImport.totalCost = calculateTotalCostWithMarkup(
+              lineToImport.materialCost || 0,
+              lineToImport.laborCost || 0,
+              lineToImport.coatingCost || 0,
+              lineToImport.hardwareCost || 0,
+              companySettings,
+              projectSettings || undefined
+            );
+          }
 
           // Create document in Firestore
           await createDocument(linesPath, lineToImport);
@@ -1413,7 +1418,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
             size="sm" 
             onClick={async () => {
               try {
-                await exportLinesToCSV(lines.filter(l => l.status !== "void"));
+                await exportLinesToCSV(lines.filter(l => l.status !== "Void"));
                 
                 // Log audit trail for CSV export
                 await createAuditLog(
@@ -1427,7 +1432,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
                     entityName: 'Estimate Lines',
                     metadata: {
                       exportType: 'CSV',
-                      lineCount: lines.filter(l => l.status !== "void").length,
+                      lineCount: lines.filter(l => l.status !== "Void").length,
                     },
                   }
                 );
@@ -1442,7 +1447,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
             }} 
             className="flex items-center justify-center"
             title="Export active lines to CSV"
-            disabled={lines.filter(l => l.status !== "void").length === 0}
+            disabled={lines.filter(l => l.status !== "Void").length === 0}
           >
             <Download className="w-4 h-4 mr-2" />
             Export CSV
@@ -1472,7 +1477,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
                 Redo
               </Button>
               <Button
-                variant={groupByMainMember ? "default" : "outline"}
+                variant={groupByMainMember ? "primary" : "outline"}
                 size="sm"
                 onClick={() => setGroupByMainMember(!groupByMainMember)}
                 title={groupByMainMember ? "Sort by Line ID (L1, L2, L3...)" : "Group small parts under main members"}
