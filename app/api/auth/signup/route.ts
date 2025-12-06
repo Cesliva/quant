@@ -1,17 +1,72 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { auth } from "@/lib/firebase/config";
-import { setDocument } from "@/lib/firebase/firestore";
+import { setDocument, getDocument } from "@/lib/firebase/firestore";
+
+// Beta access codes - stored in Firebase for easy management
+// To disable beta access, set enabled to false in Firebase
+// To add/remove codes, update the codes array in Firebase
+async function validateBetaAccess(betaCode: string | undefined): Promise<{ valid: boolean; error?: string }> {
+  try {
+    // Check if beta access is enabled
+    const betaConfig = await getDocument<{
+      enabled: boolean;
+      codes: string[];
+      message?: string;
+    }>("betaAccess/config");
+
+    // If no config exists, allow signups (open beta/public)
+    if (!betaConfig) {
+      return { valid: true };
+    }
+
+    // If beta access is disabled (enabled: false), require a code
+    if (betaConfig.enabled === false) {
+      if (!betaCode || betaCode.trim() === "") {
+        return {
+          valid: false,
+          error: betaConfig.message || "Beta access code is required. Please contact support for access.",
+        };
+      }
+
+      // Check if code is valid
+      const validCodes = betaConfig.codes || [];
+      const trimmedCode = betaCode.trim();
+      if (!validCodes.includes(trimmedCode)) {
+        return {
+          valid: false,
+          error: "Invalid beta access code. Please contact support for access.",
+        };
+      }
+    }
+
+    // If enabled is true or undefined, codes are optional - allow signup
+    return { valid: true };
+  } catch (error) {
+    // If there's an error reading config, allow signup (fail open)
+    console.warn("Error validating beta access, allowing signup:", error);
+    return { valid: true };
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { email, password, name, companyName } = body;
+    const { email, password, name, companyName, betaAccessCode } = body;
 
     if (!email || !password || !name || !companyName) {
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 }
+      );
+    }
+
+    // Validate beta access code if provided
+    const betaValidation = await validateBetaAccess(betaAccessCode);
+    if (!betaValidation.valid) {
+      return NextResponse.json(
+        { error: betaValidation.error },
+        { status: 403 }
       );
     }
 

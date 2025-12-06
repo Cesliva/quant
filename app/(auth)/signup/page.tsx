@@ -13,6 +13,7 @@ export default function SignupPage() {
     password: "",
     confirmPassword: "",
     companyName: "",
+    betaAccessCode: "",
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -53,6 +54,7 @@ export default function SignupPage() {
           password: formData.password,
           name: formData.name,
           companyName: formData.companyName,
+          betaAccessCode: formData.betaAccessCode || undefined,
         }),
       });
 
@@ -210,6 +212,23 @@ export default function SignupPage() {
                   {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
+            </div>
+
+            <div>
+              <label htmlFor="betaAccessCode" className="block text-sm font-semibold text-slate-700 mb-2">
+                Beta Access Code <span className="text-slate-400 font-normal">(optional)</span>
+              </label>
+              <input
+                id="betaAccessCode"
+                type="text"
+                value={formData.betaAccessCode}
+                onChange={(e) => setFormData({ ...formData, betaAccessCode: e.target.value })}
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                placeholder="Enter beta access code if provided"
+              />
+              <p className="mt-1 text-xs text-slate-500">
+                If you received a beta access code, enter it here. Otherwise, leave blank.
+              </p>
             </div>
 
             <div className="flex items-start gap-2 pt-2">
