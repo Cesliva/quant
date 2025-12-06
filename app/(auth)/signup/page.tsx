@@ -231,22 +231,27 @@ export default function SignupPage() {
               </p>
             </div>
 
-            <div className="flex items-start gap-2 pt-2">
-              <input 
-                type="checkbox" 
-                required
-                className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 mt-0.5" 
-              />
-              <label className="text-sm text-slate-600">
-                I agree to the{" "}
-                <Link href="#" className="text-blue-600 hover:text-blue-700 font-medium">
+            <div className="space-y-3 pt-2">
+              <div className="text-sm text-slate-600 leading-relaxed">
+                <span className="font-semibold text-slate-800">Please review before agreeing:</span>{" "}
+                <Link href="/terms" className="text-blue-600 hover:text-blue-700 font-semibold underline">
                   Terms of Service
                 </Link>{" "}
-                and{" "}
-                <Link href="#" className="text-blue-600 hover:text-blue-700 font-medium">
+                <span className="text-slate-400">•</span>{" "}
+                <Link href="/privacy" className="text-blue-600 hover:text-blue-700 font-semibold underline">
                   Privacy Policy
                 </Link>
-              </label>
+              </div>
+              <div className="flex items-start gap-2">
+                <input 
+                  type="checkbox" 
+                  required
+                  className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 mt-0.5" 
+                />
+                <label className="text-sm text-slate-600">
+                  I agree to the Terms of Service and Privacy Policy.
+                </label>
+              </div>
             </div>
 
             <button
