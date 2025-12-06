@@ -95,12 +95,15 @@ function LandingPage() {
       }`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-24">
-            <div className="flex items-center">
+            <div className="flex items-center gap-3">
               <img 
                 src="/graphics/logos/quant logo.svg" 
                 alt="Quant AI" 
-                className="h-16 w-auto drop-shadow-sm"
+                className="h-20 w-auto drop-shadow-sm"
               />
+              <span className="text-lg font-semibold text-slate-900 tracking-tight hidden sm:inline">
+                Quant <span className="text-slate-500 font-medium">Steel Estimating Suite</span>
+              </span>
             </div>
             <div className="flex items-center gap-4">
               <Link 
