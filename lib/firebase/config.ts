@@ -30,13 +30,20 @@ let auth: Auth | undefined;
 let db: Firestore | undefined;
 let storage: FirebaseStorage | undefined;
 
-if (typeof window !== "undefined") {
+// Initialize Firebase (works in both browser and server)
+function initializeFirebase() {
+  if (app) return; // Already initialized
+  
   try {
     if (isFirebaseConfigured()) {
       app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-      auth = getAuth(app);
       db = getFirestore(app);
-      storage = getStorage(app);
+      
+      // Only initialize auth and storage in browser
+      if (typeof window !== "undefined") {
+        auth = getAuth(app);
+        storage = getStorage(app);
+      }
     } else {
       console.warn(
         "Firebase is not properly configured. Please set valid Firebase credentials in .env.local"
@@ -50,6 +57,9 @@ if (typeof window !== "undefined") {
     console.warn("The app will run in demo mode without Firebase functionality.");
   }
 }
+
+// Initialize Firebase
+initializeFirebase();
 
 export { app, auth, db, storage, isFirebaseConfigured };
 
