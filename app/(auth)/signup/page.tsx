@@ -91,7 +91,7 @@ export default function SignupPage() {
             <img 
               src="/graphics/logos/quant logo.svg" 
               alt="Quant AI" 
-              className="h-16 w-auto"
+              className="h-32 w-auto"
             />
           </Link>
           <h1 className="text-3xl font-bold text-slate-900 mb-2">Create your account</h1>
