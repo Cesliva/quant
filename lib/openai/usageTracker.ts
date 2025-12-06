@@ -3,10 +3,9 @@ import { getProjectPath } from "@/lib/firebase/firestore";
 import { Timestamp } from "firebase/firestore";
 
 export interface AIUsageLog {
-  type: "whisper" | "spec-review" | "proposal";
+  type: "spec-review" | "proposal";
   timestamp: Timestamp;
   tokens?: number;
-  duration?: number; // in minutes
   cost: number;
   input?: string;
   output?: string;
@@ -24,10 +23,6 @@ export async function logAIUsage(
     ...usage,
     timestamp: Timestamp.now(),
   });
-}
-
-export function calculateWhisperCost(durationMinutes: number): number {
-  return durationMinutes * 0.006;
 }
 
 export function calculateGPT4Cost(tokens: number, model: string = "gpt-4o-mini"): number {
