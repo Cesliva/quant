@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
@@ -15,7 +15,7 @@ import { uploadFileToStorage } from "@/lib/firebase/storage";
 
 type AnalysisType = "structural" | "misc" | "finishes" | "aess" | "div01" | "div03";
 
-export default function SpecReviewPage() {
+function SpecReviewPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const projectId = searchParams?.get("projectId");
@@ -931,3 +931,10 @@ export default function SpecReviewPage() {
   );
 }
 
+export default function SpecReviewPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-center">Loading...</div>}>
+      <SpecReviewPageContent />
+    </Suspense>
+  );
+}

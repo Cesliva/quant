@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
@@ -15,7 +15,7 @@ import { onSnapshot } from "firebase/firestore";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
 import { extractTextFromFile } from "@/lib/utils/fileExtractor";
 
-export default function ProposalPage() {
+function ProposalPageContent() {
   const searchParams = useSearchParams();
   const projectId = searchParams?.get("projectId");
   const companyId = useCompanyId();
@@ -257,3 +257,10 @@ ${projectSummary}
   );
 }
 
+export default function ProposalPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-center">Loading...</div>}>
+      <ProposalPageContent />
+    </Suspense>
+  );
+}
