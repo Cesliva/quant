@@ -99,7 +99,7 @@ function LandingPage() {
               <img 
                 src="/graphics/logos/quant logo.svg" 
                 alt="Quant AI" 
-                className="h-20 w-auto"
+                className="h-60 w-auto"
               />
             </div>
             <div className="flex items-center gap-4">
@@ -304,7 +304,7 @@ function LandingPage() {
               <img 
                 src="/graphics/logos/quant logo.svg" 
                 alt="Quant AI" 
-                className="h-16 w-auto"
+                className="h-48 w-auto"
               />
             </div>
             <div className="flex items-center gap-6 text-slate-600">
