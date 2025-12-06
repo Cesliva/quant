@@ -91,15 +91,15 @@ function LandingPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       {/* Navigation */}
       <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        isScrolled ? "bg-white/80 backdrop-blur-lg shadow-lg" : "bg-transparent"
+        isScrolled ? "bg-white/85 backdrop-blur-xl shadow-md" : "bg-white/60 backdrop-blur-lg"
       }`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-20">
+          <div className="flex items-center justify-between h-24">
             <div className="flex items-center">
               <img 
                 src="/graphics/logos/quant logo.svg" 
                 alt="Quant AI" 
-                className="h-60 w-auto"
+                className="h-16 w-auto drop-shadow-sm"
               />
             </div>
             <div className="flex items-center gap-4">
@@ -111,7 +111,7 @@ function LandingPage() {
               </Link>
               <Link 
                 href="/signup"
-                className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold hover:shadow-lg hover:shadow-blue-500/25 transition-all duration-200 hover:-translate-y-0.5"
+                className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold hover:shadow-lg hover:shadow-blue-500/25 transition-all duration-200 hover:-translate-y-0.5 border border-white/30"
               >
                 Get Started
               </Link>
@@ -121,49 +121,68 @@ function LandingPage() {
       </nav>
 
       {/* Hero Section */}
-      <section className="pt-32 pb-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center max-w-4xl mx-auto">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-100 text-blue-700 text-sm font-medium mb-6">
-              <Star className="w-4 h-4 fill-blue-600" />
+      <section className="relative overflow-hidden pt-32 pb-24 px-4 sm:px-6 lg:px-8">
+        {/* Gradient accents */}
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute -top-10 -left-20 h-72 w-72 bg-gradient-to-br from-blue-500/25 via-indigo-400/20 to-transparent blur-3xl" />
+          <div className="absolute top-10 right-[-6rem] h-80 w-80 bg-gradient-to-bl from-purple-500/25 via-indigo-400/20 to-transparent blur-3xl" />
+        </div>
+        <div className="max-w-7xl mx-auto relative">
+          <div className="text-center max-w-5xl mx-auto">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-50 text-blue-700 text-sm font-semibold mb-4 border border-blue-100 shadow-sm">
+              <Star className="w-4 h-4 fill-blue-600 text-blue-600" />
               <span>AI-Powered Steel Estimating</span>
+              <span className="text-slate-400">•</span>
+              <span>Enterprise-grade delivery</span>
             </div>
-            <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold mb-6 leading-tight">
-              <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">
+            <h1 className="text-5xl md:text-6xl lg:text-7xl font-black mb-5 leading-[0.95] tracking-tight">
+              <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-500 bg-clip-text text-transparent">
                 Estimate Faster.
               </span>
               <br />
               <span className="text-slate-900">Win More Bids.</span>
             </h1>
-            <p className="text-xl md:text-2xl text-slate-600 mb-10 leading-relaxed">
-              The only steel fabrication estimating software that combines AI intelligence with industry expertise. 
-              Turn hours of work into minutes.
+            <p className="text-xl md:text-2xl text-slate-700 mb-10 leading-relaxed max-w-4xl mx-auto">
+              The only steel fabrication estimating platform that pairs AI with deep industry expertise—
+              delivering enterprise accuracy, executive-ready proposals, and real-time collaboration.
             </p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-10">
               <Link 
                 href="/signup"
-                className="group px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-2xl font-semibold text-lg shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/40 transition-all duration-300 hover:-translate-y-1 flex items-center gap-2"
+                className="group px-9 py-4.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-500 text-white rounded-2xl font-semibold text-lg shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/40 transition-all duration-300 hover:-translate-y-1 flex items-center gap-3 border border-white/20"
               >
                 Start Free Trial
                 <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </Link>
-              <button className="px-8 py-4 bg-white text-slate-700 rounded-2xl font-semibold text-lg shadow-lg border border-slate-200 hover:shadow-xl transition-all duration-300 flex items-center gap-2">
+              <button className="px-9 py-4.5 bg-white text-slate-800 rounded-2xl font-semibold text-lg shadow-lg border border-slate-200 hover:shadow-xl transition-all duration-300 flex items-center gap-3">
                 <Play className="w-5 h-5" />
                 Watch Demo
               </button>
             </div>
-            <div className="flex items-center justify-center gap-8 text-sm text-slate-500">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-center gap-4 text-sm text-slate-600">
+              <div className="flex items-center gap-2 px-3 py-2 rounded-full bg-white shadow-sm border border-slate-100">
                 <CheckCircle2 className="w-5 h-5 text-emerald-500" />
                 <span>No credit card required</span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 px-3 py-2 rounded-full bg-white shadow-sm border border-slate-100">
                 <CheckCircle2 className="w-5 h-5 text-emerald-500" />
                 <span>14-day free trial</span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 px-3 py-2 rounded-full bg-white shadow-sm border border-slate-100">
                 <CheckCircle2 className="w-5 h-5 text-emerald-500" />
                 <span>Cancel anytime</span>
+              </div>
+            </div>
+
+            {/* Trust bar */}
+            <div className="mt-12">
+              <p className="text-sm uppercase tracking-[0.2em] text-slate-500 mb-4">Trusted by leading fabricators</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 items-center justify-items-center text-slate-400">
+                {["SteelCore", "NorthBridge", "TitanFab", "Summit Metals", "PrecisionWorks"].map((brand) => (
+                  <div key={brand} className="text-base md:text-lg font-semibold tracking-wide opacity-80">
+                    {brand}
+                  </div>
+                ))}
               </div>
             </div>
           </div>
