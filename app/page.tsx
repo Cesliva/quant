@@ -99,11 +99,12 @@ function LandingPage() {
               <img 
                 src="/graphics/logos/quant logo.svg" 
                 alt="Quant AI" 
-                className="h-20 w-auto drop-shadow-sm"
+                className="h-14 w-auto drop-shadow-sm"
               />
-              <span className="text-lg font-semibold text-slate-900 tracking-tight hidden sm:inline">
-                Quant <span className="text-slate-500 font-medium">Steel Estimating Suite</span>
-              </span>
+              <div className="hidden sm:flex flex-col leading-tight">
+                <span className="text-xl font-bold text-slate-900 tracking-tight">Quant</span>
+                <span className="text-sm text-slate-500 font-medium">Steel Estimating Suite</span>
+              </div>
             </div>
             <div className="flex items-center gap-4">
               <Link 
