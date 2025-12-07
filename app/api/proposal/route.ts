@@ -31,7 +31,7 @@ All work will be performed in accordance with industry-standard practices, appli
 
 3. PRICE
 
-Total Lump Sum: ${TOTAL_LUMP_SUM}
+Total Lump Sum: {TOTAL_LUMP_SUM}
 (Sales tax, if applicable, will be added.)
 
 {PRICE_BREAKDOWN}
@@ -243,10 +243,25 @@ Breakdowns available upon request:
       estimatingData: estimatingData || null,
     };
 
-    const prompt = `Generate a professional steel fabrication proposal using the following template structure. Fill in all placeholders with the provided information and expand sections with professional, detailed language.
+    // Replace placeholders in template with actual values
+    let filledTemplate = PROPOSAL_TEMPLATE
+      .replace(/{TO}/g, context.header.to)
+      .replace(/{CONTRACTOR}/g, context.header.contractor)
+      .replace(/{PROJECT_NAME}/g, context.header.projectName)
+      .replace(/{PROJECT_LOCATION}/g, context.header.projectLocation)
+      .replace(/{BID_DATE}/g, context.header.bidDate)
+      .replace(/{PREPARED_BY}/g, context.header.preparedBy)
+      .replace(/{SCOPE_SECTION}/g, context.scope)
+      .replace(/{TOTAL_LUMP_SUM}/g, `$${context.price.totalLumpSum.toLocaleString()}`)
+      .replace(/{PRICE_BREAKDOWN}/g, context.price.breakdown || "")
+      .replace(/{SHOP_DRAWINGS_DAYS}/g, context.schedule.shopDrawingsDays.toString())
+      .replace(/{FABRICATION_WEEKS}/g, context.schedule.fabricationWeeks.toString())
+      .replace(/{EXCLUSIONS_SECTION}/g, context.exclusions);
+
+    const prompt = `Generate a professional steel fabrication proposal using the following template structure. Fill in any remaining placeholders and expand sections with professional, detailed language.
 
 TEMPLATE STRUCTURE:
-${PROPOSAL_TEMPLATE}
+${filledTemplate}
 
 PROVIDED DATA:
 ${JSON.stringify(context, null, 2)}
