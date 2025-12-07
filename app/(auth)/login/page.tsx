@@ -7,6 +7,8 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { createAuditLog } from "@/lib/utils/auditLog";
 import { getDocument } from "@/lib/firebase/firestore";
 import { ArrowRight, Eye, EyeOff } from "lucide-react";
+import { QMark } from "@/components/ui/QMark";
+import { QLoader } from "@/components/ui/QLoader";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -87,11 +89,7 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center justify-center mb-6">
-            <img 
-              src="/graphics/logos/quant logo.svg" 
-              alt="Quant AI" 
-              className="h-16 w-auto"
-            />
+            <QMark px={96} />
           </Link>
           <h1 className="text-3xl font-bold text-slate-900 mb-2">Welcome back</h1>
           <p className="text-slate-600">Sign in to your account to continue</p>
@@ -161,7 +159,10 @@ export default function LoginPage() {
               className="w-full px-6 py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/40 transition-all duration-300 hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {loading ? (
-                "Signing in..."
+                <>
+                  <QLoader size={18} />
+                  Signing in...
+                </>
               ) : (
                 <>
                   Sign In

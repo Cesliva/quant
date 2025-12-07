@@ -21,6 +21,7 @@ import {
   BookOpen,
   Calendar,
 } from "lucide-react";
+import { QMark } from "../ui/QMark";
 
 const navigation = [
   { name: "Structural Steel Estimate", href: "/estimating", icon: ClipboardList },
@@ -51,11 +52,7 @@ export default function Sidebar() {
       <div className="mb-4">
         <Link href="/dashboard" className="block">
           <div className="flex items-center justify-center">
-            <img 
-              src="/graphics/logos/quant logo.svg" 
-              alt="Quant AI" 
-              className="h-40 w-auto"
-            />
+            <QMark px={96} />
           </div>
         </Link>
       </div>

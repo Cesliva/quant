@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { ArrowRight, Eye, EyeOff, CheckCircle2 } from "lucide-react";
+import { QMark } from "@/components/ui/QMark";
+import { QLoader } from "@/components/ui/QLoader";
 
 export default function SignupPage() {
   const [formData, setFormData] = useState({
@@ -88,11 +90,7 @@ export default function SignupPage() {
         {/* Logo */}
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center justify-center mb-6">
-            <img 
-              src="/graphics/logos/quant logo.svg" 
-              alt="Quant AI" 
-              className="h-32 w-auto"
-            />
+            <QMark px={96} />
           </Link>
           <h1 className="text-3xl font-bold text-slate-900 mb-2">Create your account</h1>
           <p className="text-slate-600">Start your 14-day free trial. No credit card required.</p>
@@ -260,7 +258,10 @@ export default function SignupPage() {
               className="w-full px-6 py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/40 transition-all duration-300 hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {loading ? (
-                "Creating account..."
+                <>
+                  <QLoader size={18} />
+                  Creating account...
+                </>
               ) : (
                 <>
                   Create Account

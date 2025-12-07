@@ -126,6 +126,11 @@ function LandingPage() {
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute -top-10 -left-20 h-72 w-72 bg-gradient-to-br from-blue-500/25 via-indigo-400/20 to-transparent blur-3xl" />
           <div className="absolute top-10 right-[-6rem] h-80 w-80 bg-gradient-to-bl from-purple-500/25 via-indigo-400/20 to-transparent blur-3xl" />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-[26rem] font-black text-slate-900/5 leading-none select-none pointer-events-none">
+              Q
+            </span>
+          </div>
         </div>
         <div className="max-w-7xl mx-auto relative">
           <div className="text-center max-w-5xl mx-auto">
@@ -149,8 +154,11 @@ function LandingPage() {
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-10">
               <Link 
                 href="/signup"
-                className="group px-9 py-4.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-500 text-white rounded-2xl font-semibold text-lg shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/40 transition-all duration-300 hover:-translate-y-1 flex items-center gap-3 border border-white/20"
+                className="relative group px-9 py-4.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-500 text-white rounded-2xl font-semibold text-lg shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/40 transition-all duration-300 hover:-translate-y-1 flex items-center gap-3 border border-white/20 overflow-visible"
               >
+                <span className="pointer-events-none absolute -top-2 -right-2 inline-flex h-6 w-6 items-center justify-center rounded-full bg-white/90 text-blue-700 text-xs font-black opacity-0 group-hover:opacity-80 transition duration-200 shadow-sm">
+                  Q
+                </span>
                 Start Free Trial
                 <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </Link>
