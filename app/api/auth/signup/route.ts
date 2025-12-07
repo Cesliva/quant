@@ -4,6 +4,8 @@ import { initializeApp, getApps } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { setDocument, getDocument } from "@/lib/firebase/firestore";
 import { validateBetaCode, getBetaAccessConfig } from "@/lib/utils/betaAccessSecure";
+import { validateEmail } from "@/lib/utils/validation";
+import { generateVerificationCode, storeVerificationCode } from "@/lib/utils/emailVerification";
 
 // Initialize Firebase on server side for API routes
 function getServerAuth() {
@@ -51,11 +53,19 @@ function getClientIP(request: NextRequest): string {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { email, password, name, companyName, betaAccessCode } = body;
+    const { email, password, name, companyName, betaAccessCode, marketingOptIn } = body;
 
     if (!email || !password || !name || !companyName) {
       return NextResponse.json(
         { error: "Missing required fields" },
+        { status: 400 }
+      );
+    }
+
+    // Validate email format
+    if (!validateEmail(email)) {
+      return NextResponse.json(
+        { error: "Please enter a valid email address" },
         { status: 400 }
       );
     }
@@ -147,22 +157,48 @@ export async function POST(request: NextRequest) {
       false
     );
 
-    // Create user document with company reference
+    // Create user document with company reference and marketing data
     await setDocument(
       `users/${user.uid}`,
       {
-        email,
+        email: email.toLowerCase().trim(),
         name,
         company: companyId,
         createdAt: new Date(),
+        emailVerified: false,
+        emailVerifiedAt: null,
+        marketingOptIn: body.marketingOptIn !== false, // Default to true unless explicitly false
+        signupSource: "web",
+        signupDate: new Date(),
       },
       false
     );
+
+    // Generate and store verification code
+    const verificationCode = generateVerificationCode();
+    try {
+      await storeVerificationCode(user.uid, email, verificationCode);
+      
+      // Send verification email (async, don't wait)
+      fetch(`${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/auth/send-verification-code`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.uid, email }),
+      }).catch((error) => {
+        console.error("Failed to send verification email:", error);
+        // Don't fail signup if email fails
+      });
+    } catch (error) {
+      console.error("Failed to create verification code:", error);
+      // Don't fail signup if verification code creation fails
+    }
 
     return NextResponse.json({
       success: true,
       userId: user.uid,
       companyId,
+      emailVerificationRequired: true,
+      ...(process.env.EMAIL_SERVICE === "console" && { verificationCode }), // Return code in dev mode
     });
   } catch (error: any) {
     console.error("Signup error:", error);

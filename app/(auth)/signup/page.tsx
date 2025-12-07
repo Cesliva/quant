@@ -16,11 +16,17 @@ export default function SignupPage() {
     confirmPassword: "",
     companyName: "",
     betaAccessCode: "",
+    marketingOptIn: true, // Default to true for marketing
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [needsVerification, setNeedsVerification] = useState(false);
+  const [verificationCode, setVerificationCode] = useState("");
+  const [verifying, setVerifying] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState("");
   const { signUp, user } = useAuth();
   const router = useRouter();
 
@@ -57,6 +63,7 @@ export default function SignupPage() {
           name: formData.name,
           companyName: formData.companyName,
           betaAccessCode: formData.betaAccessCode || undefined,
+          marketingOptIn: formData.marketingOptIn,
         }),
       });
 
@@ -64,6 +71,20 @@ export default function SignupPage() {
 
       if (!response.ok) {
         throw new Error(data.error || "Failed to create account");
+      }
+
+      // If email verification is required, show verification step
+      if (data.emailVerificationRequired) {
+        setUserId(data.userId);
+        setUserEmail(formData.email);
+        setNeedsVerification(true);
+        setLoading(false);
+        
+        // In development mode, show the code
+        if (data.verificationCode) {
+          console.log("Verification code (dev mode):", data.verificationCode);
+        }
+        return;
       }
 
       // Sign in the user
@@ -77,12 +98,158 @@ export default function SignupPage() {
     }
   };
 
+  const handleVerifyEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!verificationCode.trim() || !userId) {
+      setError("Please enter the verification code");
+      return;
+    }
+
+    setVerifying(true);
+    setError("");
+
+    try {
+      const response = await fetch("/api/auth/verify-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          code: verificationCode.trim(),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Invalid verification code");
+      }
+
+      // Email verified, sign in and redirect
+      await signUp(userEmail, formData.password);
+      router.push("/dashboard");
+    } catch (err: any) {
+      setError(err.message || "Failed to verify email. Please try again.");
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const handleResendCode = async () => {
+    if (!userId || !userEmail) return;
+
+    setError("");
+    try {
+      const response = await fetch("/api/auth/send-verification-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          email: userEmail,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to resend code");
+      }
+
+      // Show success message
+      setError(""); // Clear any errors
+      alert("Verification code sent! Please check your email.");
+      
+      // In dev mode, show the code
+      if (data.code) {
+        console.log("New verification code (dev mode):", data.code);
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to resend code. Please try again.");
+    }
+  };
+
   const passwordRequirements = [
     { met: formData.password.length >= 6, text: "At least 6 characters" },
     { met: /[A-Z]/.test(formData.password), text: "One uppercase letter" },
     { met: /[a-z]/.test(formData.password), text: "One lowercase letter" },
     { met: /[0-9]/.test(formData.password), text: "One number" },
   ];
+
+  // Show verification step if needed
+  if (needsVerification) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center px-4 py-12">
+        <div className="w-full max-w-md">
+          {/* Logo */}
+          <div className="text-center mb-8">
+            <Link href="/" className="inline-flex items-center justify-center mb-6">
+              <QMark px={96} />
+            </Link>
+            <h1 className="text-3xl font-bold text-slate-900 mb-2">Verify your email</h1>
+            <p className="text-slate-600">We sent a verification code to {userEmail}</p>
+          </div>
+
+          {/* Verification Form */}
+          <div className="bg-white rounded-3xl shadow-2xl p-8 border border-slate-100">
+            <form onSubmit={handleVerifyEmail} className="space-y-5">
+              {error && (
+                <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
+                  {error}
+                </div>
+              )}
+
+              <div>
+                <label htmlFor="verificationCode" className="block text-sm font-semibold text-slate-700 mb-2">
+                  Verification Code
+                </label>
+                <input
+                  id="verificationCode"
+                  type="text"
+                  value={verificationCode}
+                  onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  required
+                  maxLength={6}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-center text-2xl font-mono tracking-widest"
+                  placeholder="000000"
+                  autoFocus
+                />
+                <p className="mt-2 text-xs text-slate-500 text-center">
+                  Enter the 6-digit code sent to your email
+                </p>
+              </div>
+
+              <button
+                type="submit"
+                disabled={verifying || verificationCode.length !== 6}
+                className="w-full px-6 py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/40 transition-all duration-300 hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {verifying ? (
+                  <>
+                    <QLoader size={18} />
+                    Verifying...
+                  </>
+                ) : (
+                  <>
+                    Verify Email
+                    <ArrowRight className="w-5 h-5" />
+                  </>
+                )}
+              </button>
+
+              <div className="text-center">
+                <button
+                  type="button"
+                  onClick={handleResendCode}
+                  className="text-sm text-blue-600 hover:text-blue-700 font-semibold"
+                >
+                  Didn't receive the code? Resend
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center px-4 py-12">
@@ -248,6 +415,17 @@ export default function SignupPage() {
                 />
                 <label className="text-sm text-slate-600">
                   I agree to the Terms of Service and Privacy Policy.
+                </label>
+              </div>
+              <div className="flex items-start gap-2">
+                <input 
+                  type="checkbox" 
+                  checked={formData.marketingOptIn}
+                  onChange={(e) => setFormData({ ...formData, marketingOptIn: e.target.checked })}
+                  className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 mt-0.5" 
+                />
+                <label className="text-sm text-slate-600">
+                  I'd like to receive product updates and marketing communications (optional)
                 </label>
               </div>
             </div>
