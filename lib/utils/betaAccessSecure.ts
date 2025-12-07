@@ -312,27 +312,15 @@ async function checkRateLimit(ipAddress: string): Promise<{
 async function recordFailedAttempt(ipAddress: string): Promise<void> {
   const rateLimitId = ipAddress.replace(/[^a-zA-Z0-9]/g, "_");
   const rateLimitKey = `betaAccessRateLimits/${rateLimitId}`;
-  const existing = await getDocument<RateLimitRecord>(rateLimitKey) 
-    || await getDocument<RateLimitRecord>(`betaAccess/rateLimits/${rateLimitId}`);
+  const existing = await getDocument<RateLimitRecord>(rateLimitKey);
 
   if (existing) {
     await updateDocument(`betaAccessRateLimits`, rateLimitId, {
       attempts: (existing.attempts || 0) + 1,
       lastAttempt: new Date(),
     });
-    // Also update legacy path for compatibility
-    await updateDocument(`betaAccess/rateLimits`, rateLimitId, {
-      attempts: (existing.attempts || 0) + 1,
-      lastAttempt: new Date(),
-    });
   } else {
     await setDocument(rateLimitKey, {
-      ip: ipAddress,
-      attempts: 1,
-      lastAttempt: new Date(),
-    }, false);
-    // Also create legacy path for compatibility
-    await setDocument(`betaAccess/rateLimits/${rateLimitId}`, {
       ip: ipAddress,
       attempts: 1,
       lastAttempt: new Date(),
