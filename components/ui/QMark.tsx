@@ -7,13 +7,12 @@ interface QMarkProps {
 
 export function QMark({ px = 64, className = "" }: QMarkProps) {
   return (
-    <div
-      className={`relative inline-flex items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-500 text-white font-black shadow-lg ${className}`}
+    <img
+      src="/graphics/logos/Q.svg"
+      alt="Quant"
+      className={className}
       style={{ width: px, height: px }}
-      aria-label="Quant"
-    >
-      <span className="text-lg leading-none">Q</span>
-    </div>
+    />
   );
 }
 
