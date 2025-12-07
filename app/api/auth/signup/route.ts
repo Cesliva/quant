@@ -3,6 +3,7 @@ import { createUserWithEmailAndPassword, getAuth } from "firebase/auth";
 import { initializeApp, getApps } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { setDocument, getDocument } from "@/lib/firebase/firestore";
+import { validateBetaCode, getBetaAccessConfig } from "@/lib/utils/betaAccessSecure";
 
 // Initialize Firebase on server side for API routes
 function getServerAuth() {
@@ -30,50 +31,21 @@ function getServerAuth() {
   }
 }
 
-// Beta access codes - stored in Firebase for easy management
-// To disable beta access, set enabled to false in Firebase
-// To add/remove codes, update the codes array in Firebase
-async function validateBetaAccess(betaCode: string | undefined): Promise<{ valid: boolean; error?: string }> {
-  try {
-    // Check if beta access is enabled
-    const betaConfig = await getDocument<{
-      enabled: boolean;
-      codes: string[];
-      message?: string;
-    }>("betaAccess/config");
-
-    // If no config exists, allow signups (open beta/public)
-    if (!betaConfig) {
-      return { valid: true };
-    }
-
-    // If beta access is disabled (enabled: false), require a code
-    if (betaConfig.enabled === false) {
-      if (!betaCode || betaCode.trim() === "") {
-        return {
-          valid: false,
-          error: betaConfig.message || "Beta access code is required. Please contact support for access.",
-        };
-      }
-
-      // Check if code is valid
-      const validCodes = betaConfig.codes || [];
-      const trimmedCode = betaCode.trim();
-      if (!validCodes.includes(trimmedCode)) {
-        return {
-          valid: false,
-          error: "Invalid beta access code. Please contact support for access.",
-        };
-      }
-    }
-
-    // If enabled is true or undefined, codes are optional - allow signup
-    return { valid: true };
-  } catch (error) {
-    // If there's an error reading config, allow signup (fail open)
-    console.warn("Error validating beta access, allowing signup:", error);
-    return { valid: true };
+// Get client IP address from request
+function getClientIP(request: NextRequest): string {
+  // Check various headers for IP (handles proxies, load balancers, etc.)
+  const forwarded = request.headers.get("x-forwarded-for");
+  if (forwarded) {
+    return forwarded.split(",")[0].trim();
   }
+  
+  const realIP = request.headers.get("x-real-ip");
+  if (realIP) {
+    return realIP;
+  }
+  
+  // Fallback to connection remote address (may not be available in serverless)
+  return request.ip || "unknown";
 }
 
 export async function POST(request: NextRequest) {
@@ -88,14 +60,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate beta access code if provided
-    const betaValidation = await validateBetaAccess(betaAccessCode);
-    if (!betaValidation.valid) {
-      return NextResponse.json(
-        { error: betaValidation.error },
-        { status: 403 }
-      );
+    // Validate beta access code using secure system
+    const clientIP = getClientIP(request);
+    const betaConfig = await getBetaAccessConfig();
+    
+    // If no config exists, allow signups (open beta/public)
+    if (!betaConfig) {
+      // No beta access system configured - allow signup
+    } else if (betaConfig.enabled === false) {
+      // Beta access is required
+      if (!betaAccessCode || betaAccessCode.trim() === "") {
+        return NextResponse.json(
+          {
+            error: betaConfig.message || "Beta access code is required. Please contact support for access.",
+          },
+          { status: 403 }
+        );
+      }
+
+      // Validate the code using secure system
+      const validation = await validateBetaCode(betaAccessCode.trim(), clientIP);
+      if (!validation.valid) {
+        return NextResponse.json(
+          { error: validation.error || "Invalid beta access code" },
+          { status: 403 }
+        );
+      }
     }
+    // If enabled is true, codes are optional - allow signup
 
     // Initialize Firebase Auth on server side
     const serverAuth = getServerAuth();

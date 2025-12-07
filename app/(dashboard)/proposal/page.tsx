@@ -1,19 +1,31 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
-import Link from "next/link";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
-import Button from "@/components/ui/Button";
-import { FileDown, Sparkles, ArrowLeft, Upload } from "lucide-react";
-import { generateProposal } from "@/lib/openai/gpt4";
-import { exportProposalToPDF } from "@/lib/utils/export";
-import { loadCompanySettings } from "@/lib/utils/settingsLoader";
-import { useCompanyId } from "@/lib/hooks/useCompanyId";
-import { getDocument, getProjectPath, getDocRef } from "@/lib/firebase/firestore";
-import { onSnapshot } from "firebase/firestore";
-import { isFirebaseConfigured } from "@/lib/firebase/config";
-import { extractTextFromFile } from "@/lib/utils/fileExtractor";
+import { useSearchParams, useRouter } from "next/navigation";
+import { useEffect } from "react";
+
+// Redirect to enhanced proposal page
+export default function ProposalPage() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const projectId = searchParams?.get("projectId");
+
+  useEffect(() => {
+    // Redirect to enhanced proposal page
+    const enhancedPath = projectId 
+      ? `/proposal/enhanced?projectId=${projectId}`
+      : "/proposal/enhanced";
+    router.replace(enhancedPath);
+  }, [projectId, router]);
+
+  return (
+    <div className="flex items-center justify-center min-h-screen">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+        <p className="text-gray-600">Loading enhanced proposal page...</p>
+      </div>
+    </div>
+  );
+}
 
 function ProposalPageContent() {
   const searchParams = useSearchParams();
@@ -112,7 +124,7 @@ ${projectSummary}
     }
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     if (!proposalText.trim() || proposalText === "AI-generated proposal text appears here...") {
       alert("Please generate a proposal first");
       return;
@@ -123,7 +135,7 @@ ${projectSummary}
       ? projectSummary.split('\n')[0].substring(0, 50) 
       : "Project");
     
-    exportProposalToPDF(proposalText, finalProjectName, projectNumber, companyName);
+    await exportProposalToPDF(proposalText, finalProjectName, projectNumber, companyName, companyId);
   };
 
   return (

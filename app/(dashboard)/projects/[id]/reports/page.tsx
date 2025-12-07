@@ -197,7 +197,8 @@ export default function ProjectReportsPage() {
                         projectType: project.projectType,
                         projectTypeSubCategory: project.projectTypeSubCategory,
                         probabilityOfWin: project.probabilityOfWin
-                      }
+                      },
+                      companyId
                     );
                   } catch (error: any) {
                     if (error.message === 'Save cancelled') {

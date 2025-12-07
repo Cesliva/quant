@@ -8,9 +8,11 @@ import { Plus, UserPlus, Trash2, Shield, User, Eye } from "lucide-react";
 import { subscribeToCollection, createDocument, updateDocument, deleteDocument } from "@/lib/firebase/firestore";
 import { useCompanyId } from "@/lib/hooks/useCompanyId";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { useSubscription } from "@/lib/hooks/useSubscription";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
 import { getDocRef, setDocument } from "@/lib/firebase/firestore";
 import { serverTimestamp } from "firebase/firestore";
+import { AlertCircle, Crown } from "lucide-react";
 
 interface Member {
   id: string;
@@ -56,6 +58,7 @@ const ROLE_PERMISSIONS = {
 export default function UsersManagementPage() {
   const companyId = useCompanyId();
   const { user: currentUser } = useAuth();
+  const { subscription, currentSeats, maxSeats, canAddSeat, remainingSeats, loading: subscriptionLoading } = useSubscription();
   const [members, setMembers] = useState<Member[]>([]);
   const [showInviteForm, setShowInviteForm] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
@@ -102,7 +105,13 @@ export default function UsersManagementPage() {
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || "Failed to send invitation");
+        // Handle seat limit error specifically
+        if (result.seatLimitReached) {
+          alert(`Seat limit reached!\n\nYou have ${result.currentSeats} of ${result.maxSeats} seats used.\n\n${result.error}`);
+        } else {
+          throw new Error(result.error || "Failed to send invitation");
+        }
+        return;
       }
 
       if (result.emailSent) {
@@ -188,17 +197,46 @@ export default function UsersManagementPage() {
           <p className="text-sm text-gray-600 mt-1">
             Manage who has access to your company&apos;s projects
           </p>
+          {!subscriptionLoading && (
+            <div className="mt-2 flex items-center gap-2">
+              <span className="text-xs font-medium text-gray-500">
+                {subscription.plan.charAt(0).toUpperCase() + subscription.plan.slice(1)} Plan
+              </span>
+              <span className="text-xs text-gray-400">•</span>
+              <span className={`text-xs font-medium ${remainingSeats === 0 ? 'text-red-600' : remainingSeats <= 2 ? 'text-yellow-600' : 'text-gray-600'}`}>
+                {currentSeats} of {maxSeats} seats used
+                {remainingSeats > 0 && ` (${remainingSeats} remaining)`}
+              </span>
+            </div>
+          )}
         </div>
         {canManageUsers && (
           <Button
             variant="primary"
             onClick={() => setShowInviteForm(!showInviteForm)}
+            disabled={!canAddSeat}
+            title={!canAddSeat ? `Seat limit reached. You have ${currentSeats} of ${maxSeats} seats used.` : ""}
           >
             <UserPlus className="w-4 h-4 mr-2" />
             Invite Member
           </Button>
         )}
       </div>
+
+      {!canAddSeat && canManageUsers && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-yellow-800">
+              Seat limit reached
+            </p>
+            <p className="text-sm text-yellow-700 mt-1">
+              You have reached your seat limit of {maxSeats} for the {subscription.plan.charAt(0).toUpperCase() + subscription.plan.slice(1)} plan. 
+              {subscription.plan !== "enterprise" && " Please upgrade your plan to invite more users."}
+            </p>
+          </div>
+        </div>
+      )}
 
       {showInviteForm && canManageUsers && (
         <Card>
@@ -255,7 +293,14 @@ export default function UsersManagementPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Current Members ({members.length})</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle>Current Members ({members.length})</CardTitle>
+            {!subscriptionLoading && (
+              <div className="text-sm text-gray-500">
+                {currentSeats} / {maxSeats} seats
+              </div>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {members.length === 0 ? (

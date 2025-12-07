@@ -6,7 +6,9 @@ import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
-import { Save, Building2, DollarSign, Package, Paintbrush, Settings2, Plus, Trash2, Info, AlertCircle, TrendingUp } from "lucide-react";
+import { Save, Building2, DollarSign, Package, Paintbrush, Settings2, Plus, Trash2, Info, AlertCircle, TrendingUp, Crown, Upload, X, Image as ImageIcon } from "lucide-react";
+import SubscriptionManagement from "@/components/settings/SubscriptionManagement";
+import { uploadFileToStorage, deleteFileFromStorage } from "@/lib/firebase/storage";
 import { 
   loadCompanySettings, 
   saveCompanySettings, 
@@ -20,7 +22,7 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { useRouter } from "next/navigation";
 import { createAuditLog, createAuditChanges } from "@/lib/utils/auditLog";
 
-type TabType = "company" | "labor" | "material" | "coating" | "markup" | "advanced" | "executive";
+type TabType = "company" | "labor" | "material" | "coating" | "markup" | "advanced" | "executive" | "subscription";
 
 interface LaborRate {
   id: string;
@@ -48,7 +50,7 @@ function SettingsPageContent() {
   const { permissions, loading: permissionsLoading } = useUserPermissions();
   const searchParams = useSearchParams();
   const tabParam = searchParams?.get("tab") as TabType | null;
-  const [activeTab, setActiveTab] = useState<TabType>(tabParam && ["company", "labor", "material", "coating", "markup", "advanced", "executive"].includes(tabParam) ? tabParam : "company");
+  const [activeTab, setActiveTab] = useState<TabType>(tabParam && ["company", "labor", "material", "coating", "markup", "advanced", "executive", "subscription"].includes(tabParam) ? tabParam : "company");
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved">("unsaved");
@@ -64,7 +66,10 @@ function SettingsPageContent() {
     email: "",
     licenseNumber: "",
     taxId: "",
+    logoUrl: "",
   });
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
 
   const [laborRates, setLaborRates] = useState<LaborRate[]>([
     { id: "1", trade: "Fabricator", rate: 45 },
@@ -148,7 +153,11 @@ function SettingsPageContent() {
           email: settings.companyInfo.email || "",
           licenseNumber: settings.companyInfo.licenseNumber || "",
           taxId: settings.companyInfo.taxId || "",
+          logoUrl: settings.companyInfo.logoUrl || "",
         });
+        if (settings.companyInfo.logoUrl) {
+          setLogoPreview(settings.companyInfo.logoUrl);
+        }
       }
       
       // Load labor rates
@@ -232,7 +241,7 @@ function SettingsPageContent() {
 
   // Update active tab when URL parameter changes
   useEffect(() => {
-    if (tabParam && ["company", "labor", "material", "coating", "markup", "advanced", "executive"].includes(tabParam)) {
+    if (tabParam && ["company", "labor", "material", "coating", "markup", "advanced", "executive", "subscription"].includes(tabParam)) {
       setActiveTab(tabParam as TabType);
     }
   }, [tabParam]);
@@ -285,6 +294,7 @@ function SettingsPageContent() {
           email: companySettings.email || undefined,
           licenseNumber: companySettings.licenseNumber || undefined,
           taxId: companySettings.taxId || undefined,
+          logoUrl: companySettings.logoUrl || undefined,
         },
         materialGrades: materialGrades.map(({ id, ...rest }) => rest),
         laborRates: laborRates.map(({ id, ...rest }) => rest),
@@ -459,6 +469,7 @@ function SettingsPageContent() {
     { id: "markup" as TabType, label: "Markup & Fees", icon: DollarSign },
     { id: "executive" as TabType, label: "Executive Dashboard", icon: TrendingUp },
     { id: "advanced" as TabType, label: "Advanced", icon: Settings2 },
+    { id: "subscription" as TabType, label: "Subscription", icon: Crown },
   ];
 
   // Check if user is admin - redirect if not
@@ -726,6 +737,118 @@ function SettingsPageContent() {
                     }
                     placeholder="XX-XXXXXXX"
                   />
+                </div>
+
+                {/* Company Logo */}
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Company Logo
+                  </label>
+                  <div className="flex items-start gap-4">
+                    {logoPreview ? (
+                      <div className="relative">
+                        <img
+                          src={logoPreview}
+                          alt="Company logo"
+                          className="h-24 w-auto max-w-48 object-contain border border-gray-200 rounded-lg p-2 bg-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (companySettings.logoUrl) {
+                              try {
+                                // Extract storage path from URL or use a pattern
+                                const urlParts = companySettings.logoUrl.split('/');
+                                const fileName = urlParts[urlParts.length - 1].split('?')[0];
+                                const storagePath = `logos/${companyId}/${fileName}`;
+                                await deleteFileFromStorage(storagePath);
+                              } catch (error) {
+                                console.warn("Failed to delete old logo from storage:", error);
+                              }
+                            }
+                            setLogoPreview(null);
+                            setCompanySettings({ ...companySettings, logoUrl: "" });
+                          }}
+                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors"
+                          title="Remove logo"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="h-24 w-48 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center bg-gray-50">
+                        <ImageIcon className="w-8 h-8 text-gray-400" />
+                      </div>
+                    )}
+                    <div className="flex-1">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        id="logo-upload"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file || !companyId) return;
+
+                          // Validate file type
+                          if (!file.type.startsWith("image/")) {
+                            alert("Please select an image file");
+                            return;
+                          }
+
+                          // Validate file size (max 5MB)
+                          if (file.size > 5 * 1024 * 1024) {
+                            alert("Logo file size must be less than 5MB");
+                            return;
+                          }
+
+                          setIsUploadingLogo(true);
+                          try {
+                            // Delete old logo if exists
+                            if (companySettings.logoUrl) {
+                              try {
+                                const urlParts = companySettings.logoUrl.split('/');
+                                const fileName = urlParts[urlParts.length - 1].split('?')[0];
+                                const storagePath = `logos/${companyId}/${fileName}`;
+                                await deleteFileFromStorage(storagePath);
+                              } catch (error) {
+                                console.warn("Failed to delete old logo:", error);
+                              }
+                            }
+
+                            // Upload new logo
+                            const timestamp = Date.now();
+                            const fileExtension = file.name.split(".").pop() || "png";
+                            const sanitizedFileName = `logo_${timestamp}.${fileExtension}`;
+                            const storagePath = `logos/${companyId}/${sanitizedFileName}`;
+                            
+                            const downloadURL = await uploadFileToStorage(file, storagePath);
+                            
+                            setCompanySettings({ ...companySettings, logoUrl: downloadURL });
+                            setLogoPreview(downloadURL);
+                            setSaveStatus("unsaved");
+                          } catch (error: any) {
+                            console.error("Failed to upload logo:", error);
+                            alert(`Failed to upload logo: ${error.message}`);
+                          } finally {
+                            setIsUploadingLogo(false);
+                            e.target.value = "";
+                          }
+                        }}
+                        disabled={isUploadingLogo}
+                      />
+                      <label
+                        htmlFor="logo-upload"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 cursor-pointer transition-colors"
+                      >
+                        <Upload className="w-4 h-4" />
+                        {isUploadingLogo ? "Uploading..." : logoPreview ? "Replace Logo" : "Upload Logo"}
+                      </label>
+                      <p className="text-xs text-gray-500 mt-2">
+                        Logo will appear on all exported documents and proposals. Recommended: PNG or JPG, max 5MB.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -1474,6 +1597,11 @@ function SettingsPageContent() {
           </div>
         )}
 
+
+        {/* Subscription Tab */}
+        {activeTab === "subscription" && (
+          <SubscriptionManagement />
+        )}
 
         {/* Advanced Tab */}
         {activeTab === "advanced" && (

@@ -7,6 +7,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 import { EstimatingLine } from "@/components/estimating/EstimatingGrid";
+import { getCompanyLogoBase64 } from "./logoLoader";
 
 /**
  * Export estimating lines to PDF
@@ -14,9 +15,13 @@ import { EstimatingLine } from "@/components/estimating/EstimatingGrid";
 export async function exportToPDF(
   lines: EstimatingLine[],
   projectName: string = "Project",
-  companyName: string = "Company"
+  companyName: string = "Company",
+  companyId?: string
 ): Promise<void> {
   const doc = new jsPDF();
+  
+  // Add company logo if available
+  await addLogoToPDF(doc, companyId, 15);
   
   // Header
   doc.setFontSize(18);
@@ -303,9 +308,13 @@ export async function exportReportsToPDF(
     projectType?: string;
     projectTypeSubCategory?: string;
     probabilityOfWin?: number;
-  }
+  },
+  companyId?: string
 ) {
   const doc = new jsPDF();
+  
+  // Add company logo if available
+  await addLogoToPDF(doc, companyId, 15);
   
   // Header with background
   doc.setFillColor(59, 130, 246); // Blue background
@@ -952,15 +961,53 @@ export async function exportReportsToPDF(
 }
 
 /**
+ * Add company logo to PDF document
+ */
+async function addLogoToPDF(doc: jsPDF, companyId?: string, maxHeight: number = 20): Promise<void> {
+  if (!companyId || companyId === "default") return;
+
+  try {
+    const logoBase64 = await getCompanyLogoBase64(companyId);
+    if (!logoBase64) return;
+
+    // Create an image element to get dimensions
+    const img = new Image();
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = reject;
+      img.src = logoBase64;
+    });
+
+    // Calculate dimensions to fit maxHeight while maintaining aspect ratio
+    const aspectRatio = img.width / img.height;
+    const logoHeight = maxHeight;
+    const logoWidth = logoHeight * aspectRatio;
+    
+    // Position logo in top right (with margin)
+    const xPos = 210 - logoWidth - 14; // Right margin
+    const yPos = 5; // Top margin
+    
+    doc.addImage(logoBase64, 'PNG', xPos, yPos, logoWidth, logoHeight);
+  } catch (error) {
+    console.warn("Failed to add logo to PDF:", error);
+    // Continue without logo if it fails
+  }
+}
+
+/**
  * Export proposal text to PDF
  */
 export async function exportProposalToPDF(
   proposalText: string,
   projectName: string = "Project",
   projectNumber: string = "",
-  companyName: string = "Company"
+  companyName: string = "Company",
+  companyId?: string
 ) {
   const doc = new jsPDF();
+  
+  // Add company logo if available
+  await addLogoToPDF(doc, companyId, 15);
   
   // Header with background
   doc.setFillColor(59, 130, 246); // Blue background

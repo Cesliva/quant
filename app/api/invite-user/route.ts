@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDocument, createDocument } from "@/lib/firebase/firestore";
 import { serverTimestamp } from "firebase/firestore";
+import { canAddSeat, getSubscription } from "@/lib/utils/subscription";
 
 // Email service configuration
 // Supports multiple email providers via environment variables
@@ -33,6 +34,28 @@ export async function POST(request: NextRequest) {
         { error: "Invalid email format" },
         { status: 400 }
       );
+    }
+
+    // Check seat limit before allowing invitation
+    try {
+      const seatCheck = await canAddSeat(companyId);
+      if (!seatCheck.canAdd) {
+        const subscription = await getSubscription(companyId);
+        const planName = subscription.plan.charAt(0).toUpperCase() + subscription.plan.slice(1);
+        return NextResponse.json(
+          {
+            error: `You have reached your seat limit of ${seatCheck.maxSeats} for the ${planName} plan. Please upgrade your plan to invite more users.`,
+            seatLimitReached: true,
+            currentSeats: seatCheck.currentSeats,
+            maxSeats: seatCheck.maxSeats,
+          },
+          { status: 403 }
+        );
+      }
+    } catch (error) {
+      // If subscription check fails, log but don't block invitation
+      // (allows for graceful degradation if subscription system isn't fully set up)
+      console.warn("Failed to check seat limit:", error);
     }
 
     // Get company info

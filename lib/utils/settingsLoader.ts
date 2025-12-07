@@ -16,6 +16,7 @@ export interface CompanyInfo {
   email?: string;
   licenseNumber?: string;
   taxId?: string;
+  logoUrl?: string; // URL to company logo in Firebase Storage
 }
 
 export interface Estimator {

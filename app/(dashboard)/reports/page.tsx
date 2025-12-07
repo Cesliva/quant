@@ -159,7 +159,7 @@ function ReportsContent() {
       
       if (type === "pdf") {
         try {
-          await exportToPDF(lines, projectName, "Company");
+          await exportToPDF(lines, projectName, "Company", companyId);
           
           // Log audit trail for PDF export
           await createAuditLog(
@@ -238,7 +238,7 @@ function ReportsContent() {
       // Export filtered lines as PDF
       if (filteredLines.length > 0) {
         try {
-          await exportToPDF(filteredLines, `${projectName} - ${type}`, "Company");
+          await exportToPDF(filteredLines, `${projectName} - ${type}`, "Company", companyId);
           
           // Log audit trail for filtered PDF export
           await createAuditLog(

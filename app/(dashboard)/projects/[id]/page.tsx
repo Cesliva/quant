@@ -8,3 +8,4 @@ export default function ProjectPage({ params }: ProjectPageProps) {
   return <ProjectDashboardClient projectId={params.id} />;
 }
 
+
