@@ -7,6 +7,9 @@ import { validateBetaCode, getBetaAccessConfig } from "@/lib/utils/betaAccessSec
 import { validateEmail } from "@/lib/utils/validation";
 import { generateVerificationCode, storeVerificationCode } from "@/lib/utils/emailVerification";
 
+// Email service configuration
+const EMAIL_SERVICE = process.env.EMAIL_SERVICE || "console";
+
 // Initialize Firebase on server side for API routes
 function getServerAuth() {
   const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
@@ -179,12 +182,8 @@ export async function POST(request: NextRequest) {
     try {
       await storeVerificationCode(user.uid, email, verificationCode);
       
-      // Send verification email (async, don't wait)
-      fetch(`${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/auth/send-verification-code`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.uid, email }),
-      }).catch((error) => {
+      // Send verification email directly (don't wait for it to complete)
+      sendVerificationEmail(email, verificationCode).catch((error) => {
         console.error("Failed to send verification email:", error);
         // Don't fail signup if email fails
       });
