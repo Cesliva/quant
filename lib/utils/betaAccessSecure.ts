@@ -259,12 +259,7 @@ async function checkRateLimit(ipAddress: string): Promise<{
   }
 
   const rateLimitId = ipAddress.replace(/[^a-zA-Z0-9]/g, "_");
-  // Prefer new collection
-  let rateLimit = await getDocument<RateLimitRecord>(`betaAccessRateLimits/${rateLimitId}`);
-  // Fallback to legacy collection
-  if (!rateLimit) {
-    rateLimit = await getDocument<RateLimitRecord>(`betaAccess/rateLimits/${rateLimitId}`);
-  }
+  const rateLimit = await getDocument<RateLimitRecord>(`betaAccessRateLimits/${rateLimitId}`);
 
   if (!rateLimit) {
     return { allowed: true };
@@ -289,11 +284,6 @@ async function checkRateLimit(ipAddress: string): Promise<{
     const lockedUntil = new Date(Date.now() + lockoutDuration);
     
     await updateDocument(`betaAccessRateLimits`, rateLimitId, {
-      lockedUntil,
-    });
-
-    // Also update legacy path for compatibility
-    await updateDocument(`betaAccess/rateLimits`, rateLimitId, {
       lockedUntil,
     });
 
@@ -359,7 +349,6 @@ async function clearRateLimit(ipAddress: string): Promise<void> {
   const { deleteDocument } = await import("@/lib/firebase/firestore");
   try {
     await deleteDocument(`betaAccessRateLimits`, rateLimitId);
-    await deleteDocument(`betaAccess/rateLimits`, rateLimitId);
   } catch (error) {
     // Ignore if doesn't exist
   }
