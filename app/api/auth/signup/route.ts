@@ -288,11 +288,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Determine user role based on license type
-    // Single-user: user gets admin role (company settings access)
-    // Multi-user: user gets admin role but only admins can access settings
-    // No license: default to admin (backward compatibility)
-    const userRole = licenseType === "single-user" ? "admin" : licenseType === "multi-user" ? "admin" : "admin";
+    // Determine user role and permissions based on license type
+    // Single-user: user gets admin role with full settings access
+    // Multi-user: user gets admin role but settings access is restricted to admins only
+    // No license: default to admin with full access (backward compatibility)
+    const userRole = "admin"; // All signups get admin role initially
     const canAccessSettings = licenseType === "single-user" ? true : licenseType === "multi-user" ? false : true;
 
     // Create company document
