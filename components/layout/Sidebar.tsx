@@ -20,8 +20,10 @@ import {
   TrendingUp,
   BookOpen,
   Calendar,
+  Shield,
 } from "lucide-react";
 import { QMark } from "../ui/QMark";
+import { useUserPermissions } from "@/lib/hooks/useUserPermissions";
 
 const navigation = [
   { name: "Structural Steel Estimate", href: "/estimating", icon: ClipboardList },
@@ -34,6 +36,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const params = useParams();
   const searchParams = useSearchParams();
+  const { permissions, loading: permissionsLoading } = useUserPermissions();
   const projectIdFromParams = params?.id as string | undefined;
   const projectIdFromQuery = searchParams?.get("projectId");
   const projectId = projectIdFromParams || projectIdFromQuery || undefined;
@@ -99,16 +102,36 @@ export default function Sidebar() {
             <span>Reports & Analytics</span>
           </Link>
           <Link
-            href="/settings"
+            href={permissions?.role === "admin" ? "/settings" : "#"}
+            onClick={(e) => {
+              if (permissions?.role !== "admin") {
+                e.preventDefault();
+                alert(
+                  "Admin Access Required\n\n" +
+                  "Company Settings is only available to users with Admin role.\n\n" +
+                  "To get admin access:\n" +
+                  "1. Contact your company administrator\n" +
+                  "2. Ask them to go to Settings → Users\n" +
+                  "3. They can change your role to 'Admin'\n\n" +
+                  "Note: The person who created the company account is automatically an admin."
+                );
+              }
+            }}
             className={cn(
-              "flex items-center gap-3 px-4 py-3 rounded-lg transition-colors",
+              "flex items-center gap-3 px-4 py-3 rounded-lg transition-colors relative",
               pathname === "/settings" || pathname?.startsWith("/settings")
                 ? "bg-gray-100 text-blue-600 font-medium"
+                : permissions?.role !== "admin"
+                ? "text-gray-400 cursor-not-allowed opacity-60"
                 : "text-gray-700 hover:bg-gray-50"
             )}
+            title={permissions?.role !== "admin" ? "Admin access required" : "Company Settings"}
           >
             <Settings className="w-5 h-5" />
             <span>Company Settings</span>
+            {permissions?.role !== "admin" && (
+              <Shield className="w-4 h-4 ml-auto text-gray-400" title="Admin Only" />
+            )}
           </Link>
           <Link
             href="/address-book"
