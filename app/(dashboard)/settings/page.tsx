@@ -504,7 +504,7 @@ function SettingsPageContent() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <div className="max-w-7xl mx-auto space-y-6" data-save-status={saveStatus}>
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -520,7 +520,7 @@ function SettingsPageContent() {
           {saveStatus === "saving" && (
             <span className="text-sm text-blue-600">Saving...</span>
           )}
-          <Button variant="primary" onClick={handleSave} disabled={isSaving}>
+          <Button variant="primary" onClick={handleSave} disabled={isSaving} data-save-button>
             <Save className="w-4 h-4 mr-2" />
             {isSaving ? "Saving..." : "Save All Settings"}
           </Button>
