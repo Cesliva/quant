@@ -10,6 +10,7 @@ interface UserPermissions {
   canDeleteProjects: boolean;
   canViewReports: boolean;
   canManageUsers: boolean;
+  canAccessSettings?: boolean; // New: controls access to company settings
   role: "admin" | "estimator" | "viewer";
 }
 
@@ -19,6 +20,7 @@ const DEFAULT_PERMISSIONS: UserPermissions = {
   canDeleteProjects: false,
   canViewReports: true,
   canManageUsers: false,
+  canAccessSettings: false,
   role: "viewer",
 };
 
@@ -40,6 +42,7 @@ export function useUserPermissions() {
         canDeleteProjects: true,
         canViewReports: true,
         canManageUsers: true,
+        canAccessSettings: true,
         role: "admin",
       });
       setLoading(false);
@@ -57,13 +60,30 @@ export function useUserPermissions() {
         const memberPath = `companies/${companyId}/members/${user.uid}`;
         const member = await getDocument(memberPath);
         
+        // Also check company license type
+        const companyPath = `companies/${companyId}`;
+        const company = await getDocument<{ licenseType?: "single-user" | "multi-user" }>(companyPath);
+        
         if (member) {
+          const licenseType = company?.licenseType;
+          const isSingleUser = licenseType === "single-user";
+          const isMultiUser = licenseType === "multi-user";
+          
+          // For single-user licenses: user has full access including settings
+          // For multi-user licenses: only admins can access settings
+          const canAccessSettings = isSingleUser 
+            ? true 
+            : isMultiUser 
+            ? (member.role === "admin")
+            : member.permissions?.canAccessSettings ?? true; // Default: allow for backward compatibility
+          
           setPermissions({
             canCreateProjects: member.permissions?.canCreateProjects ?? false,
             canEditProjects: member.permissions?.canEditProjects ?? false,
             canDeleteProjects: member.permissions?.canDeleteProjects ?? false,
             canViewReports: member.permissions?.canViewReports ?? true,
             canManageUsers: member.permissions?.canManageUsers ?? false,
+            canAccessSettings, // Add this new permission
             role: (member.role || "viewer") as "admin" | "estimator" | "viewer",
           });
         } else {

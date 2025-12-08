@@ -472,10 +472,14 @@ function SettingsPageContent() {
     { id: "subscription" as TabType, label: "Subscription", icon: Crown },
   ];
 
-  // Check if user is admin - redirect if not
+  // Check if user can access settings - redirect if not
   useEffect(() => {
-    if (!permissionsLoading && permissions.role !== "admin") {
-      router.push("/dashboard");
+    if (!permissionsLoading) {
+      // Check both role and canAccessSettings permission
+      const canAccess = permissions.role === "admin" && (permissions.canAccessSettings !== false);
+      if (!canAccess) {
+        router.push("/dashboard");
+      }
     }
   }, [permissions, permissionsLoading, router]);
 
@@ -490,7 +494,7 @@ function SettingsPageContent() {
     );
   }
 
-  if (!permissions || permissions.role !== "admin") {
+  if (!permissions || permissions.role !== "admin" || permissions.canAccessSettings === false) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 flex items-center justify-center p-6">
         <Card className="max-w-2xl w-full">

@@ -206,6 +206,15 @@ export async function POST(request: NextRequest) {
     if (formData.exclusions.BIM) {
       exclusionItems.push("- BIM modeling beyond LOD 300 unless priced separately.");
     }
+    
+    // Add custom exclusions
+    if (formData.customExclusions && Array.isArray(formData.customExclusions)) {
+      formData.customExclusions.forEach((customExclusion) => {
+        if (customExclusion.trim()) {
+          exclusionItems.push(`- ${customExclusion.trim()}`);
+        }
+      });
+    }
 
     // Build price breakdown if requested
     let priceBreakdown = "";

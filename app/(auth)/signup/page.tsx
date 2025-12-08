@@ -16,6 +16,7 @@ export default function SignupPage() {
     confirmPassword: "",
     companyName: "",
     betaAccessCode: "",
+    licenseSerial: "",
     marketingOptIn: true, // Default to true for marketing
   });
   const [showPassword, setShowPassword] = useState(false);
@@ -63,6 +64,7 @@ export default function SignupPage() {
           name: formData.name,
           companyName: formData.companyName,
           betaAccessCode: formData.betaAccessCode || undefined,
+          licenseSerial: formData.licenseSerial || undefined,
           marketingOptIn: formData.marketingOptIn,
         }),
       });
@@ -90,7 +92,13 @@ export default function SignupPage() {
       // Sign in the user
       await signUp(formData.email, formData.password);
       
-      router.push("/dashboard");
+      // Redirect based on license type
+      if (data.needsSetup && data.licenseType === "multi-user") {
+        // Multi-user license needs setup - redirect to setup page
+        router.push("/setup/multi-user");
+      } else {
+        router.push("/dashboard");
+      }
     } catch (err: any) {
       setError(err.message || "Failed to create account. Please try again.");
     } finally {
@@ -393,6 +401,29 @@ export default function SignupPage() {
               />
               <p className="mt-1 text-xs text-slate-500">
                 If you received a beta access code, enter it here. Otherwise, leave blank.
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="licenseSerial" className="block text-sm font-semibold text-slate-700 mb-2">
+                License Serial Key <span className="text-slate-400 font-normal">(optional)</span>
+              </label>
+              <input
+                id="licenseSerial"
+                type="text"
+                value={formData.licenseSerial}
+                onChange={(e) => {
+                  // Format as XXXX-XXXX-XXXX-XXXX
+                  const value = e.target.value.replace(/[^A-Z0-9]/gi, '').toUpperCase().slice(0, 16);
+                  const formatted = value.match(/.{1,4}/g)?.join('-') || value;
+                  setFormData({ ...formData, licenseSerial: formatted });
+                }}
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all font-mono"
+                placeholder="XXXX-XXXX-XXXX-XXXX"
+                maxLength={19}
+              />
+              <p className="mt-1 text-xs text-slate-500">
+                Single-user: Full access including settings | Multi-user: Admin-only settings access
               </p>
             </div>
 

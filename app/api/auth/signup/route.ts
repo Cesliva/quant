@@ -6,6 +6,7 @@ import { setDocument, getDocument } from "@/lib/firebase/firestore";
 import { validateBetaCode, getBetaAccessConfig } from "@/lib/utils/betaAccessSecure";
 import { validateEmail } from "@/lib/utils/validation";
 import { generateVerificationCode, storeVerificationCode } from "@/lib/utils/emailVerification";
+import { validateLicenseSerial, activateLicenseSerial, getLicenseConfig, type LicenseType } from "@/lib/utils/licenseSerial";
 
 // Email service configuration
 const EMAIL_SERVICE = process.env.EMAIL_SERVICE || "console";
@@ -196,7 +197,7 @@ function generateVerificationEmailHTML(code: string): string {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { email, password, name, companyName, betaAccessCode, marketingOptIn } = body;
+    const { email, password, name, companyName, betaAccessCode, licenseSerial, marketingOptIn } = body;
 
     if (!email || !password || !name || !companyName) {
       return NextResponse.json(
@@ -242,6 +243,21 @@ export async function POST(request: NextRequest) {
     }
     // If enabled is true, codes are optional - allow signup
 
+    // Validate license serial if provided
+    let licenseType: LicenseType | undefined;
+    let licenseSerialHash: string | undefined;
+    
+    if (licenseSerial && licenseSerial.trim()) {
+      const licenseValidation = await validateLicenseSerial(licenseSerial.trim());
+      if (!licenseValidation.valid) {
+        return NextResponse.json(
+          { error: licenseValidation.error || "Invalid license serial key" },
+          { status: 403 }
+        );
+      }
+      licenseType = licenseValidation.type;
+    }
+
     // Initialize Firebase Auth on server side
     const serverAuth = getServerAuth();
     if (!serverAuth) {
@@ -258,6 +274,27 @@ export async function POST(request: NextRequest) {
     // Generate company ID
     const companyId = crypto.randomUUID();
 
+    // Activate license if provided
+    if (licenseSerial && licenseSerial.trim() && licenseType) {
+      const activation = await activateLicenseSerial(licenseSerial.trim(), companyId);
+      if (!activation.success) {
+        return NextResponse.json(
+          { error: activation.error || "Failed to activate license" },
+          { status: 400 }
+        );
+      }
+      if (activation.license) {
+        licenseSerialHash = activation.license.serial;
+      }
+    }
+
+    // Determine user role based on license type
+    // Single-user: user gets admin role (company settings access)
+    // Multi-user: user gets admin role but only admins can access settings
+    // No license: default to admin (backward compatibility)
+    const userRole = licenseType === "single-user" ? "admin" : licenseType === "multi-user" ? "admin" : "admin";
+    const canAccessSettings = licenseType === "single-user" ? true : licenseType === "multi-user" ? false : true;
+
     // Create company document
     await setDocument(
       `companies/${companyId}`,
@@ -265,6 +302,9 @@ export async function POST(request: NextRequest) {
         companyName,
         createdAt: new Date(),
         ownerId: user.uid,
+        licenseType,
+        licenseSerial: licenseSerialHash,
+        needsSetup: licenseType === "multi-user", // Multi-user licenses need setup
         settings: {
           materialRate: 1.10,
           laborRate: 45.00,
@@ -279,20 +319,21 @@ export async function POST(request: NextRequest) {
       false
     );
 
-    // Create user document
+    // Create user document with role based on license type
     await setDocument(
       `companies/${companyId}/members/${user.uid}`,
       {
         userId: user.uid,
         email,
         name,
-        role: "admin",
+        role: userRole,
         permissions: {
           canCreateProjects: true,
           canEditProjects: true,
           canDeleteProjects: true,
           canViewReports: true,
-          canManageUsers: true,
+          canManageUsers: licenseType === "multi-user" ? true : true, // Multi-user: only admins can manage users
+          canAccessSettings: canAccessSettings, // Single-user: yes, Multi-user: only admins
         },
         status: "active",
         joinedAt: new Date(),
@@ -337,6 +378,8 @@ export async function POST(request: NextRequest) {
       userId: user.uid,
       companyId,
       emailVerificationRequired: true,
+      licenseType,
+      needsSetup: licenseType === "multi-user",
       ...(process.env.EMAIL_SERVICE === "console" && { verificationCode }), // Return code in dev mode
     });
   } catch (error: any) {

@@ -102,19 +102,24 @@ export default function Sidebar() {
             <span>Reports & Analytics</span>
           </Link>
           <Link
-            href={permissions?.role === "admin" ? "/settings" : "#"}
+            href={permissions?.role === "admin" && permissions?.canAccessSettings !== false ? "/settings" : "#"}
             onClick={(e) => {
-              if (permissions?.role !== "admin") {
+              if (permissions?.role !== "admin" || permissions?.canAccessSettings === false) {
                 e.preventDefault();
-                alert(
-                  "Admin Access Required\n\n" +
-                  "Company Settings is only available to users with Admin role.\n\n" +
-                  "To get admin access:\n" +
-                  "1. Contact your company administrator\n" +
-                  "2. Ask them to go to Settings → Users\n" +
-                  "3. They can change your role to 'Admin'\n\n" +
-                  "Note: The person who created the company account is automatically an admin."
-                );
+                const message = permissions?.canAccessSettings === false
+                  ? "Settings Access Restricted\n\n" +
+                    "Your license type restricts settings access to administrators only.\n\n" +
+                    "For single-user licenses: You have full settings access.\n" +
+                    "For multi-user licenses: Only administrators can access settings.\n\n" +
+                    "Contact your company administrator if you need settings access."
+                  : "Admin Access Required\n\n" +
+                    "Company Settings is only available to users with Admin role.\n\n" +
+                    "To get admin access:\n" +
+                    "1. Contact your company administrator\n" +
+                    "2. Ask them to go to Settings → Users\n" +
+                    "3. They can change your role to 'Admin'\n\n" +
+                    "Note: The person who created the company account is automatically an admin.";
+                alert(message);
               }
             }}
             className={cn(
