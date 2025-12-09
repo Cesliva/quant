@@ -45,10 +45,15 @@ export default function Sidebar() {
   const hasProjectIdInPath = pathname?.startsWith("/projects/") && projectIdFromParams;
   const hasProjectIdInQuery = Boolean(projectIdFromQuery);
   const isProjectPage = hasProjectIdInPath || hasProjectIdInQuery;
-  const isProjectDashboard = pathname === `/projects/${projectIdFromParams}`;
+  
+  // Determine if we're on the project dashboard (exact match or no sub-path)
+  const isProjectDashboard = projectIdFromParams 
+    ? (pathname === `/projects/${projectIdFromParams}` || pathname === `/projects/${projectIdFromParams}/`)
+    : false;
+  
   const isProjectSubPage = isProjectPage && !isProjectDashboard;
-  const isReportsPage = pathname === `/projects/${projectIdFromParams}/reports`;
-  const isProjectDetailsPage = pathname === `/projects/${projectIdFromParams}/details`;
+  const isReportsPage = projectIdFromParams ? pathname === `/projects/${projectIdFromParams}/reports` : false;
+  const isProjectDetailsPage = projectIdFromParams ? pathname === `/projects/${projectIdFromParams}/details` : false;
 
   return (
     <div className="w-64 bg-white border-r border-gray-200 min-h-screen p-4 sidebar-print-hide">
