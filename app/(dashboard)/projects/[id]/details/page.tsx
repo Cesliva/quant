@@ -230,9 +230,31 @@ export default function ProjectDetailsPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validation
-    if (!project.projectName || !project.projectNumber) {
-      alert("Please fill in required fields: Project Name and Project Number");
+    // Validation - check all required fields (marked with asterisks)
+    const missingFields: string[] = [];
+    
+    if (!project.projectNumber || project.projectNumber.trim() === "") {
+      missingFields.push("Project Number");
+    }
+    
+    if (!project.projectName || project.projectName.trim() === "") {
+      missingFields.push("Project Name");
+    }
+    
+    if (!project.estimator || project.estimator.trim() === "") {
+      missingFields.push("Estimator");
+    }
+    
+    if (!project.generalContractor || project.generalContractor.trim() === "") {
+      missingFields.push("General Contractor");
+    }
+    
+    if (!project.bidDueDate || project.bidDueDate.trim() === "") {
+      missingFields.push("Bid Due Date");
+    }
+    
+    if (missingFields.length > 0) {
+      alert(`Please fill in all required fields:\n\n${missingFields.join("\n")}\n\nRequired fields are marked with a red asterisk (*).`);
       return;
     }
 
