@@ -62,30 +62,78 @@ export default function UserProfilePage() {
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !user || !companyId) return;
+    if (!file || !user || !companyId) {
+      // Reset input
+      if (e.target) e.target.value = "";
+      return;
+    }
+
+    // Validate file type
+    const validTypes = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"];
+    if (!validTypes.includes(file.type)) {
+      alert("Please select a valid image file (JPG, PNG, GIF, or WEBP).");
+      e.target.value = "";
+      return;
+    }
+
+    // Validate file size (2MB max)
+    const maxSize = 2 * 1024 * 1024; // 2MB in bytes
+    if (file.size > maxSize) {
+      alert("Image size must be less than 2MB. Please compress the image and try again.");
+      e.target.value = "";
+      return;
+    }
 
     setIsUploading(true);
     try {
+      if (!isFirebaseConfigured()) {
+        throw new Error("Firebase is not configured. Please set up your Firebase credentials.");
+      }
+
+      // Sanitize file name
+      const fileExtension = file.name.split(".").pop() || "jpg";
+      const sanitizedFileName = `avatar_${Date.now()}.${fileExtension}`;
+      const storagePath = `avatars/${companyId}/${user.uid}/${sanitizedFileName}`;
+      
       // Upload to Firebase Storage
-      const timestamp = Date.now();
-      const storagePath = `avatars/${companyId}/${user.uid}/${timestamp}_${file.name}`;
       const downloadURL = await uploadFileToStorage(file, storagePath);
 
-      // Update profile
+      if (!downloadURL) {
+        throw new Error("Failed to get download URL after upload.");
+      }
+
+      // Update profile state
       setProfile({ ...profile, avatarUrl: downloadURL });
 
-      // Save to Firestore
+      // Save to Firestore - use updateDocument to merge with existing data
       const memberPath = `companies/${companyId}/members/${user.uid}`;
+      
+      // First, get existing member data to preserve other fields
+      const existingMember = await getDocument(memberPath);
+      
       await setDocument(
         memberPath,
-        { avatarUrl: downloadURL },
-        true
+        {
+          ...(existingMember || {}),
+          userId: user.uid,
+          email: user.email || profile.email,
+          name: profile.name || existingMember?.name || user.displayName || "",
+          avatarUrl: downloadURL,
+          updatedAt: new Date(),
+        },
+        true // merge = true to preserve other fields
       );
+
+      // Show success message
+      alert("Avatar uploaded successfully!");
     } catch (error: any) {
       console.error("Failed to upload avatar:", error);
-      alert(`Failed to upload avatar: ${error.message}`);
+      const errorMessage = error.message || "An unknown error occurred. Please try again.";
+      alert(`Failed to upload avatar: ${errorMessage}`);
     } finally {
       setIsUploading(false);
+      // Reset input
+      if (e.target) e.target.value = "";
     }
   };
 

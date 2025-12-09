@@ -2,9 +2,10 @@
 
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useState, useEffect } from "react";
-import { subscribeToCollection, getDocument } from "@/lib/firebase/firestore";
+import { getDocument, getDocRef } from "@/lib/firebase/firestore";
 import { useCompanyId } from "@/lib/hooks/useCompanyId";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
+import { onSnapshot } from "firebase/firestore";
 
 interface UserProfile {
   id: string;
@@ -33,6 +34,7 @@ export function UserAvatar({ userId, size = "md", showName = false, className = 
       return;
     }
 
+    // Initial load
     const loadProfile = async () => {
       try {
         // Try to get from members collection first
@@ -67,6 +69,53 @@ export function UserAvatar({ userId, size = "md", showName = false, className = 
     };
 
     loadProfile();
+
+    // Set up real-time listener for member document
+    const memberPath = `companies/${companyId}/members/${userId}`;
+    const memberDocRef = getDocRef(memberPath);
+
+    const unsubscribe = onSnapshot(
+      memberDocRef,
+      (snapshot) => {
+        if (snapshot.exists()) {
+          const memberDoc = snapshot.data();
+          setProfile({
+            id: userId,
+            userId: memberDoc.userId || userId,
+            name: memberDoc.name || memberDoc.email || "Unknown User",
+            email: memberDoc.email || "",
+            avatarUrl: memberDoc.avatarUrl,
+            role: memberDoc.role,
+          });
+        } else {
+          // If member doc doesn't exist, try users collection
+          const userDocRef = getDocRef(`users/${userId}`);
+          onSnapshot(
+            userDocRef,
+            (userSnapshot) => {
+              if (userSnapshot.exists()) {
+                const userDoc = userSnapshot.data();
+                setProfile({
+                  id: userId,
+                  userId,
+                  name: userDoc.displayName || userDoc.email || "Unknown User",
+                  email: userDoc.email || "",
+                  avatarUrl: userDoc.photoURL,
+                });
+              }
+            },
+            (error) => {
+              console.error("Error loading user profile:", error);
+            }
+          );
+        }
+      },
+      (error) => {
+        console.error("Error subscribing to member profile:", error);
+      }
+    );
+
+    return () => unsubscribe();
   }, [userId, companyId]);
 
   const sizeClasses = {
