@@ -178,8 +178,17 @@ export default function Sidebar() {
           <>
             <Link
               href={`/projects/${projectId}`}
+              onClick={(e) => {
+                // Debug: log navigation attempt
+                if (!projectId) {
+                  console.error("Project Dashboard: projectId is missing");
+                  e.preventDefault();
+                  return;
+                }
+                console.log("Navigating to project dashboard:", `/projects/${projectId}`);
+              }}
               className={cn(
-                "flex items-center gap-3 px-4 py-3 rounded-lg transition-colors",
+                "flex items-center gap-3 px-4 py-3 rounded-lg transition-colors cursor-pointer",
                 isProjectDashboard
                   ? "bg-gray-100 text-blue-600 font-medium"
                   : "text-gray-700 hover:bg-gray-50"
