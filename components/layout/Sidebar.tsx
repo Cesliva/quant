@@ -28,7 +28,7 @@ import { useUserPermissions } from "@/lib/hooks/useUserPermissions";
 const navigation = [
   { name: "Structural Steel Estimate", href: "/estimating", icon: ClipboardList },
   { name: "AI Spec Review", href: "/spec-review", icon: FileCheck, aiIcon: Sparkles },
-  { name: "AI Generated Proposal", href: "/proposal", icon: FileEdit, aiIcon: Sparkles },
+  { name: "AI Generated Proposal", href: "/proposal/enhanced", icon: FileEdit, aiIcon: Sparkles },
   { name: "Import Quotes", href: "/import-quotes", icon: Upload },
 ];
 
@@ -236,7 +236,7 @@ export default function Sidebar() {
             } else if (item.name === "AI Spec Review") {
               href = `/spec-review?projectId=${projectId}`;
             } else if (item.name === "AI Generated Proposal") {
-              href = `/proposal?projectId=${projectId}`;
+              href = `/proposal/enhanced?projectId=${projectId}`;
             } else if (item.name === "Import Quotes") {
               href = `/import-quotes?projectId=${projectId}`;
             }
@@ -259,9 +259,9 @@ export default function Sidebar() {
             }
             if (item.name === "AI Generated Proposal") {
               if (isProjectPage && projectId) {
-                return pathname === "/proposal" && projectIdFromQuery === projectId;
+                return (pathname === "/proposal/enhanced" || pathname === "/proposal") && projectIdFromQuery === projectId;
               }
-              return pathname === "/proposal" && !projectIdFromQuery;
+              return pathname === "/proposal/enhanced" || (pathname === "/proposal" && !projectIdFromQuery);
             }
             if (item.name === "Import Quotes") {
               if (isProjectPage && projectId) {
