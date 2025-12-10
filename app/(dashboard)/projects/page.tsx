@@ -167,13 +167,11 @@ export default function ProjectsPage() {
             </p>
           </div>
           <div className="flex gap-3">
-            {permissions?.canCreateProjects && (
-              <Link href="/projects/new/details">
-                <Button className="px-5 py-2.5 rounded-2xl bg-blue-500 text-white text-sm font-medium shadow-md hover:bg-blue-600 transition-all duration-200">
-                  + New Project
-                </Button>
-              </Link>
-            )}
+            <Link href="/projects/new/details">
+              <Button className="px-5 py-2.5 rounded-2xl bg-blue-500 text-white text-sm font-medium shadow-md hover:bg-blue-600 transition-all duration-200">
+                + New Project
+              </Button>
+            </Link>
           </div>
         </div>
 

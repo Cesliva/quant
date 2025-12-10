@@ -125,6 +125,8 @@ function EnhancedProposalPageContent() {
   const [templateName, setTemplateName] = useState("");
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
+  const [isSavingProposal, setIsSavingProposal] = useState(false);
+  const [savedProposals, setSavedProposals] = useState<Array<{ id: string; name: string; createdAt: any }>>([]);
 
   // Load project and company data
   useEffect(() => {
@@ -214,6 +216,9 @@ function EnhancedProposalPageContent() {
 
     loadData();
     loadSavedTemplates();
+    if (projectId) {
+      loadSavedProposals();
+    }
   }, [companyId, projectId, user]);
 
   // Load saved templates
@@ -383,6 +388,102 @@ function EnhancedProposalPageContent() {
       formData.contractor || "Company",
       companyId
     );
+  };
+
+  // Save proposal to project
+  const handleSaveProposal = async () => {
+    if (!proposalText.trim()) {
+      alert("Please generate a proposal first");
+      return;
+    }
+
+    if (!projectId) {
+      alert("Please select a project first");
+      return;
+    }
+
+    if (!isFirebaseConfigured() || !companyId) {
+      alert("Firebase is not configured");
+      return;
+    }
+
+    setIsSavingProposal(true);
+    try {
+      const proposalData = {
+        proposalText,
+        formData,
+        estimatingTotals,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        createdBy: user?.uid,
+        version: savedProposals.length + 1,
+        versionName: `Version ${savedProposals.length + 1} - ${new Date().toLocaleDateString()}`,
+      };
+
+      const proposalId = crypto.randomUUID();
+      const proposalPath = getProjectPath(companyId, projectId, "proposals");
+      await setDocument(
+        `${proposalPath}/${proposalId}`,
+        proposalData,
+        false
+      );
+
+      alert("Proposal saved successfully!");
+      
+      // Reload saved proposals
+      await loadSavedProposals();
+    } catch (error: any) {
+      console.error("Failed to save proposal:", error);
+      alert("Failed to save proposal. Please try again.");
+    } finally {
+      setIsSavingProposal(false);
+    }
+  };
+
+  // Load saved proposals
+  const loadSavedProposals = async () => {
+    if (!isFirebaseConfigured() || !companyId || !projectId || !db) return;
+
+    try {
+      const proposalsRef = collection(db, getProjectPath(companyId, projectId, "proposals"));
+      const snapshot = await getDocs(proposalsRef);
+      
+      const proposals = snapshot.docs.map(doc => ({
+        id: doc.id,
+        name: doc.data().versionName || `Version ${doc.data().version || "Unknown"}`,
+        createdAt: doc.data().createdAt,
+      })).sort((a, b) => {
+        // Sort by creation date, newest first
+        const aDate = a.createdAt?.toDate?.() || new Date(0);
+        const bDate = b.createdAt?.toDate?.() || new Date(0);
+        return bDate.getTime() - aDate.getTime();
+      });
+      
+      setSavedProposals(proposals);
+    } catch (error) {
+      console.error("Failed to load proposals:", error);
+    }
+  };
+
+  // Load saved proposal
+  const handleLoadProposal = async (proposalId: string) => {
+    if (!isFirebaseConfigured() || !companyId || !projectId) return;
+
+    try {
+      const proposal = await getDocument(getProjectPath(companyId, projectId, `proposals/${proposalId}`));
+      if (proposal) {
+        if (proposal.proposalText) {
+          setProposalText(proposal.proposalText);
+        }
+        if (proposal.formData) {
+          setFormData(proposal.formData as ProposalFormData);
+        }
+        alert("Proposal loaded successfully!");
+      }
+    } catch (error: any) {
+      console.error("Failed to load proposal:", error);
+      alert("Failed to load proposal. Please try again.");
+    }
   };
 
   return (
@@ -784,6 +885,16 @@ function EnhancedProposalPageContent() {
           <FileDown className="w-4 h-4 mr-2" />
           Export PDF
         </Button>
+        {projectId && (
+          <Button
+            variant="primary"
+            onClick={handleSaveProposal}
+            disabled={!proposalText.trim() || isSavingProposal}
+          >
+            <Save className="w-4 h-4 mr-2" />
+            {isSavingProposal ? "Saving..." : "Save Proposal"}
+          </Button>
+        )}
         <Button
           variant="outline"
           onClick={() => setShowTemplateDialog(true)}
@@ -791,6 +902,64 @@ function EnhancedProposalPageContent() {
           <Save className="w-4 h-4 mr-2" />
           Save Template
         </Button>
+        {savedProposals.length > 0 && projectId && (
+          <div className="relative">
+            <Button
+              variant="outline"
+              onClick={() => {
+                const dialog = document.getElementById("proposal-load-dialog") as HTMLDialogElement;
+                if (dialog) dialog.showModal();
+              }}
+            >
+              <FolderOpen className="w-4 h-4 mr-2" />
+              Load Saved Proposal ({savedProposals.length})
+            </Button>
+            <dialog id="proposal-load-dialog" className="rounded-lg p-6 max-w-md">
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">Load Saved Proposal</h3>
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {savedProposals.map((proposal) => (
+                    <div
+                      key={proposal.id}
+                      className="flex items-center justify-between p-3 bg-gray-50 rounded border border-gray-200"
+                    >
+                      <div>
+                        <p className="font-medium text-sm">{proposal.name}</p>
+                        {proposal.createdAt && (
+                          <p className="text-xs text-gray-500">
+                            {proposal.createdAt.toDate?.().toLocaleDateString() || "Unknown date"}
+                          </p>
+                        )}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          handleLoadProposal(proposal.id);
+                          const dialog = document.getElementById("proposal-load-dialog") as HTMLDialogElement;
+                          if (dialog) dialog.close();
+                        }}
+                      >
+                        Load
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-end">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      const dialog = document.getElementById("proposal-load-dialog") as HTMLDialogElement;
+                      if (dialog) dialog.close();
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            </dialog>
+          </div>
+        )}
         {savedTemplates.length > 0 && (
           <div className="relative">
             <Button

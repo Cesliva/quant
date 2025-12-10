@@ -12,7 +12,7 @@ import { onSnapshot } from "firebase/firestore";
 import { useCompanyId } from "@/lib/hooks/useCompanyId";
 import { useUserPermissions } from "@/lib/hooks/useUserPermissions";
 import { loadCompanySettings } from "@/lib/utils/settingsLoader";
-import RecentActivity from "@/components/dashboard/RecentActivity";
+import BacklogAtAGlance from "@/components/dashboard/BacklogAtAGlance";
 
 interface Project {
   id: string;
@@ -479,13 +479,11 @@ export default function DashboardPage() {
               Company Settings
             </Button>
           </Link>
-          {permissions?.canCreateProjects && (
-            <Link href="/projects/new/details">
-              <Button className="px-5 py-2.5 rounded-2xl bg-blue-500 text-white text-sm font-medium shadow-[0_2px_4px_0_rgb(59,130,246,0.3),0_4px_8px_0_rgb(59,130,246,0.2)] hover:shadow-[0_4px_8px_0_rgb(59,130,246,0.4),0_8px_16px_0_rgb(59,130,246,0.25)] hover:bg-blue-600 transition-all duration-200">
-                + New Project
-              </Button>
-            </Link>
-          )}
+          <Link href="/projects/new/details">
+            <Button className="px-5 py-2.5 rounded-2xl bg-blue-500 text-white text-sm font-medium shadow-[0_2px_4px_0_rgb(59,130,246,0.3),0_4px_8px_0_rgb(59,130,246,0.2)] hover:shadow-[0_4px_8px_0_rgb(59,130,246,0.4),0_8px_16px_0_rgb(59,130,246,0.25)] hover:bg-blue-600 transition-all duration-200">
+              + New Project
+            </Button>
+          </Link>
         </div>
       </div>
 
@@ -938,9 +936,9 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Recent Activity Section */}
+      {/* Backlog at a Glance Section */}
       <div className="mt-8">
-        <RecentActivity companyId={companyId} limit={10} />
+        <BacklogAtAGlance companyId={companyId} />
       </div>
 
       </div>
