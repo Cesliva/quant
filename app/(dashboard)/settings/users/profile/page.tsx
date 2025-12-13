@@ -1,20 +1,24 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import { User, Upload, Save } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useCompanyId } from "@/lib/hooks/useCompanyId";
+import { useUserPermissions } from "@/lib/hooks/useUserPermissions";
 import { getDocument, updateDocument, setDocument } from "@/lib/firebase/firestore";
 import { uploadFileToStorage } from "@/lib/firebase/storage";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
 import { UserAvatar } from "@/components/collaboration/UserAvatar";
+import { getRoleLabel } from "@/lib/types/roles";
 
 export default function UserProfilePage() {
   const { user } = useAuth();
   const companyId = useCompanyId();
+  const { permissions } = useUserPermissions();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [profile, setProfile] = useState({
     name: "",
     email: "",
@@ -196,29 +200,41 @@ export default function UserProfilePage() {
               )}
             </div>
             <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <p className="block text-sm font-medium text-gray-700 mb-2">
                 Profile Picture
-              </label>
+              </p>
               <div className="flex items-center gap-2">
-                <label className="cursor-pointer">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleAvatarUpload}
-                    disabled={isUploading}
-                    className="hidden"
-                  />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    type="button"
-                    disabled={isUploading}
-                    as="span"
-                  >
-                    <Upload className="w-4 h-4 mr-2" />
-                    {isUploading ? "Uploading..." : "Upload Avatar"}
-                  </Button>
-                </label>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleAvatarUpload}
+                  disabled={isUploading}
+                  className="hidden"
+                  id="avatar-upload-input"
+                />
+                <button
+                  type="button"
+                  disabled={isUploading}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (isUploading) return;
+                    
+                    const input = fileInputRef.current;
+                    if (input) {
+                      // Reset the input value to allow selecting the same file again
+                      input.value = '';
+                      input.click();
+                    } else {
+                      console.error('File input ref is not attached');
+                    }
+                  }}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-semibold rounded-xl border-2 border-blue-600 text-blue-600 bg-white hover:bg-blue-50 focus:outline-none focus:ring-4 focus:ring-blue-200 shadow-sm hover:shadow-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Upload className="w-4 h-4" />
+                  {isUploading ? "Uploading..." : "Upload Avatar"}
+                </button>
                 <p className="text-xs text-gray-500">
                   JPG, PNG or GIF. Max size 2MB.
                 </p>
@@ -248,9 +264,21 @@ export default function UserProfilePage() {
               disabled
               className="bg-gray-50"
             />
-            <p className="text-xs text-gray-500 mt-1">
-              Email cannot be changed. Contact an administrator if you need to update it.
-            </p>
+            <div className="flex items-center justify-between mt-1">
+              <p className="text-xs text-gray-500">
+                Email cannot be changed. Contact a workspace administrator if you need to update it.
+              </p>
+              {permissions?.isOwner && (
+                <span className="text-xs text-slate-500 font-medium">
+                  {getRoleLabel(permissions.role)}
+                </span>
+              )}
+              {permissions?.isAdmin && !permissions?.isOwner && (
+                <span className="text-xs text-slate-500 font-medium">
+                  {getRoleLabel(permissions.role)}
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Title */}

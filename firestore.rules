@@ -49,9 +49,37 @@ service cloud.firestore {
              get(/databases/$(database)/documents/companies/$(companyId)/members/$(request.auth.uid)).data.permissions.canManageUsers == true;
     }
     
+    // Helper function to check if user is workspace owner
+    function isWorkspaceOwner(companyId) {
+      return isCompanyMember(companyId) && 
+             get(/databases/$(database)/documents/companies/$(companyId)).data.ownerId == request.auth.uid;
+    }
+    
+    // Helper function to check if user can access settings (owner or admin)
+    function canAccessSettings(companyId) {
+      if (!isCompanyMember(companyId)) return false;
+      let member = get(/databases/$(database)/documents/companies/$(companyId)/members/$(request.auth.uid)).data;
+      // Owner always has access
+      if (isWorkspaceOwner(companyId)) return true;
+      // Admin has access
+      return member.role == 'admin' || member.role == 'owner';
+    }
+    
     // Companies collection
     match /companies/{companyId} {
-      // Company document
+      // Company document - protect settings field
+      allow read: if isCompanyMember(companyId);
+      allow create: if isCompanyMember(companyId);
+      allow update: if isCompanyMember(companyId) && (
+        // If updating settings field, require admin/owner access
+        // Allow update if settings field is unchanged OR user has settings access
+        !('settings' in request.resource.data) ||
+        request.resource.data.settings == resource.data.settings ||
+        canAccessSettings(companyId)
+      );
+      allow delete: if false; // Never allow company deletion via rules
+      
+      // Legacy catch-all for other document paths
       match /{document=**} {
         allow read, write: if isCompanyMember(companyId);
       }
@@ -74,9 +102,19 @@ service cloud.firestore {
         allow write: if isCompanyMember(companyId); // Any member can create notifications for others
       }
       
-      // Settings
+      // Settings - only owner/admin can write
       match /settings/{settingsId} {
-        allow read, write: if isCompanyMember(companyId);
+        allow read: if isCompanyMember(companyId);
+        allow write: if canAccessSettings(companyId);
+      }
+      
+      // Company document - only owner can transfer ownership
+      match /{document=**} {
+        allow read: if isCompanyMember(companyId);
+        allow update: if isCompanyMember(companyId) && 
+          (!('ownerId' in request.resource.data) || 
+           request.resource.data.ownerId == resource.data.ownerId || 
+           isWorkspaceOwner(companyId));
       }
       
       // Projects

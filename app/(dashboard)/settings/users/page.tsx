@@ -8,18 +8,21 @@ import { Plus, UserPlus, Trash2, Shield, User, Eye } from "lucide-react";
 import { subscribeToCollection, createDocument, updateDocument, deleteDocument } from "@/lib/firebase/firestore";
 import { useCompanyId } from "@/lib/hooks/useCompanyId";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { useUserPermissions } from "@/lib/hooks/useUserPermissions";
 import { useSubscription } from "@/lib/hooks/useSubscription";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
-import { getDocRef, setDocument } from "@/lib/firebase/firestore";
+import { getDocRef, setDocument, getDocument } from "@/lib/firebase/firestore";
 import { serverTimestamp } from "firebase/firestore";
 import { AlertCircle, Crown } from "lucide-react";
+import { UserRole, getRoleLabel, ROLE_CONFIG } from "@/lib/types/roles";
+import { PermissionGate } from "@/components/auth/PermissionGate";
 
 interface Member {
   id: string;
   userId: string;
   email: string;
   name: string;
-  role: "admin" | "estimator" | "viewer";
+  role: UserRole | "admin" | "estimator" | "viewer"; // Support legacy roles
   permissions?: {
     canCreateProjects: boolean;
     canEditProjects: boolean;
@@ -31,39 +34,46 @@ interface Member {
   lastActive?: any;
 }
 
-const ROLE_PERMISSIONS = {
-  admin: {
-    canCreateProjects: true,
-    canEditProjects: true,
-    canDeleteProjects: true,
-    canViewReports: true,
-    canManageUsers: true,
-  },
-  estimator: {
-    canCreateProjects: true,
-    canEditProjects: true,
-    canDeleteProjects: false,
-    canViewReports: true,
-    canManageUsers: false,
-  },
-  viewer: {
-    canCreateProjects: false,
-    canEditProjects: false,
-    canDeleteProjects: false,
-    canViewReports: true,
-    canManageUsers: false,
-  },
-};
+/**
+ * Map legacy roles to new role system for display
+ */
+function getDisplayRole(member: Member, isOwner: boolean): UserRole {
+  if (isOwner) return "owner";
+  if (member.role === "owner") return "owner";
+  if (member.role === "admin") return "admin";
+  // Legacy roles map to member
+  return "member";
+}
 
 export default function UsersManagementPage() {
   const companyId = useCompanyId();
   const { user: currentUser } = useAuth();
+  const { permissions: currentUserPermissions } = useUserPermissions();
   const { subscription, currentSeats, maxSeats, canAddSeat, remainingSeats, loading: subscriptionLoading } = useSubscription();
   const [members, setMembers] = useState<Member[]>([]);
+  const [companyOwnerId, setCompanyOwnerId] = useState<string | null>(null);
   const [showInviteForm, setShowInviteForm] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<"admin" | "estimator" | "viewer">("estimator");
+  const [inviteRole, setInviteRole] = useState<UserRole>("member");
   const [isInviting, setIsInviting] = useState(false);
+
+  // Load company to get owner ID
+  useEffect(() => {
+    if (!companyId || !isFirebaseConfigured()) return;
+    
+    const loadCompany = async () => {
+      try {
+        const company = await getDocument<{ ownerId?: string }>(`companies/${companyId}`);
+        if (company?.ownerId) {
+          setCompanyOwnerId(company.ownerId);
+        }
+      } catch (error) {
+        console.error("Failed to load company:", error);
+      }
+    };
+    
+    loadCompany();
+  }, [companyId]);
 
   // Load members
   useEffect(() => {
@@ -130,19 +140,27 @@ export default function UsersManagementPage() {
     }
   };
 
-  const handleUpdateRole = async (memberId: string, newRole: "admin" | "estimator" | "viewer") => {
+  const handleUpdateRole = async (memberId: string, newRole: UserRole) => {
     try {
+      const roleConfig = ROLE_CONFIG[newRole];
       await updateDocument(
         `companies/${companyId}/members`,
         memberId,
         {
           role: newRole,
-          permissions: ROLE_PERMISSIONS[newRole],
+          permissions: {
+            canCreateProjects: newRole !== "member",
+            canEditProjects: newRole !== "member",
+            canDeleteProjects: newRole === "owner",
+            canViewReports: true,
+            canManageUsers: roleConfig.canManageUsers,
+            canAccessSettings: roleConfig.canAccessSettings,
+          },
         }
       );
     } catch (error: any) {
-      console.error("Failed to update role:", error);
-      alert(`Failed to update role: ${error.message}`);
+      console.error("Failed to update access level:", error);
+      alert(`Failed to update access level: ${error.message}`);
     }
   };
 
@@ -159,23 +177,28 @@ export default function UsersManagementPage() {
     }
   };
 
-  const getRoleIcon = (role: string) => {
+  const getRoleIcon = (role: string, isOwner: boolean) => {
+    if (isOwner) return <Shield className="w-4 h-4 text-gray-700" />;
     switch (role) {
+      case "owner":
+        return <Shield className="w-4 h-4 text-gray-700" />;
       case "admin":
-        return <Shield className="w-4 h-4 text-purple-600" />;
+        return <Shield className="w-4 h-4 text-gray-600" />;
       case "estimator":
-        return <User className="w-4 h-4 text-blue-600" />;
       case "viewer":
-        return <Eye className="w-4 h-4 text-gray-600" />;
+      case "member":
       default:
-        return <User className="w-4 h-4" />;
+        return <User className="w-4 h-4 text-gray-500" />;
     }
   };
 
-  const getRoleBadgeColor = (role: string) => {
+  const getRoleBadgeColor = (role: string, isOwner: boolean) => {
+    if (isOwner) return "bg-gray-100 text-gray-700 border-gray-200";
     switch (role) {
+      case "owner":
+        return "bg-gray-100 text-gray-700 border-gray-200";
       case "admin":
-        return "bg-purple-100 text-purple-700 border-purple-200";
+        return "bg-gray-100 text-gray-600 border-gray-200";
       case "estimator":
         return "bg-blue-100 text-blue-700 border-blue-200";
       case "viewer":
@@ -190,7 +213,8 @@ export default function UsersManagementPage() {
   )?.permissions?.canManageUsers;
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <PermissionGate requireSettingsAccess>
+      <div className="max-w-6xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Team Members</h1>
@@ -264,9 +288,8 @@ export default function UsersManagementPage() {
                 onChange={(e) => setInviteRole(e.target.value as any)}
                 className="w-full px-4 py-2 rounded-lg border border-gray-300 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="viewer">Viewer - Can view projects and reports</option>
-                <option value="estimator">Estimator - Can create and edit projects</option>
-                <option value="admin">Admin - Full access including user management</option>
+                <option value="member">Member - Core estimating functionality</option>
+                <option value="admin">Workspace Administrator - Manages settings and members</option>
               </select>
             </div>
             <div className="flex gap-2">
@@ -297,11 +320,11 @@ export default function UsersManagementPage() {
             <Crown className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="text-sm font-medium text-blue-900 mb-1">
-                Admin Access Management
+                Workspace Administration
               </p>
               <p className="text-sm text-blue-800">
-                To grant admin access to a user, find them in the list below and change their role from <strong>"Estimator"</strong> or <strong>"Viewer"</strong> to <strong>"Admin"</strong> using the role dropdown. 
-                Admins can access Company Settings, manage users, and have full system access.
+                To grant workspace administrator access, change a member&apos;s access level to <strong>Workspace Administrator</strong>. 
+                Administrators can access Company Settings and manage team members.
               </p>
             </div>
           </div>
@@ -351,26 +374,28 @@ export default function UsersManagementPage() {
                     <div className="flex items-center gap-2">
                       <div
                         className={`flex items-center gap-1 px-2 py-1 rounded border text-xs font-medium ${getRoleBadgeColor(
-                          member.role
+                          member.role,
+                          member.userId === companyOwnerId
                         )}`}
                       >
-                        {getRoleIcon(member.role)}
-                        {member.role}
+                        {getRoleIcon(member.role, member.userId === companyOwnerId)}
+                        {getRoleLabel(getDisplayRole(member, member.userId === companyOwnerId))}
                       </div>
                     </div>
                   </div>
                   {canManageUsers && member.userId !== currentUser?.uid && (
                     <div className="flex items-center gap-2">
                       <select
-                        value={member.role}
+                        value={getDisplayRole(member, member.userId === companyOwnerId)}
                         onChange={(e) =>
-                          handleUpdateRole(member.id, e.target.value as any)
+                          handleUpdateRole(member.id, e.target.value as UserRole)
                         }
-                        className="text-sm px-2 py-1 border border-gray-300 rounded"
+                        disabled={member.userId === companyOwnerId}
+                        className="text-sm px-2 py-1 border border-gray-300 rounded disabled:bg-gray-100 disabled:text-gray-500"
+                        title={member.userId === companyOwnerId ? "Workspace owner access cannot be changed" : ""}
                       >
-                        <option value="viewer">Viewer</option>
-                        <option value="estimator">Estimator</option>
-                        <option value="admin">Admin</option>
+                        <option value="member">Member</option>
+                        <option value="admin">Workspace Administrator</option>
                       </select>
                       <button
                         onClick={() => handleRemoveMember(member.id, member.email)}
@@ -388,6 +413,7 @@ export default function UsersManagementPage() {
         </CardContent>
       </Card>
     </div>
+    </PermissionGate>
   );
 }
 

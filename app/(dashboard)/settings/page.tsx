@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
@@ -21,6 +21,7 @@ import { useUserPermissions } from "@/lib/hooks/useUserPermissions";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useRouter } from "next/navigation";
 import { createAuditLog, createAuditChanges } from "@/lib/utils/auditLog";
+import { PermissionGate } from "@/components/auth/PermissionGate";
 
 type TabType = "company" | "labor" | "material" | "coating" | "markup" | "advanced" | "executive" | "subscription";
 
@@ -472,90 +473,6 @@ function SettingsPageContent() {
     { id: "subscription" as TabType, label: "Subscription", icon: Crown },
   ];
 
-  // Check if user can access settings - redirect if not
-  useEffect(() => {
-    if (!permissionsLoading) {
-      // Check both role and canAccessSettings permission
-      const canAccess = permissions.role === "admin" && (permissions.canAccessSettings !== false);
-      if (!canAccess) {
-        router.push("/dashboard");
-      }
-    }
-  }, [permissions, permissionsLoading, router]);
-
-  if (permissionsLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-600">Loading permissions...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!permissions || permissions.role !== "admin" || permissions.canAccessSettings === false) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 flex items-center justify-center p-6">
-        <Card className="max-w-2xl w-full">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-red-600">
-              <AlertCircle className="w-6 h-6" />
-              Admin Access Required
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <p className="text-gray-800 font-medium mb-2">
-                You don't have permission to access Company Settings.
-              </p>
-              <p className="text-sm text-gray-600">
-                This page is only available to users with <strong>Admin</strong> role.
-              </p>
-            </div>
-
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <h3 className="font-semibold text-gray-900 mb-3">How to Get Admin Access:</h3>
-              <ol className="list-decimal list-inside space-y-2 text-sm text-gray-700">
-                <li>
-                  <strong>Contact your company administrator</strong> - The person who created your company account is automatically an admin.
-                </li>
-                <li>
-                  Ask them to navigate to <strong>Settings → Users</strong> (they need admin access to see this).
-                </li>
-                <li>
-                  They can find your account in the user list and change your role from <strong>"Estimator"</strong> or <strong>"Viewer"</strong> to <strong>"Admin"</strong>.
-                </li>
-                <li>
-                  Once your role is updated, refresh this page to access Company Settings.
-                </li>
-              </ol>
-            </div>
-
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-              <h3 className="font-semibold text-gray-900 mb-2">Your Current Role:</h3>
-              <p className="text-sm text-gray-700">
-                <strong>{permissions?.role || "Unknown"}</strong> - {permissions?.role === "estimator" 
-                  ? "You can create and edit projects, but cannot manage company settings or users."
-                  : permissions?.role === "viewer"
-                  ? "You have read-only access to assigned projects."
-                  : "Please contact support if you believe this is an error."}
-              </p>
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <Button variant="primary" onClick={() => router.push("/dashboard")}>
-                Go to Dashboard
-              </Button>
-              <Button variant="outline" onClick={() => window.location.reload()}>
-                Refresh Page
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
 
   if (isLoading) {
     return (
@@ -571,15 +488,16 @@ function SettingsPageContent() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6" data-save-status={saveStatus}>
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Settings</h1>
-          <p className="text-sm text-gray-600 mt-1">
-            Configure company defaults and estimating parameters
-          </p>
-        </div>
+    <>
+      <div className="max-w-7xl mx-auto space-y-6" data-save-status={saveStatus}>
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Company Settings</h1>
+            <p className="text-sm text-gray-500 mt-1">
+              Workspace administration
+            </p>
+          </div>
         <div className="flex items-center gap-3">
           {saveStatus === "saved" && (
             <span className="text-sm text-green-600">Saved</span>
@@ -1795,24 +1713,27 @@ function SettingsPageContent() {
           </div>
         )}
       </div>
-    </div>
+      </div>
+    </>
   );
 }
 
 export default function SettingsPage() {
   return (
-    <Suspense fallback={
-      <div className="max-w-7xl mx-auto space-y-6">
-        <div className="flex items-center justify-center h-64">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading settings...</p>
+    <PermissionGate requireSettingsAccess>
+      <Suspense fallback={
+        <div className="max-w-7xl mx-auto space-y-6">
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <p className="text-gray-600">Loading settings...</p>
+            </div>
           </div>
         </div>
-      </div>
-    }>
-      <SettingsPageContent />
-    </Suspense>
+      }>
+        <SettingsPageContent />
+      </Suspense>
+    </PermissionGate>
   );
 }
 

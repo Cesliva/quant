@@ -29,12 +29,19 @@ interface Project {
 }
 
 import { useCompanyId } from "@/lib/hooks/useCompanyId";
+import { useUserPermissions } from "@/lib/hooks/useUserPermissions";
+import { useAuth } from "@/lib/hooks/useAuth";
+import { updateDocument } from "@/lib/firebase/firestore";
+import { createAuditLog, createAuditChanges } from "@/lib/utils/auditLog";
+import { Save, Shield } from "lucide-react";
 
 export default function ProjectReportsPage() {
   const params = useParams();
   const router = useRouter();
   const projectId = params.id as string;
   const companyId = useCompanyId();
+  const { permissions } = useUserPermissions();
+  const { user } = useAuth();
 
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
@@ -44,6 +51,7 @@ export default function ProjectReportsPage() {
     buyouts: any[];
   } | null>(null);
   const [companyName, setCompanyName] = useState("Company");
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (projectId && projectId !== "new") {

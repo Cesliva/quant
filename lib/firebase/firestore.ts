@@ -1,9 +1,9 @@
-import { 
-  collection, 
-  doc, 
-  getDoc, 
-  setDoc, 
-  updateDoc, 
+import {
+  collection,
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
   deleteDoc,
   deleteField,
   addDoc,
@@ -27,6 +27,26 @@ const checkFirebase = () => {
   }
 };
 
+// Remove undefined values recursively to prevent Firestore errors
+const sanitizeData = <T>(value: T): T => {
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeData(item)) as unknown as T;
+  }
+
+  if (value && typeof value === "object" && !(value instanceof Date) && !(value instanceof Timestamp)) {
+    const cleaned: Record<string, any> = {};
+    Object.entries(value as Record<string, any>).forEach(([key, val]) => {
+      const sanitized = sanitizeData(val);
+      if (sanitized !== undefined) {
+        cleaned[key] = sanitized;
+      }
+    });
+    return cleaned as unknown as T;
+  }
+
+  return value;
+};
+
 // Helper function to get collection reference
 export const getCollectionRef = (path: string) => {
   checkFirebase();
@@ -45,11 +65,14 @@ export const createDocument = async <T extends DocumentData>(
   data: T
 ): Promise<string> => {
   checkFirebase();
-  const docRef = await addDoc(collection(db!, path), {
-    ...data,
-    createdAt: Timestamp.now(),
-    updatedAt: Timestamp.now(),
-  });
+  const docRef = await addDoc(
+    collection(db!, path),
+    sanitizeData({
+      ...data,
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+    })
+  );
   return docRef.id;
 };
 
@@ -73,10 +96,14 @@ export const setDocument = async <T extends DocumentData>(
 ): Promise<void> => {
   checkFirebase();
   const docRef = doc(db!, path);
-  await setDoc(docRef, {
-    ...data,
-    updatedAt: Timestamp.now(),
-  }, { merge });
+  await setDoc(
+    docRef,
+    sanitizeData({
+      ...data,
+      updatedAt: Timestamp.now(),
+    }),
+    { merge }
+  );
 };
 
 export const updateDocument = async <T extends Partial<DocumentData>>(
@@ -86,10 +113,13 @@ export const updateDocument = async <T extends Partial<DocumentData>>(
 ): Promise<void> => {
   checkFirebase();
   const docRef = doc(collection(db!, collectionPath), documentId);
-  await updateDoc(docRef, {
-    ...data,
-    updatedAt: Timestamp.now(),
-  });
+  await updateDoc(
+    docRef,
+    sanitizeData({
+      ...data,
+      updatedAt: Timestamp.now(),
+    })
+  );
 };
 
 export const deleteDocument = async (collectionPath: string, documentId: string): Promise<void> => {

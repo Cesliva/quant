@@ -288,20 +288,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Determine user role and permissions based on license type
-    // Single-user: user gets admin role with full settings access
-    // Multi-user: user gets admin role but settings access is restricted to admins only
-    // No license: default to admin with full access (backward compatibility)
-    const userRole = "admin"; // All signups get admin role initially
-    const canAccessSettings = licenseType === "single-user" ? true : licenseType === "multi-user" ? false : true;
+    // First user automatically becomes Workspace Owner
+    // This happens silently - no UI announcement, no decision fatigue
+    const userRole = "owner"; // First user is always owner
 
     // Create company document
+    // ownerId marks the first user as workspace owner
     await setDocument(
       `companies/${companyId}`,
       {
         companyName,
         createdAt: new Date(),
-        ownerId: user.uid,
+        ownerId: user.uid, // First user is workspace owner
         licenseType,
         licenseSerial: licenseSerialHash,
         needsSetup: licenseType === "multi-user", // Multi-user licenses need setup
@@ -319,21 +317,21 @@ export async function POST(request: NextRequest) {
       false
     );
 
-    // Create user document with role based on license type
+    // Create user document - first user is owner with full permissions
     await setDocument(
       `companies/${companyId}/members/${user.uid}`,
       {
         userId: user.uid,
         email,
         name,
-        role: userRole,
+        role: userRole, // "owner" - full control, billing authority
         permissions: {
           canCreateProjects: true,
           canEditProjects: true,
           canDeleteProjects: true,
           canViewReports: true,
-          canManageUsers: licenseType === "multi-user" ? true : true, // Multi-user: only admins can manage users
-          canAccessSettings: canAccessSettings, // Single-user: yes, Multi-user: only admins
+          canManageUsers: true,
+          canAccessSettings: true,
         },
         status: "active",
         joinedAt: new Date(),

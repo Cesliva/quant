@@ -643,7 +643,17 @@ export default function DashboardPage() {
           <p className="text-xs text-slate-400 mb-4">Based on AI spec review</p>
           <div className="relative w-48 h-32 mx-auto">
             <svg className="w-full h-full" viewBox="0 0 200 100" preserveAspectRatio="xMidYMid meet">
-              {(() => {
+              {/* Background arc - always visible, muted gray */}
+              <path
+                d="M 20 80 A 80 80 0 0 1 180 80"
+                fill="none"
+                stroke="#e5e7eb"
+                strokeWidth="8"
+                strokeLinecap="round"
+                className="opacity-30"
+              />
+              {/* Active risk arc - only show if there's actual risk data */}
+              {aggregatedRisk.percentage > 0 && (() => {
                 const getRiskColor = (percentage: number) => {
                   if (percentage < 30) return "#10b981";
                   if (percentage < 50) return "#f59e0b";
@@ -664,7 +674,8 @@ export default function DashboardPage() {
                   />
                 );
               })()}
-              {(() => {
+              {/* Needle indicator - only show if there's actual risk data */}
+              {aggregatedRisk.percentage > 0 && (() => {
                 const rotationAngle = -90 + (aggregatedRisk.percentage / 100) * 180;
                 const getRiskColor = (percentage: number) => {
                   if (percentage < 30) return "#10b981";

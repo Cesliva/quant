@@ -106,43 +106,25 @@ export default function Sidebar() {
             <TrendingUp className="w-5 h-5" />
             <span>Reports & Analytics</span>
           </Link>
-          <Link
-            href={permissions?.role === "admin" && permissions?.canAccessSettings !== false ? "/settings" : "#"}
-            onClick={(e) => {
-              if (permissions?.role !== "admin" || permissions?.canAccessSettings === false) {
-                e.preventDefault();
-                const message = permissions?.canAccessSettings === false
-                  ? "Settings Access Restricted\n\n" +
-                    "Your license type restricts settings access to administrators only.\n\n" +
-                    "For single-user licenses: You have full settings access.\n" +
-                    "For multi-user licenses: Only administrators can access settings.\n\n" +
-                    "Contact your company administrator if you need settings access."
-                  : "Admin Access Required\n\n" +
-                    "Company Settings is only available to users with Admin role.\n\n" +
-                    "To get admin access:\n" +
-                    "1. Contact your company administrator\n" +
-                    "2. Ask them to go to Settings → Users\n" +
-                    "3. They can change your role to 'Admin'\n\n" +
-                    "Note: The person who created the company account is automatically an admin.";
-                alert(message);
-              }
-            }}
-            className={cn(
-              "flex items-center gap-3 px-4 py-3 rounded-lg transition-colors relative",
-              pathname === "/settings" || pathname?.startsWith("/settings")
-                ? "bg-gray-100 text-blue-600 font-medium"
-                : permissions?.role !== "admin"
-                ? "text-gray-400 cursor-not-allowed opacity-60"
-                : "text-gray-700 hover:bg-gray-50"
-            )}
-            title={permissions?.role !== "admin" ? "Admin access required" : "Company Settings"}
-          >
-            <Settings className="w-5 h-5" />
-            <span>Company Settings</span>
-            {permissions?.role !== "admin" && (
-              <Shield className="w-4 h-4 ml-auto text-gray-400" title="Admin Only" />
-            )}
-          </Link>
+          {/* Company Settings - Hidden for members, visible for owner/admin */}
+          {permissions?.canAccessSettings && (
+            <Link
+              href="/settings"
+              className={cn(
+                "flex items-center gap-3 px-4 py-3 rounded-lg transition-colors",
+                pathname === "/settings" || pathname?.startsWith("/settings")
+                  ? "bg-gray-100 text-blue-600 font-medium"
+                  : "text-gray-700 hover:bg-gray-50"
+              )}
+              title={permissions.isOwner ? "You manage this workspace" : "Workspace administration"}
+            >
+              <Settings className="w-5 h-5" />
+              <div className="flex-1">
+                <span>Company Settings</span>
+                <p className="text-xs text-gray-500 mt-0.5">Workspace administration</p>
+              </div>
+            </Link>
+          )}
           <Link
             href="/address-book"
             className={cn(
@@ -169,23 +151,23 @@ export default function Sidebar() {
           </Link>
         </div>
         
-        {/* Divider */}
+        {/* Project tools are hidden until a project context is available */}
         <div className="pt-2 pb-2">
-          <p className="px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Project Tools</p>
+          <p className="px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+            Project Tools
+          </p>
         </div>
-        
-        {isProjectPage && projectId && (
+
+        {isProjectPage && projectId ? (
           <>
             <Link
               href={`/projects/${projectId}`}
               onClick={(e) => {
-                // Debug: log navigation attempt
                 if (!projectId) {
                   console.error("Project Dashboard: projectId is missing");
                   e.preventDefault();
                   return;
                 }
-                console.log("Navigating to project dashboard:", `/projects/${projectId}`);
               }}
               className={cn(
                 "flex items-center gap-3 px-4 py-3 rounded-lg transition-colors cursor-pointer",
@@ -221,80 +203,78 @@ export default function Sidebar() {
               <BarChart3 className="w-5 h-5" />
               <span>Structural Steel Estimate Summary</span>
             </Link>
+            {navigation.map((item) => {
+              const Icon = item.icon;
+              const AiIcon = (item as any).aiIcon;
+
+              let href = item.href;
+              if (projectId) {
+                if (item.name === "Structural Steel Estimate") {
+                  href = `/projects/${projectId}/estimating`;
+                } else if (item.name === "AI Spec Review") {
+                  href = `/spec-review?projectId=${projectId}`;
+                } else if (item.name === "AI Generated Proposal") {
+                  href = `/proposal/enhanced?projectId=${projectId}`;
+                } else if (item.name === "Import Quotes") {
+                  href = `/import-quotes?projectId=${projectId}`;
+                }
+              }
+
+              const isActive = (() => {
+                if (item.name === "Structural Steel Estimate") {
+                  if (isProjectPage && projectId) {
+                    return pathname === `/projects/${projectId}/estimating`;
+                  }
+                  return pathname === "/estimating" && !projectIdFromQuery;
+                }
+                if (item.name === "AI Spec Review") {
+                  if (isProjectPage && projectId) {
+                    return pathname === "/spec-review" && projectIdFromQuery === projectId;
+                  }
+                  return pathname === "/spec-review" && !projectIdFromQuery;
+                }
+                if (item.name === "AI Generated Proposal") {
+                  if (isProjectPage && projectId) {
+                    return (
+                      (pathname === "/proposal/enhanced" || pathname === "/proposal") &&
+                      projectIdFromQuery === projectId
+                    );
+                  }
+                  return pathname === "/proposal/enhanced" || (pathname === "/proposal" && !projectIdFromQuery);
+                }
+                if (item.name === "Import Quotes") {
+                  if (isProjectPage && projectId) {
+                    return pathname === "/import-quotes" && projectIdFromQuery === projectId;
+                  }
+                  return pathname === "/import-quotes" && !projectIdFromQuery;
+                }
+                const baseHref = item.href.split("?")[0];
+                return pathname === baseHref || pathname?.startsWith(baseHref + "/");
+              })();
+
+              return (
+                <Link
+                  key={item.name}
+                  href={href}
+                  className={cn(
+                    "flex items-center gap-3 px-4 py-3 rounded-lg transition-colors",
+                    isActive ? "bg-gray-100 text-blue-600 font-medium" : "text-gray-700 hover:bg-gray-50"
+                  )}
+                >
+                  <div className="relative">
+                    <Icon className="w-5 h-5" />
+                    {AiIcon && <AiIcon className="w-3 h-3 absolute -top-1 -right-1 text-purple-500" />}
+                  </div>
+                  <span>{item.name}</span>
+                </Link>
+              );
+            })}
           </>
+        ) : (
+          <div className="mx-4 mt-1 rounded-lg border border-dashed border-gray-200 bg-gray-50 px-4 py-3 text-xs text-gray-500">
+            Open a project to access project tools.
+          </div>
         )}
-        {navigation.map((item) => {
-          const Icon = item.icon;
-          const AiIcon = (item as any).aiIcon;
-          
-          // If on a project page, use project-specific routes
-          let href = item.href;
-          if (isProjectPage && projectId) {
-            // Map navigation items to project-specific routes
-            if (item.name === "Structural Steel Estimate") {
-              href = `/projects/${projectId}/estimating`;
-            } else if (item.name === "AI Spec Review") {
-              href = `/spec-review?projectId=${projectId}`;
-            } else if (item.name === "AI Generated Proposal") {
-              href = `/proposal/enhanced?projectId=${projectId}`;
-            } else if (item.name === "Import Quotes") {
-              href = `/import-quotes?projectId=${projectId}`;
-            }
-          }
-          
-          // Determine if this navigation item is active
-          const isActive = (() => {
-            // Check exact pathname matches first
-            if (item.name === "Structural Steel Estimate") {
-              if (isProjectPage && projectId) {
-                return pathname === `/projects/${projectId}/estimating`;
-              }
-              return pathname === "/estimating" && !projectIdFromQuery;
-            }
-            if (item.name === "AI Spec Review") {
-              if (isProjectPage && projectId) {
-                return pathname === "/spec-review" && projectIdFromQuery === projectId;
-              }
-              return pathname === "/spec-review" && !projectIdFromQuery;
-            }
-            if (item.name === "AI Generated Proposal") {
-              if (isProjectPage && projectId) {
-                return (pathname === "/proposal/enhanced" || pathname === "/proposal") && projectIdFromQuery === projectId;
-              }
-              return pathname === "/proposal/enhanced" || (pathname === "/proposal" && !projectIdFromQuery);
-            }
-            if (item.name === "Import Quotes") {
-              if (isProjectPage && projectId) {
-                return pathname === "/import-quotes" && projectIdFromQuery === projectId;
-              }
-              return pathname === "/import-quotes" && !projectIdFromQuery;
-            }
-            // Fallback: check if pathname starts with the base href (without query params)
-            const baseHref = item.href.split("?")[0];
-            return pathname === baseHref || pathname?.startsWith(baseHref + "/");
-          })();
-          
-          return (
-            <Link
-              key={item.name}
-              href={href}
-              className={cn(
-                "flex items-center gap-3 px-4 py-3 rounded-lg transition-colors",
-                isActive
-                  ? "bg-gray-100 text-blue-600 font-medium"
-                  : "text-gray-700 hover:bg-gray-50"
-              )}
-            >
-              <div className="relative">
-                <Icon className="w-5 h-5" />
-                {AiIcon && (
-                  <AiIcon className="w-3 h-3 absolute -top-1 -right-1 text-purple-500" />
-                )}
-              </div>
-              <span>{item.name}</span>
-            </Link>
-          );
-        })}
       </nav>
     </div>
   );
