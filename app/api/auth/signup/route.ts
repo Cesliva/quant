@@ -7,6 +7,7 @@ import { validateBetaCode, getBetaAccessConfig } from "@/lib/utils/betaAccessSec
 import { validateEmail } from "@/lib/utils/validation";
 import { generateVerificationCode, storeVerificationCode } from "@/lib/utils/emailVerification";
 import { validateLicenseSerial, activateLicenseSerial, getLicenseConfig, type LicenseType } from "@/lib/utils/licenseSerial";
+import { getAuthErrorMessage } from "@/lib/utils/authErrors";
 
 // Email service configuration
 const EMAIL_SERVICE = process.env.EMAIL_SERVICE || "console";
@@ -382,9 +383,26 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: any) {
     console.error("Signup error:", error);
+    
+    // Convert Firebase errors to user-friendly messages
+    const userFriendlyError = getAuthErrorMessage(error);
+    
+    // Determine appropriate HTTP status code
+    let statusCode = 500;
+    if (error?.code) {
+      const code = error.code;
+      if (code === 'auth/email-already-in-use') {
+        statusCode = 409; // Conflict
+      } else if (code === 'auth/invalid-email' || code === 'auth/weak-password') {
+        statusCode = 400; // Bad Request
+      } else if (code.startsWith('auth/')) {
+        statusCode = 400; // Bad Request for other auth errors
+      }
+    }
+    
     return NextResponse.json(
-      { error: error.message || "Failed to create account" },
-      { status: 500 }
+      { error: userFriendlyError },
+      { status: statusCode }
     );
   }
 }

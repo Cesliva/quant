@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { createAuditLog } from "@/lib/utils/auditLog";
 import { getDocument } from "@/lib/firebase/firestore";
+import { getAuthErrorMessage } from "@/lib/utils/authErrors";
 import { ArrowRight, Eye, EyeOff } from "lucide-react";
 import { QMark } from "@/components/ui/QMark";
 import { QLoader } from "@/components/ui/QLoader";
@@ -77,7 +78,8 @@ export default function LoginPage() {
       
       router.push("/dashboard");
     } catch (err: any) {
-      setError(err.message || "Failed to sign in. Please check your credentials.");
+      // Convert Firebase errors to user-friendly messages
+      setError(getAuthErrorMessage(err));
     } finally {
       setLoading(false);
     }

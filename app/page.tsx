@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { 
@@ -22,14 +21,7 @@ import {
 
 function LandingPage() {
   const { user } = useAuth();
-  const router = useRouter();
   const [isScrolled, setIsScrolled] = useState(false);
-
-  useEffect(() => {
-    if (user) {
-      router.push("/dashboard");
-    }
-  }, [user, router]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -103,18 +95,29 @@ function LandingPage() {
               />
             </div>
             <div className="flex items-center gap-4">
-              <Link 
-                href="/login"
-                className="px-4 py-2 text-slate-700 hover:text-blue-600 font-medium transition-colors"
-              >
-                Sign In
-              </Link>
-              <Link 
-                href="/signup"
-                className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold hover:shadow-lg hover:shadow-blue-500/25 transition-all duration-200 hover:-translate-y-0.5 border border-white/30"
-              >
-                Get Started
-              </Link>
+              {user ? (
+                <Link 
+                  href="/dashboard"
+                  className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold hover:shadow-lg hover:shadow-blue-500/25 transition-all duration-200 hover:-translate-y-0.5 border border-white/30"
+                >
+                  Go to Dashboard
+                </Link>
+              ) : (
+                <>
+                  <Link 
+                    href="/login"
+                    className="px-4 py-2 text-slate-700 hover:text-blue-600 font-medium transition-colors"
+                  >
+                    Sign In
+                  </Link>
+                  <Link 
+                    href="/signup"
+                    className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold hover:shadow-lg hover:shadow-blue-500/25 transition-all duration-200 hover:-translate-y-0.5 border border-white/30"
+                  >
+                    Get Started
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -155,20 +158,35 @@ function LandingPage() {
               delivering enterprise accuracy, executive-ready proposals, and real-time collaboration.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-10">
-              <Link 
-                href="/signup"
-                className="relative group px-9 py-4.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-500 text-white rounded-2xl font-semibold text-lg shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/40 transition-all duration-300 hover:-translate-y-1 flex items-center gap-3 border border-white/20 overflow-visible"
-              >
-                <span className="pointer-events-none absolute -top-2 -right-2 inline-flex h-6 w-6 items-center justify-center rounded-full bg-white/90 opacity-0 group-hover:opacity-80 transition duration-200 shadow-sm">
-                  <img src="/graphics/logos/Q.svg" alt="Q" className="h-4 w-4" />
-                </span>
-                Start Free Trial
-                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-              </Link>
-              <button className="px-9 py-4.5 bg-white text-slate-800 rounded-2xl font-semibold text-lg shadow-lg border border-slate-200 hover:shadow-xl transition-all duration-300 flex items-center gap-3">
-                <Play className="w-5 h-5" />
-                Watch Demo
-              </button>
+              {user ? (
+                <Link 
+                  href="/dashboard"
+                  className="relative group px-9 py-4.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-500 text-white rounded-2xl font-semibold text-lg shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/40 transition-all duration-300 hover:-translate-y-1 flex items-center gap-3 border border-white/20 overflow-visible"
+                >
+                  <span className="pointer-events-none absolute -top-2 -right-2 inline-flex h-6 w-6 items-center justify-center rounded-full bg-white/90 opacity-0 group-hover:opacity-80 transition duration-200 shadow-sm">
+                    <img src="/graphics/logos/Q.svg" alt="Q" className="h-4 w-4" />
+                  </span>
+                  Go to Dashboard
+                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </Link>
+              ) : (
+                <>
+                  <Link 
+                    href="/signup"
+                    className="relative group px-9 py-4.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-500 text-white rounded-2xl font-semibold text-lg shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/40 transition-all duration-300 hover:-translate-y-1 flex items-center gap-3 border border-white/20 overflow-visible"
+                  >
+                    <span className="pointer-events-none absolute -top-2 -right-2 inline-flex h-6 w-6 items-center justify-center rounded-full bg-white/90 opacity-0 group-hover:opacity-80 transition duration-200 shadow-sm">
+                      <img src="/graphics/logos/Q.svg" alt="Q" className="h-4 w-4" />
+                    </span>
+                    Start Free Trial
+                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  </Link>
+                  <button className="px-9 py-4.5 bg-white text-slate-800 rounded-2xl font-semibold text-lg shadow-lg border border-slate-200 hover:shadow-xl transition-all duration-300 flex items-center gap-3">
+                    <Play className="w-5 h-5" />
+                    Watch Demo
+                  </button>
+                </>
+              )}
             </div>
             <div className="flex flex-wrap items-center justify-center gap-4 text-sm text-slate-600">
               <div className="flex items-center gap-2 px-3 py-2 rounded-full bg-white shadow-sm border border-slate-100">
@@ -309,19 +327,39 @@ function LandingPage() {
       <section className="py-24 px-4 sm:px-6 lg:px-8">
         <div className="max-w-4xl mx-auto text-center">
           <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-3xl p-12 md:p-16 shadow-2xl">
-            <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">
-              Ready to Transform Your Estimating?
-            </h2>
-            <p className="text-xl text-blue-100 mb-10 max-w-2xl mx-auto">
-              Start your free 14-day trial. No credit card required. Cancel anytime.
-            </p>
-            <Link 
-              href="/signup"
-              className="inline-flex items-center gap-2 px-8 py-4 bg-white text-blue-600 rounded-2xl font-semibold text-lg shadow-xl hover:shadow-2xl transition-all duration-300 hover:-translate-y-1"
-            >
-              Get Started Free
-              <ArrowRight className="w-5 h-5" />
-            </Link>
+            {user ? (
+              <>
+                <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">
+                  Welcome Back!
+                </h2>
+                <p className="text-xl text-blue-100 mb-10 max-w-2xl mx-auto">
+                  Continue managing your projects and estimates.
+                </p>
+                <Link 
+                  href="/dashboard"
+                  className="inline-flex items-center gap-2 px-8 py-4 bg-white text-blue-600 rounded-2xl font-semibold text-lg shadow-xl hover:shadow-2xl transition-all duration-300 hover:-translate-y-1"
+                >
+                  Go to Dashboard
+                  <ArrowRight className="w-5 h-5" />
+                </Link>
+              </>
+            ) : (
+              <>
+                <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">
+                  Ready to Transform Your Estimating?
+                </h2>
+                <p className="text-xl text-blue-100 mb-10 max-w-2xl mx-auto">
+                  Start your free 14-day trial. No credit card required. Cancel anytime.
+                </p>
+                <Link 
+                  href="/signup"
+                  className="inline-flex items-center gap-2 px-8 py-4 bg-white text-blue-600 rounded-2xl font-semibold text-lg shadow-xl hover:shadow-2xl transition-all duration-300 hover:-translate-y-1"
+                >
+                  Get Started Free
+                  <ArrowRight className="w-5 h-5" />
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </section>
@@ -353,15 +391,14 @@ function LandingPage() {
 }
 
 export default function RootPage() {
-  const router = useRouter();
-  const { user, loading } = useAuth();
+  const { loading } = useAuth();
 
+  // Debug: Log that we're rendering the root page
   useEffect(() => {
-    if (!loading && user) {
-      // Redirect authenticated users to dashboard
-      router.push("/dashboard");
+    if (typeof window !== 'undefined') {
+      console.log('RootPage rendering - pathname:', window.location.pathname);
     }
-  }, [user, loading, router]);
+  }, []);
 
   // Show loading state while checking auth
   if (loading) {
@@ -375,11 +412,7 @@ export default function RootPage() {
     );
   }
 
-  // Show landing page for non-authenticated users
-  if (!user) {
-    return <LandingPage />;
-  }
-
-  // This shouldn't render as we redirect, but just in case
-  return null;
+  // Show landing page for everyone (authenticated users can navigate to dashboard via links)
+  // IMPORTANT: This page should NEVER redirect - always show the landing page
+  return <LandingPage />;
 }

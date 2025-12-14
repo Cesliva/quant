@@ -18,9 +18,9 @@ import {
   FolderKanban,
   Settings,
   TrendingUp,
+  Shield,
   BookOpen,
   Calendar,
-  Shield,
 } from "lucide-react";
 import { QMark } from "../ui/QMark";
 import { useUserPermissions } from "@/lib/hooks/useUserPermissions";
@@ -122,6 +122,22 @@ export default function Sidebar() {
               <div className="flex-1">
                 <span>Company Settings</span>
                 <p className="text-xs text-gray-500 mt-0.5">Workspace administration</p>
+              </div>
+            </Link>
+          )}
+          {/* Fix Owner Access - Temporary helper link (remove after fixing) */}
+          {!permissions?.canAccessSettings && !permissionsLoading && (
+            <Link
+              href="/fix-owner-access"
+              className={cn(
+                "flex items-center gap-3 px-4 py-3 rounded-lg transition-colors text-amber-700 hover:bg-amber-50 border border-amber-200"
+              )}
+              title="Fix owner access if you're the first user"
+            >
+              <Shield className="w-5 h-5" />
+              <div className="flex-1">
+                <span>Fix Owner Access</span>
+                <p className="text-xs text-amber-600 mt-0.5">First user setup helper</p>
               </div>
             </Link>
           )}

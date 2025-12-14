@@ -22,6 +22,7 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { useRouter } from "next/navigation";
 import { createAuditLog, createAuditChanges } from "@/lib/utils/auditLog";
 import { PermissionGate } from "@/components/auth/PermissionGate";
+import { Users, Mail } from "lucide-react";
 
 type TabType = "company" | "labor" | "material" | "coating" | "markup" | "advanced" | "executive" | "subscription";
 
@@ -510,6 +511,24 @@ function SettingsPageContent() {
             {isSaving ? "Saving..." : "Save All Settings"}
           </Button>
         </div>
+      </div>
+
+      {/* Settings Navigation */}
+      <div className="flex items-center gap-2 pb-4 border-b border-gray-200">
+        <Link
+          href="/settings/users"
+          className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:text-blue-600 hover:bg-gray-50 rounded-lg transition-colors"
+        >
+          <Users className="w-4 h-4" />
+          Team Members
+        </Link>
+        <Link
+          href="/settings/beta-testers"
+          className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:text-blue-600 hover:bg-gray-50 rounded-lg transition-colors"
+        >
+          <Mail className="w-4 h-4" />
+          Beta Testers
+        </Link>
       </div>
 
       {/* Validation Errors */}

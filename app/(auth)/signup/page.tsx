@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { getAuthErrorMessage } from "@/lib/utils/authErrors";
 import { ArrowRight, Eye, EyeOff, CheckCircle2 } from "lucide-react";
 import { QMark } from "@/components/ui/QMark";
 import { QLoader } from "@/components/ui/QLoader";
@@ -72,6 +73,7 @@ export default function SignupPage() {
       const data = await response.json();
 
       if (!response.ok) {
+        // API route already returns user-friendly errors, but ensure we handle them properly
         throw new Error(data.error || "Failed to create account");
       }
 
@@ -100,7 +102,9 @@ export default function SignupPage() {
         router.push("/dashboard");
       }
     } catch (err: any) {
-      setError(err.message || "Failed to create account. Please try again.");
+      // Convert Firebase errors to user-friendly messages
+      // Note: API route errors are already user-friendly, but handle direct Firebase errors too
+      setError(getAuthErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -136,7 +140,8 @@ export default function SignupPage() {
       await signUp(userEmail, formData.password);
       router.push("/dashboard");
     } catch (err: any) {
-      setError(err.message || "Failed to verify email. Please try again.");
+      // Convert Firebase errors to user-friendly messages
+      setError(getAuthErrorMessage(err));
     } finally {
       setVerifying(false);
     }
@@ -171,7 +176,8 @@ export default function SignupPage() {
         console.log("New verification code (dev mode):", data.code);
       }
     } catch (err: any) {
-      setError(err.message || "Failed to resend code. Please try again.");
+      // Convert Firebase errors to user-friendly messages
+      setError(getAuthErrorMessage(err));
     }
   };
 
