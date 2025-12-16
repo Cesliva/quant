@@ -7,18 +7,15 @@ import Input from "@/components/ui/Input";
 import { User, Upload, Save } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useCompanyId } from "@/lib/hooks/useCompanyId";
-import { useUserPermissions } from "@/lib/hooks/useUserPermissions";
 import { getDocument, updateDocument, setDocument } from "@/lib/firebase/firestore";
-import { uploadFileToStorage } from "@/lib/firebase/storage";
+import { uploadFileToStorage, isStorageConfigured } from "@/lib/firebase/storage";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
 import { UserAvatar } from "@/components/collaboration/UserAvatar";
-import { getRoleLabel } from "@/lib/types/roles";
 
 export default function UserProfilePage() {
   const { user } = useAuth();
   const companyId = useCompanyId();
-  const { permissions } = useUserPermissions();
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [profile, setProfile] = useState({
     name: "",
     email: "",
@@ -28,6 +25,12 @@ export default function UserProfilePage() {
   });
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+
+  const handleUploadClick = () => {
+    if (fileInputRef.current && !isUploading) {
+      fileInputRef.current.click();
+    }
+  };
 
   useEffect(() => {
     if (!user || !companyId) return;
@@ -66,78 +69,82 @@ export default function UserProfilePage() {
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !user || !companyId) {
-      // Reset input
-      if (e.target) e.target.value = "";
+    if (!file || !user) {
+      console.log("[Avatar] No file or user");
       return;
     }
-
-    // Validate file type
-    const validTypes = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"];
-    if (!validTypes.includes(file.type)) {
-      alert("Please select a valid image file (JPG, PNG, GIF, or WEBP).");
+    
+    console.log("[Avatar] Starting upload for file:", file.name, "size:", file.size);
+    
+    // Check if Firebase Storage is configured
+    if (!isStorageConfigured()) {
+      alert("Firebase Storage is not configured. Please check NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET in your environment.");
+      e.target.value = "";
+      return;
+    }
+    
+    // Ensure we have a valid companyId before uploading
+    if (!companyId || companyId === "default") {
+      alert("Unable to upload avatar. Please wait for your profile to fully load and try again.");
       e.target.value = "";
       return;
     }
 
     // Validate file size (2MB max)
-    const maxSize = 2 * 1024 * 1024; // 2MB in bytes
-    if (file.size > maxSize) {
-      alert("Image size must be less than 2MB. Please compress the image and try again.");
+    if (file.size > 2 * 1024 * 1024) {
+      alert("File is too large. Maximum size is 2MB.");
+      e.target.value = "";
+      return;
+    }
+
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      alert("Please select an image file (JPG, PNG, or GIF).");
       e.target.value = "";
       return;
     }
 
     setIsUploading(true);
+    
+    // Create a timeout promise to prevent infinite hanging
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        console.error("[Avatar] Upload timed out after 30 seconds");
+        reject(new Error("Upload timed out after 30 seconds. Please check your internet connection and Firebase Storage configuration."));
+      }, 30000);
+    });
+    
     try {
-      if (!isFirebaseConfigured()) {
-        throw new Error("Firebase is not configured. Please set up your Firebase credentials.");
-      }
-
-      // Sanitize file name
-      const fileExtension = file.name.split(".").pop() || "jpg";
-      const sanitizedFileName = `avatar_${Date.now()}.${fileExtension}`;
-      const storagePath = `avatars/${companyId}/${user.uid}/${sanitizedFileName}`;
+      // Upload to Firebase Storage with timeout
+      const timestamp = Date.now();
+      const storagePath = `avatars/${companyId}/${user.uid}/${timestamp}_${file.name}`;
+      console.log("[Avatar] Uploading to path:", storagePath);
       
-      // Upload to Firebase Storage
-      const downloadURL = await uploadFileToStorage(file, storagePath);
+      const uploadPromise = uploadFileToStorage(file, storagePath);
+      const downloadURL = await Promise.race([uploadPromise, timeoutPromise]);
 
-      if (!downloadURL) {
-        throw new Error("Failed to get download URL after upload.");
-      }
+      console.log("[Avatar] Upload successful, URL:", downloadURL);
 
-      // Update profile state
-      setProfile({ ...profile, avatarUrl: downloadURL });
+      // Update profile
+      setProfile((prev) => ({ ...prev, avatarUrl: downloadURL }));
 
-      // Save to Firestore - use updateDocument to merge with existing data
+      // Save to Firestore
       const memberPath = `companies/${companyId}/members/${user.uid}`;
-      
-      // First, get existing member data to preserve other fields
-      const existingMember = await getDocument(memberPath);
-      
       await setDocument(
         memberPath,
-        {
-          ...(existingMember || {}),
-          userId: user.uid,
-          email: user.email || profile.email,
-          name: profile.name || existingMember?.name || user.displayName || "",
-          avatarUrl: downloadURL,
-          updatedAt: new Date(),
-        },
-        true // merge = true to preserve other fields
+        { avatarUrl: downloadURL },
+        true
       );
-
-      // Show success message
+      
+      console.log("[Avatar] Saved to Firestore");
       alert("Avatar uploaded successfully!");
     } catch (error: any) {
-      console.error("Failed to upload avatar:", error);
-      const errorMessage = error.message || "An unknown error occurred. Please try again.";
-      alert(`Failed to upload avatar: ${errorMessage}`);
+      console.error("[Avatar] Failed to upload:", error);
+      alert(`Failed to upload avatar: ${error.message || "Unknown error occurred"}`);
     } finally {
       setIsUploading(false);
-      // Reset input
-      if (e.target) e.target.value = "";
+      // Reset the input so the same file can be selected again if needed
+      e.target.value = "";
     }
   };
 
@@ -200,41 +207,28 @@ export default function UserProfilePage() {
               )}
             </div>
             <div className="flex-1">
-              <p className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
                 Profile Picture
-              </p>
+              </label>
               <div className="flex items-center gap-2">
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*"
+                  accept="image/jpeg,image/png,image/gif"
                   onChange={handleAvatarUpload}
                   disabled={isUploading}
-                  className="hidden"
-                  id="avatar-upload-input"
+                  style={{ display: "none" }}
                 />
-                <button
+                <Button
                   type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleUploadClick}
                   disabled={isUploading}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (isUploading) return;
-                    
-                    const input = fileInputRef.current;
-                    if (input) {
-                      // Reset the input value to allow selecting the same file again
-                      input.value = '';
-                      input.click();
-                    } else {
-                      console.error('File input ref is not attached');
-                    }
-                  }}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-semibold rounded-xl border-2 border-blue-600 text-blue-600 bg-white hover:bg-blue-50 focus:outline-none focus:ring-4 focus:ring-blue-200 shadow-sm hover:shadow-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Upload className="w-4 h-4" />
+                  <Upload className="w-4 h-4 mr-2" />
                   {isUploading ? "Uploading..." : "Upload Avatar"}
-                </button>
+                </Button>
                 <p className="text-xs text-gray-500">
                   JPG, PNG or GIF. Max size 2MB.
                 </p>
@@ -264,21 +258,9 @@ export default function UserProfilePage() {
               disabled
               className="bg-gray-50"
             />
-            <div className="flex items-center justify-between mt-1">
-              <p className="text-xs text-gray-500">
-                Email cannot be changed. Contact a workspace administrator if you need to update it.
-              </p>
-              {permissions?.isOwner && (
-                <span className="text-xs text-slate-500 font-medium">
-                  {getRoleLabel(permissions.role)}
-                </span>
-              )}
-              {permissions?.isAdmin && !permissions?.isOwner && (
-                <span className="text-xs text-slate-500 font-medium">
-                  {getRoleLabel(permissions.role)}
-                </span>
-              )}
-            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              Email cannot be changed. Contact an administrator if you need to update it.
+            </p>
           </div>
 
           {/* Title */}

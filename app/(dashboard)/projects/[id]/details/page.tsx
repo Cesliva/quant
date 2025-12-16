@@ -45,21 +45,18 @@ interface ProjectFile {
 }
 
 import { useCompanyId } from "@/lib/hooks/useCompanyId";
-import { useAuth } from "@/lib/hooks/useAuth";
 import { UserPresence } from "@/components/collaboration/UserPresence";
 import { ActivityFeed } from "@/components/collaboration/ActivityFeed";
 import { CommentsPanel } from "@/components/collaboration/CommentsPanel";
 import { ProjectAssignment } from "@/components/projects/ProjectAssignment";
 import { logActivity } from "@/lib/utils/activityLogger";
 import { syncProjectToWinLoss } from "@/lib/utils/syncWinLossRecord";
-import { createAuditLog, createAuditChanges } from "@/lib/utils/auditLog";
 
 export default function ProjectDetailsPage() {
   const params = useParams();
   const router = useRouter();
   const projectId = params.id as string;
   const companyId = useCompanyId();
-  const { user } = useAuth();
   const isNewProject = projectId === "new";
   
   const [project, setProject] = useState({
@@ -230,31 +227,9 @@ export default function ProjectDetailsPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validation - check all required fields (marked with asterisks)
-    const missingFields: string[] = [];
-    
-    if (!project.projectNumber || project.projectNumber.trim() === "") {
-      missingFields.push("Project Number");
-    }
-    
-    if (!project.projectName || project.projectName.trim() === "") {
-      missingFields.push("Project Name");
-    }
-    
-    if (!project.estimator || project.estimator.trim() === "") {
-      missingFields.push("Estimator");
-    }
-    
-    if (!project.generalContractor || project.generalContractor.trim() === "") {
-      missingFields.push("General Contractor");
-    }
-    
-    if (!project.bidDueDate || project.bidDueDate.trim() === "") {
-      missingFields.push("Bid Due Date");
-    }
-    
-    if (missingFields.length > 0) {
-      alert(`Please fill in all required fields:\n\n${missingFields.join("\n")}\n\nRequired fields are marked with a red asterisk (*).`);
+    // Validation
+    if (!project.projectName || !project.projectNumber) {
+      alert("Please fill in required fields: Project Name and Project Number");
       return;
     }
 
@@ -374,56 +349,12 @@ export default function ProjectDetailsPage() {
         const projectsPath = `companies/${companyId}/projects`;
         const newProjectId = await createDocument(projectsPath, projectData);
         
-        // Log audit trail for project creation
-        await createAuditLog(
-          companyId,
-          'CREATE',
-          'PROJECT',
-          newProjectId,
-          user,
-          {
-            entityName: projectData.projectName || 'New Project',
-          }
-        );
-        
         // Redirect to the new project dashboard
         router.push(`/projects/${newProjectId}`);
       } else {
         // Update existing project
         const projectPath = getProjectPath(companyId, projectId);
-        
-        // Get original project data for audit trail
-        const originalProject = await getDocument(projectPath);
-        
         await updateDocument(`companies/${companyId}/projects`, projectId, projectData);
-        
-        // Log audit trail for project update
-        if (originalProject) {
-          const changes = createAuditChanges(originalProject, projectData, [
-            'projectName',
-            'projectNumber',
-            'status',
-            'estimatedValue',
-            'bidDueDate',
-            'generalContractor',
-            'projectType',
-          ]);
-          
-          if (changes.length > 0) {
-            await createAuditLog(
-              companyId,
-              'UPDATE',
-              'PROJECT',
-              projectId,
-              user,
-              {
-                projectId,
-                entityName: projectData.projectName || projectId,
-                changes,
-              }
-            );
-          }
-        }
         
         // Sync to win/loss records if status changed to "won" or "lost"
         if ((projectData.status === "won" || projectData.status === "lost") && projectData.status !== originalStatus) {

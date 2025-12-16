@@ -117,24 +117,37 @@ export default function DashboardPage() {
     const unsubscribe = subscribeToCollection<Project>(
       projectsPath,
       (projects) => {
-        const mappedProjects = projects.map((p) => ({
-          id: p.id,
-          name: p.projectName || "Untitled Project",
-          gc: p.generalContractor || "",
-          bidDate: p.bidDueDate || "",
-          status: p.status || "draft",
-          isSampleData: p.isSampleData || false,
-          projectNumber: p.projectNumber || "",
-          archived: p.archived === true,
-          estimatedValue: p.estimatedValue,
-          winProbability: p.probabilityOfWin ? p.probabilityOfWin / 100 : p.winProbability,
-          bidDueDate: p.bidDueDate,
-        }));
+        console.log("Dashboard: Loaded projects from Firestore:", projects.length, "projects");
+        const mappedProjects = projects.map((p) => {
+          if (!p.id) {
+            console.warn("Dashboard: Project missing ID:", p);
+          }
+          return {
+            id: p.id,
+            name: p.projectName || "Untitled Project",
+            gc: p.generalContractor || "",
+            bidDate: p.bidDueDate || "",
+            status: p.status || "draft",
+            isSampleData: p.isSampleData || false,
+            projectNumber: p.projectNumber || "",
+            archived: p.archived === true,
+            estimatedValue: p.estimatedValue,
+            winProbability: p.probabilityOfWin ? p.probabilityOfWin / 100 : p.winProbability,
+            bidDueDate: p.bidDueDate,
+          };
+        });
         
-        const uniqueProjects = mappedProjects.filter((project, index, self) => 
+        // Filter out projects without IDs
+        const validProjects = mappedProjects.filter(p => p.id);
+        if (validProjects.length !== mappedProjects.length) {
+          console.warn("Dashboard: Filtered out", mappedProjects.length - validProjects.length, "projects without IDs");
+        }
+        
+        const uniqueProjects = validProjects.filter((project, index, self) => 
           index === self.findIndex((p) => p.id === project.id)
         );
         
+        console.log("Dashboard: Setting active projects:", uniqueProjects.length);
         setActiveProjects(uniqueProjects);
         const activeOnly = projects.filter((p) => p.archived !== true);
         setAllProjects(activeOnly);
@@ -602,7 +615,7 @@ export default function DashboardPage() {
               const maxHeight = 120;
               const scale = pipelineDistribution.maxValue > 0 
                 ? maxHeight / pipelineDistribution.maxValue 
-                : 0;
+                : 1; // Use scale of 1 when no data so bars still render
 
               return ranges.map((range) => {
                 const value = pipelineDistribution.values[range.key as keyof typeof pipelineDistribution.values];
@@ -612,11 +625,13 @@ export default function DashboardPage() {
                 return (
                   <div key={range.key} className="flex flex-col items-center gap-1 flex-1">
                     <div
-                      className="w-full rounded-xl transition-all duration-500"
+                      className={`w-full rounded-xl transition-all duration-500 ${
+                        value > 0 ? "opacity-100" : "opacity-20"
+                      }`}
                       style={{
-                        height: `${height}px`,
+                        height: `${Math.max(height, 2)}px`, // Minimum 2px height so bars are always visible
                         backgroundColor: color,
-                        minHeight: height > 0 ? "4px" : "0",
+                        minHeight: "2px",
                       }}
                     />
                     <span className="text-[10px] text-slate-500 font-medium">
@@ -652,9 +667,10 @@ export default function DashboardPage() {
                 strokeLinecap="round"
                 className="opacity-30"
               />
-              {/* Active risk arc - only show if there's actual risk data */}
-              {aggregatedRisk.percentage > 0 && (() => {
+              {/* Active risk arc - always show, use green for 0% risk */}
+              {(() => {
                 const getRiskColor = (percentage: number) => {
+                  if (percentage === 0) return "#10b981"; // Green for no risk
                   if (percentage < 30) return "#10b981";
                   if (percentage < 50) return "#f59e0b";
                   if (percentage < 70) return "#f97316";
@@ -662,6 +678,8 @@ export default function DashboardPage() {
                 };
                 
                 const arcColor = getRiskColor(aggregatedRisk.percentage);
+                // Always show arc, even at 0% (shows as green)
+                const arcPercentage = Math.max(aggregatedRisk.percentage, 1); // Minimum 1% to show arc
                 
                 return (
                   <path
@@ -670,14 +688,21 @@ export default function DashboardPage() {
                     stroke={arcColor}
                     strokeWidth="8"
                     strokeLinecap="round"
+                    strokeDasharray={arcPercentage === 0 ? "0" : "none"}
                     className="transition-all duration-500"
+                    style={{
+                      strokeDashoffset: arcPercentage === 0 ? 0 : "none",
+                      opacity: arcPercentage === 0 ? 0.3 : 1,
+                    }}
                   />
                 );
               })()}
-              {/* Needle indicator - only show if there's actual risk data */}
-              {aggregatedRisk.percentage > 0 && (() => {
-                const rotationAngle = -90 + (aggregatedRisk.percentage / 100) * 180;
+              {/* Needle indicator - always show, positioned based on risk percentage */}
+              {(() => {
+                // Always show needle, even at 0% (points to Low)
+                const rotationAngle = -90 + (Math.max(aggregatedRisk.percentage, 0) / 100) * 180;
                 const getRiskColor = (percentage: number) => {
+                  if (percentage === 0) return "#10b981"; // Green for no risk
                   if (percentage < 30) return "#10b981";
                   if (percentage < 50) return "#f59e0b";
                   if (percentage < 70) return "#f97316";
@@ -803,8 +828,17 @@ export default function DashboardPage() {
                     }`}
                   >
                     <Link
-                      href={`/projects/${project.id}`}
+                      href={project.id ? `/projects/${project.id}` : "#"}
                       className="flex-1 flex items-center"
+                      onClick={(e) => {
+                        if (!project.id) {
+                          e.preventDefault();
+                          console.error("Project ID is missing:", project);
+                          alert("Project ID is missing. Cannot navigate to project.");
+                        } else {
+                          console.log("Navigating to project:", project.id, project.name);
+                        }
+                      }}
                     >
                       <div className="flex-1">
                         <p className={`font-medium ${isArchived ? "text-slate-500" : "text-slate-800"}`}>

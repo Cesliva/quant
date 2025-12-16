@@ -202,7 +202,7 @@ export default function ImportQuotesPage() {
     try {
       // Delete from Firestore
       const quotesPath = `companies/${companyId}/quoteDocuments`;
-      await deleteDocument(quotesPath, quoteId);
+      await deleteDocument(`${quotesPath}/${quoteId}`);
       
       // Delete from Firebase Storage if storage path exists
       if (storagePath) {
@@ -449,7 +449,7 @@ export default function ImportQuotesPage() {
                           </div>
                         </div>
                         {quote.notes && (
-                          <p className="text-xs text-gray-600 mt-2 ml-8 italic">&quot;{quote.notes}&quot;</p>
+                          <p className="text-xs text-gray-600 mt-2 ml-8 italic">"{quote.notes}"</p>
                         )}
                         <p className="text-xs text-gray-400 mt-2 ml-8">
                           Uploaded {formatDate(quote.uploadedAt)}

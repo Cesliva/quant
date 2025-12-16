@@ -8,21 +8,16 @@ import { Plus, UserPlus, Trash2, Shield, User, Eye } from "lucide-react";
 import { subscribeToCollection, createDocument, updateDocument, deleteDocument } from "@/lib/firebase/firestore";
 import { useCompanyId } from "@/lib/hooks/useCompanyId";
 import { useAuth } from "@/lib/hooks/useAuth";
-import { useUserPermissions } from "@/lib/hooks/useUserPermissions";
-import { useSubscription } from "@/lib/hooks/useSubscription";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
-import { getDocRef, setDocument, getDocument } from "@/lib/firebase/firestore";
+import { getDocRef, setDocument } from "@/lib/firebase/firestore";
 import { serverTimestamp } from "firebase/firestore";
-import { AlertCircle, Crown } from "lucide-react";
-import { UserRole, getRoleLabel, ROLE_CONFIG } from "@/lib/types/roles";
-import { PermissionGate } from "@/components/auth/PermissionGate";
 
 interface Member {
   id: string;
   userId: string;
   email: string;
   name: string;
-  role: UserRole | "admin" | "estimator" | "viewer"; // Support legacy roles
+  role: "admin" | "estimator" | "viewer";
   permissions?: {
     canCreateProjects: boolean;
     canEditProjects: boolean;
@@ -34,46 +29,38 @@ interface Member {
   lastActive?: any;
 }
 
-/**
- * Map legacy roles to new role system for display
- */
-function getDisplayRole(member: Member, isOwner: boolean): UserRole {
-  if (isOwner) return "owner";
-  if (member.role === "owner") return "owner";
-  if (member.role === "admin") return "admin";
-  // Legacy roles map to member
-  return "member";
-}
+const ROLE_PERMISSIONS = {
+  admin: {
+    canCreateProjects: true,
+    canEditProjects: true,
+    canDeleteProjects: true,
+    canViewReports: true,
+    canManageUsers: true,
+  },
+  estimator: {
+    canCreateProjects: true,
+    canEditProjects: true,
+    canDeleteProjects: false,
+    canViewReports: true,
+    canManageUsers: false,
+  },
+  viewer: {
+    canCreateProjects: false,
+    canEditProjects: false,
+    canDeleteProjects: false,
+    canViewReports: true,
+    canManageUsers: false,
+  },
+};
 
 export default function UsersManagementPage() {
   const companyId = useCompanyId();
   const { user: currentUser } = useAuth();
-  const { permissions: currentUserPermissions } = useUserPermissions();
-  const { subscription, currentSeats, maxSeats, canAddSeat, remainingSeats, loading: subscriptionLoading } = useSubscription();
   const [members, setMembers] = useState<Member[]>([]);
-  const [companyOwnerId, setCompanyOwnerId] = useState<string | null>(null);
   const [showInviteForm, setShowInviteForm] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<UserRole>("member");
+  const [inviteRole, setInviteRole] = useState<"admin" | "estimator" | "viewer">("estimator");
   const [isInviting, setIsInviting] = useState(false);
-
-  // Load company to get owner ID
-  useEffect(() => {
-    if (!companyId || !isFirebaseConfigured()) return;
-    
-    const loadCompany = async () => {
-      try {
-        const company = await getDocument<{ ownerId?: string }>(`companies/${companyId}`);
-        if (company?.ownerId) {
-          setCompanyOwnerId(company.ownerId);
-        }
-      } catch (error) {
-        console.error("Failed to load company:", error);
-      }
-    };
-    
-    loadCompany();
-  }, [companyId]);
 
   // Load members
   useEffect(() => {
@@ -115,13 +102,7 @@ export default function UsersManagementPage() {
       const result = await response.json();
 
       if (!response.ok) {
-        // Handle seat limit error specifically
-        if (result.seatLimitReached) {
-          alert(`Seat limit reached!\n\nYou have ${result.currentSeats} of ${result.maxSeats} seats used.\n\n${result.error}`);
-        } else {
-          throw new Error(result.error || "Failed to send invitation");
-        }
-        return;
+        throw new Error(result.error || "Failed to send invitation");
       }
 
       if (result.emailSent) {
@@ -140,27 +121,19 @@ export default function UsersManagementPage() {
     }
   };
 
-  const handleUpdateRole = async (memberId: string, newRole: UserRole) => {
+  const handleUpdateRole = async (memberId: string, newRole: "admin" | "estimator" | "viewer") => {
     try {
-      const roleConfig = ROLE_CONFIG[newRole];
       await updateDocument(
         `companies/${companyId}/members`,
         memberId,
         {
           role: newRole,
-          permissions: {
-            canCreateProjects: newRole !== "member",
-            canEditProjects: newRole !== "member",
-            canDeleteProjects: newRole === "owner",
-            canViewReports: true,
-            canManageUsers: roleConfig.canManageUsers,
-            canAccessSettings: roleConfig.canAccessSettings,
-          },
+          permissions: ROLE_PERMISSIONS[newRole],
         }
       );
     } catch (error: any) {
-      console.error("Failed to update access level:", error);
-      alert(`Failed to update access level: ${error.message}`);
+      console.error("Failed to update role:", error);
+      alert(`Failed to update role: ${error.message}`);
     }
   };
 
@@ -177,28 +150,23 @@ export default function UsersManagementPage() {
     }
   };
 
-  const getRoleIcon = (role: string, isOwner: boolean) => {
-    if (isOwner) return <Shield className="w-4 h-4 text-gray-700" />;
+  const getRoleIcon = (role: string) => {
     switch (role) {
-      case "owner":
-        return <Shield className="w-4 h-4 text-gray-700" />;
       case "admin":
-        return <Shield className="w-4 h-4 text-gray-600" />;
+        return <Shield className="w-4 h-4 text-purple-600" />;
       case "estimator":
+        return <User className="w-4 h-4 text-blue-600" />;
       case "viewer":
-      case "member":
+        return <Eye className="w-4 h-4 text-gray-600" />;
       default:
-        return <User className="w-4 h-4 text-gray-500" />;
+        return <User className="w-4 h-4" />;
     }
   };
 
-  const getRoleBadgeColor = (role: string, isOwner: boolean) => {
-    if (isOwner) return "bg-gray-100 text-gray-700 border-gray-200";
+  const getRoleBadgeColor = (role: string) => {
     switch (role) {
-      case "owner":
-        return "bg-gray-100 text-gray-700 border-gray-200";
       case "admin":
-        return "bg-gray-100 text-gray-600 border-gray-200";
+        return "bg-purple-100 text-purple-700 border-purple-200";
       case "estimator":
         return "bg-blue-100 text-blue-700 border-blue-200";
       case "viewer":
@@ -213,54 +181,24 @@ export default function UsersManagementPage() {
   )?.permissions?.canManageUsers;
 
   return (
-    <PermissionGate requireSettingsAccess>
-      <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Team Members</h1>
           <p className="text-sm text-gray-600 mt-1">
-            Manage who has access to your company&apos;s projects
+            Manage who has access to your company's projects
           </p>
-          {!subscriptionLoading && (
-            <div className="mt-2 flex items-center gap-2">
-              <span className="text-xs font-medium text-gray-500">
-                {subscription.plan.charAt(0).toUpperCase() + subscription.plan.slice(1)} Plan
-              </span>
-              <span className="text-xs text-gray-400">•</span>
-              <span className={`text-xs font-medium ${remainingSeats === 0 ? 'text-red-600' : remainingSeats <= 2 ? 'text-yellow-600' : 'text-gray-600'}`}>
-                {currentSeats} of {maxSeats} seats used
-                {remainingSeats > 0 && ` (${remainingSeats} remaining)`}
-              </span>
-            </div>
-          )}
         </div>
         {canManageUsers && (
           <Button
             variant="primary"
             onClick={() => setShowInviteForm(!showInviteForm)}
-            disabled={!canAddSeat}
-            title={!canAddSeat ? `Seat limit reached. You have ${currentSeats} of ${maxSeats} seats used.` : ""}
           >
             <UserPlus className="w-4 h-4 mr-2" />
             Invite Member
           </Button>
         )}
       </div>
-
-      {!canAddSeat && canManageUsers && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <p className="text-sm font-medium text-yellow-800">
-              Seat limit reached
-            </p>
-            <p className="text-sm text-yellow-700 mt-1">
-              You have reached your seat limit of {maxSeats} for the {subscription.plan.charAt(0).toUpperCase() + subscription.plan.slice(1)} plan. 
-              {subscription.plan !== "enterprise" && " Please upgrade your plan to invite more users."}
-            </p>
-          </div>
-        </div>
-      )}
 
       {showInviteForm && canManageUsers && (
         <Card>
@@ -288,8 +226,9 @@ export default function UsersManagementPage() {
                 onChange={(e) => setInviteRole(e.target.value as any)}
                 className="w-full px-4 py-2 rounded-lg border border-gray-300 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="member">Member - Core estimating functionality</option>
-                <option value="admin">Workspace Administrator - Manages settings and members</option>
+                <option value="viewer">Viewer - Can view projects and reports</option>
+                <option value="estimator">Estimator - Can create and edit projects</option>
+                <option value="admin">Admin - Full access including user management</option>
               </select>
             </div>
             <div className="flex gap-2">
@@ -314,33 +253,9 @@ export default function UsersManagementPage() {
         </Card>
       )}
 
-      {canManageUsers && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-          <div className="flex items-start gap-3">
-            <Crown className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="text-sm font-medium text-blue-900 mb-1">
-                Workspace Administration
-              </p>
-              <p className="text-sm text-blue-800">
-                To grant workspace administrator access, change a member&apos;s access level to <strong>Workspace Administrator</strong>. 
-                Administrators can access Company Settings and manage team members.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Current Members ({members.length})</CardTitle>
-            {!subscriptionLoading && (
-              <div className="text-sm text-gray-500">
-                {currentSeats} / {maxSeats} seats
-              </div>
-            )}
-          </div>
+          <CardTitle>Current Members ({members.length})</CardTitle>
         </CardHeader>
         <CardContent>
           {members.length === 0 ? (
@@ -374,28 +289,26 @@ export default function UsersManagementPage() {
                     <div className="flex items-center gap-2">
                       <div
                         className={`flex items-center gap-1 px-2 py-1 rounded border text-xs font-medium ${getRoleBadgeColor(
-                          member.role,
-                          member.userId === companyOwnerId
+                          member.role
                         )}`}
                       >
-                        {getRoleIcon(member.role, member.userId === companyOwnerId)}
-                        {getRoleLabel(getDisplayRole(member, member.userId === companyOwnerId))}
+                        {getRoleIcon(member.role)}
+                        {member.role}
                       </div>
                     </div>
                   </div>
                   {canManageUsers && member.userId !== currentUser?.uid && (
                     <div className="flex items-center gap-2">
                       <select
-                        value={getDisplayRole(member, member.userId === companyOwnerId)}
+                        value={member.role}
                         onChange={(e) =>
-                          handleUpdateRole(member.id, e.target.value as UserRole)
+                          handleUpdateRole(member.id, e.target.value as any)
                         }
-                        disabled={member.userId === companyOwnerId}
-                        className="text-sm px-2 py-1 border border-gray-300 rounded disabled:bg-gray-100 disabled:text-gray-500"
-                        title={member.userId === companyOwnerId ? "Workspace owner access cannot be changed" : ""}
+                        className="text-sm px-2 py-1 border border-gray-300 rounded"
                       >
-                        <option value="member">Member</option>
-                        <option value="admin">Workspace Administrator</option>
+                        <option value="viewer">Viewer</option>
+                        <option value="estimator">Estimator</option>
+                        <option value="admin">Admin</option>
                       </select>
                       <button
                         onClick={() => handleRemoveMember(member.id, member.email)}
@@ -413,7 +326,6 @@ export default function UsersManagementPage() {
         </CardContent>
       </Card>
     </div>
-    </PermissionGate>
   );
 }
 

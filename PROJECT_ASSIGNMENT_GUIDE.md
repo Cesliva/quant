@@ -21,7 +21,7 @@ This system implements role-based access control with project assignment functio
 - **Setup Page**: `app/(dashboard)/setup/admin/page.tsx`
 - Creates default admin user for development:
   - **Email**: `admin@quant.com`
-  - **Password**: `admin123`
+  - **Password**: `admin`
 - Navigate to `/setup/admin` to create the admin user
 
 ### 3. **Dashboard Updates**
@@ -102,12 +102,13 @@ This system implements role-based access control with project assignment functio
 
 ## Setup Instructions
 
-### 1. Create Your Account
+### 1. Create Default Admin User
 
-1. Navigate to `/signup` in your browser
-2. Fill in your details (name, company name, email, password)
-3. Click "Create Account"
-4. You'll automatically be set as admin of your company
+1. Navigate to `/setup/admin` in your browser
+2. Click "Create Admin User"
+3. Use credentials:
+   - Email: `admin@quant.com`
+   - Password: `admin`
 
 ### 2. Invite Team Members
 
@@ -126,7 +127,7 @@ This system implements role-based access control with project assignment functio
 ## Testing
 
 ### Test Admin Access
-1. Log in as `admin@quant.com` / `admin123`
+1. Log in as `admin@quant.com` / `admin`
 2. Verify you can:
    - See "New Project" button
    - See all projects
@@ -159,12 +160,8 @@ This system implements role-based access control with project assignment functio
 ## Future Enhancements
 
 - [ ] Bulk project assignment
-- [x] Assignment history/audit log (See `AUDIT_TRAIL_DOCUMENTATION.md` for details)
+- [ ] Assignment history/audit log
 - [ ] Project templates with pre-assigned estimators
 - [ ] Notification when assigned to a project
 - [ ] Project request system (estimators request access)
-
-## Related Documentation
-
-- **Audit Trail System**: See `AUDIT_TRAIL_DOCUMENTATION.md` for comprehensive audit logging implementation
 

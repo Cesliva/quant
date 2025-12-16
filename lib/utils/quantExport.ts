@@ -45,7 +45,7 @@ export async function exportToQuant(
     totalWeight: lines.reduce(
       (sum, line) =>
         sum +
-        (line.materialType === "Material"
+        (line.materialType === "Rolled"
           ? line.totalWeight || 0
           : line.plateTotalWeight || 0),
       0

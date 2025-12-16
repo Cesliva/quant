@@ -12,7 +12,6 @@ import { onSnapshot } from "firebase/firestore";
 import { getProjectPath } from "@/lib/firebase/firestore";
 import { EstimatingLine } from "@/components/estimating/EstimatingGrid";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
-// Voice features removed
 import { exportToQuant, importFromQuant } from "@/lib/utils/quantExport";
 import {
   loadCompanySettings,
@@ -23,8 +22,6 @@ import {
 } from "@/lib/utils/settingsLoader";
 
 import { useCompanyId } from "@/lib/hooks/useCompanyId";
-import { useAuth } from "@/lib/hooks/useAuth";
-import { createAuditLog } from "@/lib/utils/auditLog";
 import { UserPresence } from "@/components/collaboration/UserPresence";
 import { ActivityFeed } from "@/components/collaboration/ActivityFeed";
 import { CommentsPanel } from "@/components/collaboration/CommentsPanel";
@@ -35,7 +32,6 @@ export default function EstimatingPage() {
   const searchParams = useSearchParams();
   const projectId = params.id as string;
   const companyId = useCompanyId();
-  const { user } = useAuth();
   const lineIdFromUrl = searchParams.get("lineId");
   
   const [lines, setLines] = useState<EstimatingLine[]>([]);
@@ -172,8 +168,6 @@ export default function EstimatingPage() {
     return () => unsubscribe();
   }, [companyId, projectId]);
 
-  // Voice features removed - handleStructuredData, handleVoiceAgentAction, and handleTranscription no longer needed
-
   // Log activity when viewing page
   useEffect(() => {
     if (projectId && companyId) {
@@ -227,24 +221,6 @@ export default function EstimatingPage() {
             onClick={async () => {
               try {
                 await exportToQuant(lines, projectId, companyId);
-                
-                // Log audit trail for Quant export
-                await createAuditLog(
-                  companyId,
-                  'EXPORT',
-                  'EXPORT',
-                  projectId,
-                  user,
-                  {
-                    projectId,
-                    entityName: `${projectName || projectId} - Quant Export`,
-                    metadata: {
-                      exportType: 'Quant',
-                      lineCount: lines.length,
-                    },
-                  }
-                );
-                
                 // Check if browser supports File System Access API
                 const supportsSaveDialog = 'showSaveFilePicker' in window;
                 if (supportsSaveDialog) {
@@ -294,4 +270,3 @@ export default function EstimatingPage() {
     </div>
   );
 }
-

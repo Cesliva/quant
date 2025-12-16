@@ -1,14 +1,13 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
-import { Save, Building2, DollarSign, Package, Paintbrush, Settings2, Plus, Trash2, Info, AlertCircle, TrendingUp, Crown, Upload, X, Image as ImageIcon } from "lucide-react";
-import SubscriptionManagement from "@/components/settings/SubscriptionManagement";
-import { uploadFileToStorage, deleteFileFromStorage } from "@/lib/firebase/storage";
+import { Save, Building2, DollarSign, Package, Paintbrush, Settings2, Plus, Trash2, Info, AlertCircle, TrendingUp, BookOpen } from "lucide-react";
+import CompanyAddressBook from "@/components/settings/CompanyAddressBook";
 import { 
   loadCompanySettings, 
   saveCompanySettings, 
@@ -17,14 +16,8 @@ import {
 } from "@/lib/utils/settingsLoader";
 import { validateCompanySettings, getFieldError, type ValidationError } from "@/lib/utils/validation";
 import { useCompanyId } from "@/lib/hooks/useCompanyId";
-import { useUserPermissions } from "@/lib/hooks/useUserPermissions";
-import { useAuth } from "@/lib/hooks/useAuth";
-import { useRouter } from "next/navigation";
-import { createAuditLog, createAuditChanges } from "@/lib/utils/auditLog";
-import { PermissionGate } from "@/components/auth/PermissionGate";
-import { Users, Mail } from "lucide-react";
 
-type TabType = "company" | "labor" | "material" | "coating" | "markup" | "advanced" | "executive" | "subscription";
+type TabType = "company" | "labor" | "material" | "coating" | "markup" | "advanced" | "executive" | "addressbook";
 
 interface LaborRate {
   id: string;
@@ -41,18 +34,14 @@ interface MaterialGrade {
 interface CoatingType {
   id: string;
   type: string;
-  costPerSF?: number;
-  costPerPound?: number;
+  costPerSF: number;
 }
 
 function SettingsPageContent() {
   const companyId = useCompanyId();
-  const router = useRouter();
-  const { user } = useAuth();
-  const { permissions, loading: permissionsLoading } = useUserPermissions();
   const searchParams = useSearchParams();
   const tabParam = searchParams?.get("tab") as TabType | null;
-  const [activeTab, setActiveTab] = useState<TabType>(tabParam && ["company", "labor", "material", "coating", "markup", "advanced", "executive", "subscription"].includes(tabParam) ? tabParam : "company");
+  const [activeTab, setActiveTab] = useState<TabType>(tabParam && ["company", "labor", "material", "coating", "markup", "advanced", "executive", "addressbook"].includes(tabParam) ? tabParam : "company");
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved">("unsaved");
@@ -68,10 +57,7 @@ function SettingsPageContent() {
     email: "",
     licenseNumber: "",
     taxId: "",
-    logoUrl: "",
   });
-  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
-  const [logoPreview, setLogoPreview] = useState<string | null>(null);
 
   const [laborRates, setLaborRates] = useState<LaborRate[]>([
     { id: "1", trade: "Fabricator", rate: 45 },
@@ -87,7 +73,7 @@ function SettingsPageContent() {
   ]);
 
   const [coatingTypes, setCoatingTypes] = useState<CoatingType[]>([
-    { id: "1", type: "Galvanizing", costPerPound: 0.15 },
+    { id: "1", type: "Galvanized", costPerSF: 2.50 },
     { id: "2", type: "Paint (Primer + Topcoat)", costPerSF: 3.25 },
     { id: "3", type: "Powder Coat", costPerSF: 4.00 },
     { id: "4", type: "None", costPerSF: 0 },
@@ -155,11 +141,7 @@ function SettingsPageContent() {
           email: settings.companyInfo.email || "",
           licenseNumber: settings.companyInfo.licenseNumber || "",
           taxId: settings.companyInfo.taxId || "",
-          logoUrl: settings.companyInfo.logoUrl || "",
         });
-        if (settings.companyInfo.logoUrl) {
-          setLogoPreview(settings.companyInfo.logoUrl);
-        }
       }
       
       // Load labor rates
@@ -191,7 +173,6 @@ function SettingsPageContent() {
             id: index.toString(),
             type: coating.type,
             costPerSF: coating.costPerSF,
-            costPerPound: coating.costPerPound,
           }))
         );
       }
@@ -210,7 +191,7 @@ function SettingsPageContent() {
       if (settings.pipelineRanges) {
         setPipelineRanges(settings.pipelineRanges);
       }
-
+      
       // Load executive dashboard settings
       setExecutiveSettings({
         shopCapacityHoursPerWeek: settings.shopCapacityHoursPerWeek ?? 0,
@@ -243,7 +224,7 @@ function SettingsPageContent() {
 
   // Update active tab when URL parameter changes
   useEffect(() => {
-    if (tabParam && ["company", "labor", "material", "coating", "markup", "advanced", "executive", "subscription"].includes(tabParam)) {
+    if (tabParam && ["company", "labor", "material", "coating", "markup", "advanced", "executive", "addressbook"].includes(tabParam)) {
       setActiveTab(tabParam as TabType);
     }
   }, [tabParam]);
@@ -296,7 +277,6 @@ function SettingsPageContent() {
           email: companySettings.email || undefined,
           licenseNumber: companySettings.licenseNumber || undefined,
           taxId: companySettings.taxId || undefined,
-          logoUrl: companySettings.logoUrl || undefined,
         },
         materialGrades: materialGrades.map(({ id, ...rest }) => rest),
         laborRates: laborRates.map(({ id, ...rest }) => rest),
@@ -316,38 +296,7 @@ function SettingsPageContent() {
         pipelineRanges: pipelineRanges,
       };
 
-      // Get original settings for audit trail
-      const originalSettings = await loadCompanySettings(companyId);
-      
       await saveCompanySettings(companyId, settingsToSave);
-      
-      // Log audit trail for settings update
-      if (originalSettings) {
-        const changes = createAuditChanges(originalSettings, settingsToSave, [
-          'materialRate',
-          'laborRate',
-          'coatingRate',
-          'overheadPercentage',
-          'profitPercentage',
-          'materialWasteFactor',
-          'laborWasteFactor',
-        ] as (keyof CompanySettings)[]);
-        
-        if (changes.length > 0) {
-          await createAuditLog(
-            companyId,
-            'UPDATE',
-            'SETTINGS',
-            'company',
-            user,
-            {
-              entityName: 'Company Settings',
-              changes,
-            }
-          );
-        }
-      }
-      
       setSaveStatus("saved");
       setTimeout(() => setSaveStatus("unsaved"), 3000);
     } catch (error) {
@@ -469,11 +418,10 @@ function SettingsPageContent() {
     { id: "material" as TabType, label: "Material Costs", icon: Package },
     { id: "coating" as TabType, label: "Coating Rates", icon: Paintbrush },
     { id: "markup" as TabType, label: "Markup & Fees", icon: DollarSign },
+    { id: "addressbook" as TabType, label: "Address Book", icon: BookOpen },
     { id: "executive" as TabType, label: "Executive Dashboard", icon: TrendingUp },
     { id: "advanced" as TabType, label: "Advanced", icon: Settings2 },
-    { id: "subscription" as TabType, label: "Subscription", icon: Crown },
   ];
-
 
   if (isLoading) {
     return (
@@ -489,16 +437,15 @@ function SettingsPageContent() {
   }
 
   return (
-    <>
-      <div className="max-w-7xl mx-auto space-y-6" data-save-status={saveStatus}>
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Company Settings</h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Workspace administration
-            </p>
-          </div>
+    <div className="max-w-7xl mx-auto space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Settings</h1>
+          <p className="text-sm text-gray-600 mt-1">
+            Configure company defaults and estimating parameters
+          </p>
+        </div>
         <div className="flex items-center gap-3">
           {saveStatus === "saved" && (
             <span className="text-sm text-green-600">Saved</span>
@@ -506,29 +453,11 @@ function SettingsPageContent() {
           {saveStatus === "saving" && (
             <span className="text-sm text-blue-600">Saving...</span>
           )}
-          <Button variant="primary" onClick={handleSave} disabled={isSaving} data-save-button>
+          <Button variant="primary" onClick={handleSave} disabled={isSaving}>
             <Save className="w-4 h-4 mr-2" />
             {isSaving ? "Saving..." : "Save All Settings"}
           </Button>
         </div>
-      </div>
-
-      {/* Settings Navigation */}
-      <div className="flex items-center gap-2 pb-4 border-b border-gray-200">
-        <Link
-          href="/settings/users"
-          className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:text-blue-600 hover:bg-gray-50 rounded-lg transition-colors"
-        >
-          <Users className="w-4 h-4" />
-          Team Members
-        </Link>
-        <Link
-          href="/settings/beta-testers"
-          className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:text-blue-600 hover:bg-gray-50 rounded-lg transition-colors"
-        >
-          <Mail className="w-4 h-4" />
-          Beta Testers
-        </Link>
       </div>
 
       {/* Validation Errors */}
@@ -742,118 +671,6 @@ function SettingsPageContent() {
                     placeholder="XX-XXXXXXX"
                   />
                 </div>
-
-                {/* Company Logo */}
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Company Logo
-                  </label>
-                  <div className="flex items-start gap-4">
-                    {logoPreview ? (
-                      <div className="relative">
-                        <img
-                          src={logoPreview}
-                          alt="Company logo"
-                          className="h-24 w-auto max-w-48 object-contain border border-gray-200 rounded-lg p-2 bg-white"
-                        />
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            if (companySettings.logoUrl) {
-                              try {
-                                // Extract storage path from URL or use a pattern
-                                const urlParts = companySettings.logoUrl.split('/');
-                                const fileName = urlParts[urlParts.length - 1].split('?')[0];
-                                const storagePath = `logos/${companyId}/${fileName}`;
-                                await deleteFileFromStorage(storagePath);
-                              } catch (error) {
-                                console.warn("Failed to delete old logo from storage:", error);
-                              }
-                            }
-                            setLogoPreview(null);
-                            setCompanySettings({ ...companySettings, logoUrl: "" });
-                          }}
-                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors"
-                          title="Remove logo"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="h-24 w-48 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center bg-gray-50">
-                        <ImageIcon className="w-8 h-8 text-gray-400" />
-                      </div>
-                    )}
-                    <div className="flex-1">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        id="logo-upload"
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (!file || !companyId) return;
-
-                          // Validate file type
-                          if (!file.type.startsWith("image/")) {
-                            alert("Please select an image file");
-                            return;
-                          }
-
-                          // Validate file size (max 5MB)
-                          if (file.size > 5 * 1024 * 1024) {
-                            alert("Logo file size must be less than 5MB");
-                            return;
-                          }
-
-                          setIsUploadingLogo(true);
-                          try {
-                            // Delete old logo if exists
-                            if (companySettings.logoUrl) {
-                              try {
-                                const urlParts = companySettings.logoUrl.split('/');
-                                const fileName = urlParts[urlParts.length - 1].split('?')[0];
-                                const storagePath = `logos/${companyId}/${fileName}`;
-                                await deleteFileFromStorage(storagePath);
-                              } catch (error) {
-                                console.warn("Failed to delete old logo:", error);
-                              }
-                            }
-
-                            // Upload new logo
-                            const timestamp = Date.now();
-                            const fileExtension = file.name.split(".").pop() || "png";
-                            const sanitizedFileName = `logo_${timestamp}.${fileExtension}`;
-                            const storagePath = `logos/${companyId}/${sanitizedFileName}`;
-                            
-                            const downloadURL = await uploadFileToStorage(file, storagePath);
-                            
-                            setCompanySettings({ ...companySettings, logoUrl: downloadURL });
-                            setLogoPreview(downloadURL);
-                            setSaveStatus("unsaved");
-                          } catch (error: any) {
-                            console.error("Failed to upload logo:", error);
-                            alert(`Failed to upload logo: ${error.message}`);
-                          } finally {
-                            setIsUploadingLogo(false);
-                            e.target.value = "";
-                          }
-                        }}
-                        disabled={isUploadingLogo}
-                      />
-                      <label
-                        htmlFor="logo-upload"
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 cursor-pointer transition-colors"
-                      >
-                        <Upload className="w-4 h-4" />
-                        {isUploadingLogo ? "Uploading..." : logoPreview ? "Replace Logo" : "Upload Logo"}
-                      </label>
-                      <p className="text-xs text-gray-500 mt-2">
-                        Logo will appear on all exported documents and proposals. Recommended: PNG or JPG, max 5MB.
-                      </p>
-                    </div>
-                  </div>
-                </div>
               </div>
             </CardContent>
           </Card>
@@ -1016,11 +833,9 @@ function SettingsPageContent() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {coatingTypes.map((coating) => {
-                  const isGalvanizing = coating.type.toLowerCase().includes("galv");
-                  return (
+                {coatingTypes.map((coating) => (
                   <div key={coating.id} className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
-                    <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="flex-1 grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                           Coating Type
@@ -1030,57 +845,26 @@ function SettingsPageContent() {
                           onChange={(e) =>
                             updateCoatingType(coating.id, "type", e.target.value)
                           }
-                          placeholder="e.g., Galvanizing, Paint"
+                          placeholder="e.g., Galvanized, Paint"
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Cost per Pound ($/lb) {isGalvanizing && <span className="text-blue-600">*</span>}
+                          Cost per Square Foot ($/SF)
                         </label>
                         <div className="relative">
                           <span className="absolute left-3 top-2 text-gray-500">$</span>
                           <Input
                             type="number"
                             step="0.01"
-                            value={coating.costPerPound ?? ""}
+                            value={coating.costPerSF}
                             onChange={(e) =>
-                              updateCoatingType(coating.id, "costPerPound", parseFloat(e.target.value) || undefined)
+                              updateCoatingType(coating.id, "costPerSF", parseFloat(e.target.value) || 0)
                             }
                             placeholder="0.00"
                             className="pl-8"
                           />
                         </div>
-                        {isGalvanizing && (
-                          <p className="text-xs text-gray-500 mt-1">Default for galvanizing</p>
-                        )}
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Cost per Square Foot ($/SF) <span className="text-gray-400 text-xs">(optional)</span>
-                        </label>
-                        <div className="relative">
-                          <span className="absolute left-3 top-2 text-gray-500">$</span>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            value={coating.costPerSF ?? ""}
-                            onChange={(e) => {
-                              const value = parseFloat(e.target.value) || undefined;
-                              if (value !== undefined && value > 0) {
-                                // If costPerSF is entered, convert to costPerPound (overwrite)
-                                // Rough conversion: 1 lb ≈ 0.24 SF for typical steel
-                                const costPerPound = value * 0.24;
-                                updateCoatingType(coating.id, "costPerSF", value);
-                                updateCoatingType(coating.id, "costPerPound", costPerPound);
-                              } else {
-                                updateCoatingType(coating.id, "costPerSF", undefined);
-                              }
-                            }}
-                            placeholder="0.00"
-                            className="pl-8"
-                          />
-                        </div>
-                        <p className="text-xs text-gray-500 mt-1">Overwrites cost per lb if entered</p>
                       </div>
                     </div>
                     {coatingTypes.length > 1 && (
@@ -1093,8 +877,7 @@ function SettingsPageContent() {
                       </button>
                     )}
                   </div>
-                  );
-                })}
+                ))}
               </div>
             </CardContent>
           </Card>
@@ -1245,7 +1028,7 @@ function SettingsPageContent() {
         {/* Executive Dashboard Tab */}
         {activeTab === "executive" && (
           <div className="space-y-6">
-            <Card>
+          <Card>
             <CardHeader>
               <CardTitle>Shop Capacity & Backlog Settings</CardTitle>
               <p className="text-sm text-gray-500 mt-2">
@@ -1434,7 +1217,7 @@ function SettingsPageContent() {
                 </div>
               </div>
             </CardContent>
-            </Card>
+          </Card>
 
             <Card>
           <CardHeader>
@@ -1601,10 +1384,11 @@ function SettingsPageContent() {
           </div>
         )}
 
-
-        {/* Subscription Tab */}
-        {activeTab === "subscription" && (
-          <SubscriptionManagement />
+        {/* Address Book Tab */}
+        {activeTab === "addressbook" && (
+          <div className="space-y-6">
+            <CompanyAddressBook companyId={companyId} compact={false} />
+          </div>
         )}
 
         {/* Advanced Tab */}
@@ -1732,27 +1516,24 @@ function SettingsPageContent() {
           </div>
         )}
       </div>
-      </div>
-    </>
+    </div>
   );
 }
 
 export default function SettingsPage() {
   return (
-    <PermissionGate requireSettingsAccess>
-      <Suspense fallback={
-        <div className="max-w-7xl mx-auto space-y-6">
-          <div className="flex items-center justify-center h-64">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-              <p className="text-gray-600">Loading settings...</p>
-            </div>
+    <Suspense fallback={
+      <div className="max-w-7xl mx-auto space-y-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading settings...</p>
           </div>
         </div>
-      }>
-        <SettingsPageContent />
-      </Suspense>
-    </PermissionGate>
+      </div>
+    }>
+      <SettingsPageContent />
+    </Suspense>
   );
 }
 

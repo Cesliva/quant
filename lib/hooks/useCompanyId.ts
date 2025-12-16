@@ -18,20 +18,10 @@ export function useCompanyId(): string {
   const [companyId, setCompanyId] = useState<string>("default");
   const [loading, setLoading] = useState(true);
 
-  // Development bypass
-  const bypassAuth = process.env.NEXT_PUBLIC_BYPASS_AUTH === "true" && process.env.NODE_ENV === "development";
-
   useEffect(() => {
     const fetchCompanyId = async () => {
       // If auth is still loading, wait
       if (authLoading) {
-        return;
-      }
-
-      // In bypass mode, use default company
-      if (bypassAuth) {
-        setCompanyId("default");
-        setLoading(false);
         return;
       }
 
@@ -74,7 +64,7 @@ export function useCompanyId(): string {
     };
 
     fetchCompanyId();
-  }, [user, authLoading, bypassAuth]);
+  }, [user, authLoading]);
 
   return companyId;
 }

@@ -175,6 +175,10 @@ export const getProjectPath = (
   projectId: string,
   ...segments: string[]
 ) => {
-  return `companies/${companyId}/projects/${projectId}/${segments.join("/")}`;
+  const basePath = `companies/${companyId}/projects/${projectId}`;
+  if (segments.length === 0) {
+    return basePath; // No trailing slash when no segments
+  }
+  return `${basePath}/${segments.join("/")}`;
 };
 

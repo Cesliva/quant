@@ -89,7 +89,38 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
     totalLabor: 0,
   });
 
+  // Store the valid companyId when it's ready
+  const [validCompanyId, setValidCompanyId] = useState<string | null>(null);
+
+  // Track when companyId becomes valid (not "default")
   useEffect(() => {
+    if (companyId && companyId !== "default") {
+      setValidCompanyId(companyId);
+    }
+  }, [companyId]);
+
+  // Timeout to prevent infinite loading if companyId never resolves
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (!validCompanyId && loading) {
+        console.warn("CompanyId took too long to load, proceeding with current value");
+        // If we still have "default" after 5 seconds, try to load anyway
+        // This handles edge cases where companyId might actually be "default"
+        if (companyId) {
+          setValidCompanyId(companyId);
+        }
+      }
+    }, 5000);
+    
+    return () => clearTimeout(timeout);
+  }, [validCompanyId, loading, companyId]);
+
+  useEffect(() => {
+    // Don't load until we have a valid companyId
+    if (!validCompanyId) {
+      return;
+    }
+    
     if (projectId && projectId !== "new") {
       loadProject();
       const unsubscribe = loadEstimatingStats();
@@ -102,15 +133,15 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId]);
+  }, [projectId, validCompanyId]);
 
   const subscribeToProject = () => {
-    if (!isFirebaseConfigured()) {
+    if (!isFirebaseConfigured() || !validCompanyId) {
       return () => {};
     }
 
     try {
-      const projectPath = getProjectPath(companyId, projectId);
+      const projectPath = getProjectPath(validCompanyId, projectId);
       const projectDocRef = getDocRef(projectPath);
 
       return onSnapshot(
@@ -132,7 +163,7 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
 
   const loadEstimatingStats = () => {
     try {
-      if (!isFirebaseConfigured()) {
+      if (!isFirebaseConfigured() || !validCompanyId) {
         setEstimatingStats({
           totalLines: 0,
           totalWeight: 0,
@@ -142,7 +173,7 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
         return () => {};
       }
 
-      const linesPath = getProjectPath(companyId, projectId, "lines");
+      const linesPath = getProjectPath(validCompanyId, projectId, "lines");
       const unsubscribe = subscribeToCollection<EstimatingLine>(linesPath, (lines) => {
         const activeLines = lines.filter((line) => line.status !== "Void");
         const stats = {
@@ -150,7 +181,7 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
           totalWeight: activeLines.reduce(
             (sum, line) =>
               sum +
-              (line.materialType === "Material"
+              (line.materialType === "Rolled"
                 ? line.totalWeight || 0
                 : line.plateTotalWeight || 0),
             0
@@ -177,12 +208,12 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
     try {
       setLoading(true);
 
-      if (!isFirebaseConfigured()) {
+      if (!isFirebaseConfigured() || !validCompanyId) {
         setProject(null);
         return;
       }
 
-      const projectPath = getProjectPath(companyId, projectId);
+      const projectPath = getProjectPath(validCompanyId, projectId);
       const projectData = await getDocument<Project>(projectPath);
 
       setProject(projectData);
@@ -281,7 +312,7 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
         <div className="text-center py-12">
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Project Not Found</h1>
           <p className="text-gray-600 mb-6">The project you're looking for doesn't exist.</p>
-          <Link href="/dashboard">
+          <Link href="/">
             <Button variant="outline">
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back to Company Dashboard
@@ -304,6 +335,14 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
       icon: ClipboardList,
       description: "Build your estimate",
       color: "bg-blue-500 hover:bg-blue-600",
+    },
+    {
+      name: "Misc Metals AI",
+      href: `/misc-metals?projectId=${projectId}`,
+      icon: Package,
+      aiIcon: Sparkles,
+      description: "AI-powered misc metals estimation",
+      color: "bg-indigo-500 hover:bg-indigo-600",
     },
     {
       name: "Structural Steel Estimate Summary",
@@ -384,12 +423,13 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
                 variant="outline"
                 size="sm"
                 onClick={async () => {
+                  const activeCompanyId = validCompanyId || companyId;
                   if (confirm("Restore this project? It will appear in your active projects list.")) {
                     try {
-                      const projectPath = getProjectPath(companyId, projectId);
+                      const projectPath = getProjectPath(activeCompanyId, projectId);
                       const currentProject = await getDocument<Project>(projectPath);
 
-                      await updateDocument(`companies/${companyId}/projects`, projectId, {
+                      await updateDocument(`companies/${activeCompanyId}/projects`, projectId, {
                         ...currentProject,
                         archived: false,
                       });
@@ -410,13 +450,14 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
                 variant="outline"
                 size="sm"
                 onClick={async () => {
+                  const activeCompanyId = validCompanyId || companyId;
                   if (
                     confirm(
                       "Archive this project? It will be hidden from your active projects but can be restored later."
                     )
                   ) {
                     try {
-                      const projectPath = getProjectPath(companyId, projectId);
+                      const projectPath = getProjectPath(activeCompanyId, projectId);
                       const currentProject = await getDocument<Project>(projectPath);
 
                       if (!currentProject) {
@@ -460,7 +501,7 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
         </div>
 
         <div>
-          <ProjectSettingsPanel companyId={companyId} projectId={projectId} compact />
+          <ProjectSettingsPanel companyId={validCompanyId || companyId} projectId={projectId} compact />
         </div>
 
         {/* Key Stats Cards */}
@@ -707,21 +748,22 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
                     variant={isCurrent ? "primary" : "outline"}
                     size="sm"
                     onClick={async () => {
-                      if (!isFirebaseConfigured() || !companyId || !projectId) {
+                      const activeCompanyId = validCompanyId || companyId;
+                      if (!isFirebaseConfigured() || !activeCompanyId || !projectId) {
                         alert("Unable to update status. Please check your connection.");
                         return;
                       }
 
                       try {
                         const oldStatus = project.status;
-                        const projectPath = getProjectPath(companyId, projectId);
-                        await updateDocument(`companies/${companyId}/projects`, projectId, {
+                        const projectPath = getProjectPath(activeCompanyId, projectId);
+                        await updateDocument(`companies/${activeCompanyId}/projects`, projectId, {
                           status: status,
                         });
                         
                         // Sync to win/loss records if status is "won" or "lost"
                         if (status === "won" || status === "lost") {
-                          await syncProjectToWinLoss(companyId, {
+                          await syncProjectToWinLoss(activeCompanyId, {
                             ...project,
                             id: projectId,
                             status: status,
