@@ -80,8 +80,51 @@ export default function DashboardPage() {
     xlarge: { min: 250000, max: 500000 },
     xxlarge: { min: 500000, max: 999999999 },
   });
+  const [userFirstName, setUserFirstName] = useState<string>("");
 
   // Auth check is handled in layout, so we don't need to redirect here
+
+  // Load user's first name for personalized greeting
+  useEffect(() => {
+    if (!user || !companyId || companyId === "default") {
+      setUserFirstName("");
+      return;
+    }
+
+    const loadUserName = async () => {
+      try {
+        // Try to load from members collection first
+        const memberPath = `companies/${companyId}/members/${user.uid}`;
+        const memberDoc = await getDocument(memberPath);
+
+        if (memberDoc?.name) {
+          // Extract first name from full name
+          const firstName = memberDoc.name.split(" ")[0];
+          setUserFirstName(firstName);
+        } else if (user.displayName) {
+          // Fallback to displayName from auth
+          const firstName = user.displayName.split(" ")[0];
+          setUserFirstName(firstName);
+        } else if (user.email) {
+          // Fallback to email username
+          const firstName = user.email.split("@")[0].split(".")[0];
+          setUserFirstName(firstName.charAt(0).toUpperCase() + firstName.slice(1));
+        }
+      } catch (error) {
+        console.error("Failed to load user name:", error);
+        // Fallback to displayName or email if available
+        if (user.displayName) {
+          const firstName = user.displayName.split(" ")[0];
+          setUserFirstName(firstName);
+        } else if (user.email) {
+          const firstName = user.email.split("@")[0].split(".")[0];
+          setUserFirstName(firstName.charAt(0).toUpperCase() + firstName.slice(1));
+        }
+      }
+    };
+
+    loadUserName();
+  }, [user, companyId]);
 
   // Load win/loss data for win rate calculation
   useEffect(() => {
@@ -478,7 +521,7 @@ export default function DashboardPage() {
         <div>
           <h1 className="text-4xl font-semibold tracking-tight mb-1">Company Dashboard</h1>
           <p className="text-slate-500">
-            Welcome back ·{" "}
+            {userFirstName ? `Welcome back ${userFirstName}` : "Welcome back"} ·{" "}
             {new Date().toLocaleDateString("en-US", {
               weekday: "long",
               month: "long",

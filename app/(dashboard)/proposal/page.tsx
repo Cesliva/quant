@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
@@ -15,7 +15,7 @@ import { onSnapshot } from "firebase/firestore";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
 import { extractTextFromFile } from "@/lib/utils/fileExtractor";
 
-export default function ProposalPage() {
+function ProposalPageContent() {
   const searchParams = useSearchParams();
   const projectId = searchParams?.get("projectId");
   const companyId = useCompanyId();
@@ -254,6 +254,27 @@ ${projectSummary}
         </Button>
       </div>
     </div>
+  );
+}
+
+export default function ProposalPage() {
+  return (
+    <Suspense fallback={
+      <div className="max-w-4xl mx-auto space-y-6">
+        <div className="flex items-center gap-4">
+          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
+            <Sparkles className="w-8 h-8 text-purple-500" />
+            <span>AI Generated Proposal</span>
+          </h1>
+        </div>
+        <div className="text-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500 mx-auto mb-4"></div>
+          <p className="text-gray-500">Loading...</p>
+        </div>
+      </div>
+    }>
+      <ProposalPageContent />
+    </Suspense>
   );
 }
 
