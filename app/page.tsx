@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import Button from "@/components/ui/Button";
 import { useAuth } from "@/lib/hooks/useAuth";
 import {
@@ -39,13 +40,14 @@ export default function Home() {
       <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/80 backdrop-blur-xl">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-500 to-purple-500 shadow-lg shadow-indigo-200 flex items-center justify-center text-white font-semibold text-lg">
-              Q
-            </div>
-            <div>
-              <div className="text-lg font-semibold tracking-tight">Quant Estimating AI</div>
-              <div className="text-xs text-slate-500">Built by a 25-year steel estimator</div>
-            </div>
+            <Image 
+              src="/graphics/logos/quant logo.svg" 
+              alt="Quant Estimating AI" 
+              width={180} 
+              height={40}
+              className="h-10 w-auto"
+            />
+            <div className="text-xs text-slate-500 hidden sm:block">Built by a 25-year steel estimator</div>
           </div>
           <div className="flex items-center gap-3">
             {user ? (
@@ -135,9 +137,13 @@ export default function Home() {
                 </div>
                 <div className="rounded-2xl border border-slate-200 p-4 bg-gradient-to-br from-slate-50 to-white space-y-2 text-sm text-slate-700">
                   <div className="flex items-center gap-3 mb-2">
-                    <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white flex items-center justify-center font-semibold">
-                      Q
-                    </div>
+                    <Image 
+                      src="/graphics/logos/Q.svg" 
+                      alt="Q" 
+                      width={40} 
+                      height={40}
+                      className="h-10 w-10"
+                    />
                     <div>
                       <div className="text-sm font-medium text-slate-900">Strategic AI Insights</div>
                       <div className="text-xs text-slate-500">Estimator-trained guardrails</div>
@@ -295,9 +301,13 @@ export default function Home() {
       <footer className="border-t border-slate-200 bg-white py-10">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white flex items-center justify-center font-semibold text-lg">
-              Q
-            </div>
+            <Image 
+              src="/graphics/logos/Q.svg" 
+              alt="Quant" 
+              width={36} 
+              height={36}
+              className="h-9 w-9"
+            />
             <div>
               <div className="text-sm font-semibold text-slate-900">Quant Estimating AI</div>
               <div className="text-xs text-slate-500">Steel fabrication estimating, reimagined.</div>
