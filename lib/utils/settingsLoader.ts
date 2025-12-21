@@ -65,6 +65,8 @@ export interface CompanySettings {
     xlarge: { min: number; max: number }; // 250K-500K
     xxlarge: { min: number; max: number }; // 500K+
   };
+  // Sample Data Settings
+  showSampleData?: boolean; // Toggle to show/hide sample data projects
 }
 
 export interface ProjectSettings {

@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
-import { Save, Building2, DollarSign, Package, Paintbrush, Settings2, Plus, Trash2, Info, AlertCircle, TrendingUp, BookOpen } from "lucide-react";
+import { Save, Building2, DollarSign, Package, Paintbrush, Settings2, Plus, Trash2, Info, AlertCircle, TrendingUp, BookOpen, Database } from "lucide-react";
 import CompanyAddressBook from "@/components/settings/CompanyAddressBook";
 import { 
   loadCompanySettings, 
@@ -123,6 +123,8 @@ function SettingsPageContent() {
     xlarge: { min: 250000, max: 500000 },
     xxlarge: { min: 500000, max: 999999999 },
   });
+  const [showSampleData, setShowSampleData] = useState(true);
+  const [savingSampleDataToggle, setSavingSampleDataToggle] = useState(false);
 
   const loadSettings = async () => {
     setIsLoading(true);
@@ -191,6 +193,9 @@ function SettingsPageContent() {
       if (settings.pipelineRanges) {
         setPipelineRanges(settings.pipelineRanges);
       }
+      
+      // Load sample data visibility setting
+      setShowSampleData(settings.showSampleData !== false); // Default to true if not set
       
       // Load executive dashboard settings
       setExecutiveSettings({
@@ -304,6 +309,25 @@ function SettingsPageContent() {
       alert("Failed to save settings. Please try again.");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleToggleSampleData = async (value: boolean) => {
+    if (!companyId || companyId === "default") return;
+    
+    setSavingSampleDataToggle(true);
+    try {
+      const settings = await loadCompanySettings(companyId);
+      await saveCompanySettings(companyId, {
+        ...settings,
+        showSampleData: value,
+      });
+      setShowSampleData(value);
+    } catch (error) {
+      console.error("Failed to save sample data setting:", error);
+      alert("Failed to save setting. Please try again.");
+    } finally {
+      setSavingSampleDataToggle(false);
     }
   };
 
@@ -1511,6 +1535,53 @@ function SettingsPageContent() {
                 <Link href="/settings/project-defaults">
                   <Button variant="outline">Go to Project Defaults</Button>
                 </Link>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Database className="w-5 h-5" />
+                  Sample Data Settings
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <label className="text-sm font-medium text-gray-700">
+                      Show Sample Data in Projects & Dashboard
+                    </label>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Toggle to show or hide sample data projects throughout Quant.
+                    </p>
+                  </div>
+                  <div className="ml-4">
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={showSampleData}
+                        onChange={(e) => handleToggleSampleData(e.target.checked)}
+                        disabled={savingSampleDataToggle || !companyId || companyId === "default"}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+                </div>
+                {savingSampleDataToggle && (
+                  <div className="text-sm text-blue-600">Saving...</div>
+                )}
+                <div className="pt-4 border-t border-gray-200">
+                  <p className="text-sm text-gray-600 mb-4">
+                    Generate realistic sample data for testing all Quant functionalities. This creates a mid-year $8M fabrication shop scenario with 12 projects and hundreds of estimating lines.
+                  </p>
+                  <Link href="/settings/seed-data">
+                    <Button variant="outline" className="w-full sm:w-auto">
+                      <Database className="w-4 h-4 mr-2" />
+                      Manage Sample Data
+                    </Button>
+                  </Link>
+                </div>
               </CardContent>
             </Card>
           </div>

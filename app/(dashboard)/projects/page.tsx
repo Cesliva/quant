@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useMemo, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Button from "@/components/ui/Button";
 import { subscribeToCollection, getDocument, getProjectPath, setDocument } from "@/lib/firebase/firestore";
@@ -9,6 +9,7 @@ import { isFirebaseConfigured } from "@/lib/firebase/config";
 import { useCompanyId } from "@/lib/hooks/useCompanyId";
 import { useUserPermissions } from "@/lib/hooks/useUserPermissions";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { loadCompanySettings } from "@/lib/utils/settingsLoader";
 import Input from "@/components/ui/Input";
 import { Search, Archive, Filter } from "lucide-react";
 
@@ -32,8 +33,9 @@ interface Project {
   assignedEstimator?: string;
 }
 
-export default function ProjectsPage() {
+function ProjectsPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const companyId = useCompanyId();
   const { user } = useAuth();
   const { permissions } = useUserPermissions();
@@ -41,6 +43,29 @@ export default function ProjectsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [showArchived, setShowArchived] = useState(false);
+  const [showSampleData, setShowSampleData] = useState(true);
+
+  // Load search query from URL parameter
+  useEffect(() => {
+    const urlSearch = searchParams?.get("search");
+    if (urlSearch) {
+      setSearchQuery(urlSearch);
+    }
+  }, [searchParams]);
+
+  // Load showSampleData setting
+  useEffect(() => {
+    if (!companyId || companyId === "default") return;
+    const loadSetting = async () => {
+      try {
+        const settings = await loadCompanySettings(companyId);
+        setShowSampleData(settings.showSampleData !== false); // Default to true if not set
+      } catch (error) {
+        console.error("Failed to load sample data setting:", error);
+      }
+    };
+    loadSetting();
+  }, [companyId]);
 
   // Load projects from Firestore
   useEffect(() => {
@@ -69,7 +94,13 @@ export default function ProjectsPage() {
           assignedEstimator: p.assignedEstimator,
         }));
 
-        const uniqueProjects = mappedProjects.filter((project, index, self) =>
+        // Filter out sample data if setting is disabled
+        let filteredProjects = mappedProjects;
+        if (!showSampleData) {
+          filteredProjects = filteredProjects.filter(p => !p.isSampleData);
+        }
+
+        const uniqueProjects = filteredProjects.filter((project, index, self) =>
           index === self.findIndex((p) => p.id === project.id)
         );
 
@@ -78,7 +109,7 @@ export default function ProjectsPage() {
     );
 
     return () => unsubscribe();
-  }, [companyId]);
+  }, [companyId, showSampleData]);
 
   // Filter projects based on user permissions and assignment
   const filteredProjects = useMemo(() => {
@@ -370,3 +401,19 @@ export default function ProjectsPage() {
   );
 }
 
+export default function ProjectsPage() {
+  return (
+    <Suspense fallback={
+      <div className="max-w-7xl mx-auto space-y-6 p-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading projects...</p>
+          </div>
+        </div>
+      </div>
+    }>
+      <ProjectsPageContent />
+    </Suspense>
+  );
+}

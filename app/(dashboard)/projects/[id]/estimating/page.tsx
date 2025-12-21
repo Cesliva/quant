@@ -183,30 +183,32 @@ export default function EstimatingPage() {
         </div>
         
         {/* Header */}
-        <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-4 min-w-0 flex-shrink">
           <Link href={`/projects/${projectId}`}>
-            <Button variant="outline" size="sm" className="gap-2">
+            <Button variant="outline" size="sm" className="gap-2 flex-shrink-0">
               <ArrowLeft className="w-4 h-4" />
-              Project Dashboard
+              <span className="hidden sm:inline">Project Dashboard</span>
+              <span className="sm:hidden">Back</span>
             </Button>
           </Link>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Structural Steel Estimate</h1>
-            <p className="text-sm text-gray-600 mt-1">
+          <div className="min-w-0">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 truncate">Structural Steel Estimate</h1>
+            <p className="text-sm text-gray-600 mt-1 truncate">
               {projectNumber ? `${projectNumber} - ` : ""}{projectName || projectId || "N/A"}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-shrink-0">
           {/* Import Estimate Button */}
           <button
             onClick={handleImportEstimate}
-            className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2 transition-all shadow-md font-medium"
+            className="px-3 sm:px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2 transition-all shadow-md font-medium whitespace-nowrap"
             title="Import estimate from Quant proprietary format (.quant)"
           >
-            <Upload className="w-4 h-4" />
-            <span className="text-sm">Import Estimate</span>
+            <Upload className="w-4 h-4 flex-shrink-0" />
+            <span className="text-sm hidden sm:inline">Import Estimate</span>
+            <span className="text-sm sm:hidden">Import</span>
           </button>
           {/* Hidden file input */}
           <input
@@ -237,11 +239,12 @@ export default function EstimatingPage() {
                 alert(`Failed to save estimate: ${error.message}`);
               }
             }}
-            className="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white flex items-center gap-2 transition-all shadow-md font-medium"
+            className="px-3 sm:px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white flex items-center gap-2 transition-all shadow-md font-medium whitespace-nowrap"
             title="Save estimate in Quant proprietary format (.quant)"
           >
-            <Save className="w-4 h-4" />
-            <span className="text-sm">Save Estimate</span>
+            <Save className="w-4 h-4 flex-shrink-0" />
+            <span className="text-sm hidden sm:inline">Save Estimate</span>
+            <span className="text-sm sm:hidden">Save</span>
           </button>
         </div>
       </div>

@@ -13,6 +13,9 @@ import { useCompanyId } from "@/lib/hooks/useCompanyId";
 import { useUserPermissions } from "@/lib/hooks/useUserPermissions";
 import { loadCompanySettings } from "@/lib/utils/settingsLoader";
 import BacklogAtAGlance from "@/components/dashboard/BacklogAtAGlance";
+import CostTrendAnalysis from "@/components/dashboard/CostTrendAnalysis";
+import Input from "@/components/ui/Input";
+import { Search, Lightbulb, TrendingUp, AlertCircle } from "lucide-react";
 
 interface Project {
   id: string;
@@ -73,6 +76,7 @@ export default function DashboardPage() {
     averageGrade: "A"
   });
   const [projectFilter, setProjectFilter] = useState<"all" | "mine">("all");
+  const [projectSearchQuery, setProjectSearchQuery] = useState("");
   const [pipelineRanges, setPipelineRanges] = useState({
     small: { min: 0, max: 50000 },
     medium: { min: 50000, max: 100000 },
@@ -81,6 +85,7 @@ export default function DashboardPage() {
     xxlarge: { min: 500000, max: 999999999 },
   });
   const [userFirstName, setUserFirstName] = useState<string>("");
+  const [showSampleData, setShowSampleData] = useState(true);
 
   // Auth check is handled in layout, so we don't need to redirect here
 
@@ -126,7 +131,7 @@ export default function DashboardPage() {
     loadUserName();
   }, [user, companyId]);
 
-  // Load win/loss data for win rate calculation
+  // Load win/loss data for win rate calculation (current calendar year only)
   useEffect(() => {
     if (!isFirebaseConfigured() || !companyId) return;
 
@@ -134,11 +139,34 @@ export default function DashboardPage() {
     const unsubscribe = subscribeToCollection(
       recordsPath,
       (records: any[]) => {
-        if (records.length > 0) {
-          const wins = records.filter((r: any) => r.status === "won").length;
-          const rate = (wins / records.length) * 100;
+        // Get current calendar year
+        const currentYear = new Date().getFullYear();
+        const yearStart = new Date(currentYear, 0, 1); // January 1st of current year
+        const yearEnd = new Date(currentYear, 11, 31, 23, 59, 59); // December 31st of current year
+
+        // Filter records to current calendar year based on decisionDate
+        const currentYearRecords = records.filter((r: any) => {
+          if (!r.decisionDate) return false;
+          
+          try {
+            const decisionDate = r.decisionDate.toDate ? r.decisionDate.toDate() : new Date(r.decisionDate);
+            return decisionDate >= yearStart && decisionDate <= yearEnd;
+          } catch (e) {
+            // If date parsing fails, check if it's a string in YYYY-MM-DD format
+            if (typeof r.decisionDate === 'string') {
+              const dateStr = r.decisionDate.split('T')[0]; // Get YYYY-MM-DD part
+              const year = parseInt(dateStr.split('-')[0]);
+              return year === currentYear;
+            }
+            return false;
+          }
+        });
+
+        if (currentYearRecords.length > 0) {
+          const wins = currentYearRecords.filter((r: any) => r.status === "won").length;
+          const rate = (wins / currentYearRecords.length) * 100;
           setWinRate(Math.round(rate * 10) / 10);
-          setTotalBids(records.length);
+          setTotalBids(currentYearRecords.length);
         } else {
           setWinRate(0);
           setTotalBids(0);
@@ -147,6 +175,25 @@ export default function DashboardPage() {
     );
 
     return () => unsubscribe();
+  }, [companyId]);
+
+  // Load showSampleData setting and pipeline ranges
+  useEffect(() => {
+    if (!companyId || companyId === "default") return;
+    const loadSetting = async () => {
+      try {
+        const settings = await loadCompanySettings(companyId);
+        setShowSampleData(settings.showSampleData !== false); // Default to true if not set
+        
+        // Load pipeline ranges from settings
+        if (settings.pipelineRanges) {
+          setPipelineRanges(settings.pipelineRanges);
+        }
+      } catch (error) {
+        console.error("Failed to load settings:", error);
+      }
+    };
+    loadSetting();
   }, [companyId]);
 
   // Load projects from Firestore
@@ -181,9 +228,15 @@ export default function DashboardPage() {
         });
         
         // Filter out projects without IDs
-        const validProjects = mappedProjects.filter(p => p.id);
+        let validProjects = mappedProjects.filter(p => p.id);
+        
+        // Filter out sample data if setting is disabled
+        if (!showSampleData) {
+          validProjects = validProjects.filter(p => !p.isSampleData);
+        }
+        
         if (validProjects.length !== mappedProjects.length) {
-          console.warn("Dashboard: Filtered out", mappedProjects.length - validProjects.length, "projects without IDs");
+          console.warn("Dashboard: Filtered out", mappedProjects.length - validProjects.length, "projects");
         }
         
         const uniqueProjects = validProjects.filter((project, index, self) => 
@@ -192,13 +245,17 @@ export default function DashboardPage() {
         
         console.log("Dashboard: Setting active projects:", uniqueProjects.length);
         setActiveProjects(uniqueProjects);
-        const activeOnly = projects.filter((p) => p.archived !== true);
+        const activeOnly = projects.filter((p) => {
+          if (p.archived === true) return false;
+          if (!showSampleData && p.isSampleData) return false;
+          return true;
+        });
         setAllProjects(activeOnly);
       }
     );
 
     return () => unsubscribe();
-  }, [companyId]);
+  }, [companyId, showSampleData]);
 
   // Load contacts from Firestore
   useEffect(() => {
@@ -380,7 +437,12 @@ export default function DashboardPage() {
         typeof project.estimatedValue === "string"
           ? parseFloat(project.estimatedValue) || 0
           : project.estimatedValue || 0;
-      const probability = project.winProbability ?? 0.5;
+      // winProbability could be stored as percentage (50) or decimal (0.5)
+      let probability = project.winProbability ?? 50;
+      // If stored as percentage (> 1), convert to decimal
+      if (probability > 1) {
+        probability = probability / 100;
+      }
       return sum + value * probability;
     }, 0);
   
@@ -397,19 +459,42 @@ export default function DashboardPage() {
       return [];
     }
     
+    // "all" filter - return all projects
     return projects;
   }, [activeProjectsList, projectFilter, user?.uid]);
 
-  const topActiveProjects = filteredProjects.slice(0, 5);
+  // Get top 3 projects by contract value (estimatedValue)
+  const topActiveProjects = useMemo(() => {
+    return [...filteredProjects]
+      .sort((a, b) => {
+        const aValue = typeof a.estimatedValue === "string" 
+          ? parseFloat(a.estimatedValue) || 0 
+          : a.estimatedValue || 0;
+        const bValue = typeof b.estimatedValue === "string" 
+          ? parseFloat(b.estimatedValue) || 0 
+          : b.estimatedValue || 0;
+        return bValue - aValue; // Sort descending (highest first)
+      })
+      .slice(0, 3); // Top 3 only
+  }, [filteredProjects]);
 
   const pipelineDistribution = useMemo(() => {
     const now = new Date();
     const sixtyDaysFromNow = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
     
+    // Filter for active pipeline projects (active, submitted, draft status)
+    // Include ALL active projects regardless of bid date - pipeline is about future work
     const upcomingProjects = activeProjectsList.filter((project) => {
-      if (!project.bidDueDate) return false;
-      const bidDate = new Date(project.bidDueDate);
-      return bidDate >= now && bidDate <= sixtyDaysFromNow;
+      const status = project.status?.toLowerCase();
+      // Include active, submitted, and draft projects
+      // Also include "won" projects that haven't been delivered (still in pipeline)
+      const isActiveStatus = 
+        status === "active" || 
+        status === "submitted" || 
+        status === "draft" ||
+        status === "won"; // Won projects are still in pipeline until delivered
+      
+      return isActiveStatus;
     });
 
     const projectsByRange = {
@@ -421,13 +506,30 @@ export default function DashboardPage() {
     };
 
     upcomingProjects.forEach((project) => {
-      const value =
-        typeof project.estimatedValue === "string"
-          ? parseFloat(project.estimatedValue) || 0
-          : project.estimatedValue || 0;
-      const probability = project.winProbability ?? 0.5;
+      const rawValue = project.estimatedValue;
+      let value = 0;
+      
+      // Parse value - handle string, number, or undefined
+      if (typeof rawValue === "string") {
+        // Remove any non-numeric characters except decimal point and minus sign
+        const cleaned = rawValue.replace(/[^0-9.-]/g, "");
+        value = parseFloat(cleaned) || 0;
+      } else if (typeof rawValue === "number") {
+        value = rawValue;
+      }
+      
+      // Skip projects with no value
+      if (value <= 0) return;
+      
+      // Handle winProbability - could be 0-1 or 0-100
+      let probability = project.winProbability ?? 0.5;
+      if (probability > 1) {
+        probability = probability / 100; // Convert percentage to decimal
+      }
+      
       const weightedValue = value * probability;
 
+      // Categorize by weighted value using pipeline ranges
       if (weightedValue >= pipelineRanges.xxlarge.min) {
         projectsByRange.xxlarge += weightedValue;
       } else if (weightedValue >= pipelineRanges.xlarge.min) {
@@ -446,7 +548,8 @@ export default function DashboardPage() {
       projectsByRange.medium,
       projectsByRange.large,
       projectsByRange.xlarge,
-      projectsByRange.xxlarge
+      projectsByRange.xxlarge,
+      1 // Ensure at least 1 to prevent division by zero in rendering
     );
 
     return {
@@ -515,9 +618,9 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 py-6 md:py-10 text-slate-800">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-8 md:mb-10">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 py-6 md:py-8 text-slate-800">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4 md:mb-6">
         <div>
           <h1 className="text-4xl font-semibold tracking-tight mb-1">Company Dashboard</h1>
           <p className="text-slate-500">
@@ -544,7 +647,7 @@ export default function DashboardPage() {
       </div>
 
         {/* Top Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8 md:mb-12">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-4 md:mb-6">
         {primaryCards.map((card) => (
           <Link
             key={card.label}
@@ -561,18 +664,32 @@ export default function DashboardPage() {
       </div>
 
         {/* Graph Row */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 lg:gap-8 mb-8 md:mb-12">
-        <div className="bg-white p-4 md:p-6 rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300">
-          <p className="text-sm font-semibold mb-1">Win Rate (Last 90 Days)</p>
-          <p className="text-xs text-slate-400 mb-4">Company-wide</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 lg:gap-5 mb-4 md:mb-6">
+        <div className="bg-white p-3 md:p-4 rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300">
+          <p className="text-sm font-semibold mb-1">Win Rate ({new Date().getFullYear()})</p>
+          <p className="text-xs text-slate-400 mb-3">Current calendar year • Company-wide</p>
           <div className="relative w-48 h-32 mx-auto">
             <svg className="w-full h-full" viewBox="0 0 200 100" preserveAspectRatio="xMidYMid meet">
               {(() => {
+                // Gradient: 50% = yellow, >50% = yellow to red, <50% = yellow to green
                 const getWinRateColor = (percentage: number) => {
-                  if (percentage < 30) return "#ef4444";
-                  if (percentage < 50) return "#f97316";
-                  if (percentage < 70) return "#f59e0b";
-                  return "#10b981";
+                  if (percentage === 50) return "#eab308"; // Base yellow
+                  
+                  if (percentage > 50) {
+                    // Gradient from yellow (#eab308) to bright red (#ef4444)
+                    const ratio = (percentage - 50) / 50; // 0 to 1
+                    const r = Math.round(234 + (239 - 234) * ratio); // 234->239
+                    const g = Math.round(179 + (68 - 179) * ratio);   // 179->68
+                    const b = Math.round(8 + (68 - 8) * ratio);       // 8->68
+                    return `rgb(${r}, ${g}, ${b})`;
+                  } else {
+                    // Gradient from yellow (#eab308) to full green (#22c55e)
+                    const ratio = percentage / 50; // 0 to 1
+                    const r = Math.round(34 + (234 - 34) * (1 - ratio)); // 34->234
+                    const g = Math.round(197 + (179 - 197) * (1 - ratio)); // 197->179
+                    const b = Math.round(94 + (8 - 94) * (1 - ratio));     // 94->8
+                    return `rgb(${r}, ${g}, ${b})`;
+                  }
                 };
                 
                 const arcColor = getWinRateColor(winRate);
@@ -590,11 +707,25 @@ export default function DashboardPage() {
               })()}
               {(() => {
                 const rotationAngle = -90 + (winRate / 100) * 180;
+                // Gradient: 50% = yellow, >50% = yellow to red, <50% = yellow to green
                 const getWinRateColor = (percentage: number) => {
-                  if (percentage < 30) return "#ef4444";
-                  if (percentage < 50) return "#f97316";
-                  if (percentage < 70) return "#f59e0b";
-                  return "#10b981";
+                  if (percentage === 50) return "#eab308"; // Base yellow
+                  
+                  if (percentage > 50) {
+                    // Gradient from yellow (#eab308) to bright red (#ef4444)
+                    const ratio = (percentage - 50) / 50; // 0 to 1
+                    const r = Math.round(234 + (239 - 234) * ratio); // 234->239
+                    const g = Math.round(179 + (68 - 179) * ratio);   // 179->68
+                    const b = Math.round(8 + (68 - 8) * ratio);       // 8->68
+                    return `rgb(${r}, ${g}, ${b})`;
+                  } else {
+                    // Gradient from yellow (#eab308) to full green (#22c55e)
+                    const ratio = percentage / 50; // 0 to 1
+                    const r = Math.round(34 + (234 - 34) * (1 - ratio)); // 34->234
+                    const g = Math.round(197 + (179 - 197) * (1 - ratio)); // 197->179
+                    const b = Math.round(94 + (8 - 94) * (1 - ratio));     // 94->8
+                    return `rgb(${r}, ${g}, ${b})`;
+                  }
                 };
                 
                 const needleColor = getWinRateColor(winRate);
@@ -639,12 +770,14 @@ export default function DashboardPage() {
             </div>
           </div>
           <p className="text-center text-xs text-slate-400 mt-4">
-            {totalBids === 0 ? "No awarded bids in the last 90 days" : `${totalBids} decisions logged`}
+            {totalBids === 0 
+              ? `No decisions logged in ${new Date().getFullYear()}` 
+              : `${totalBids} decision${totalBids !== 1 ? 's' : ''} logged this year`}
           </p>
         </div>
-        <div className="bg-white p-4 md:p-6 rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300">
+        <div className="bg-white p-3 md:p-4 rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300">
           <p className="text-sm font-semibold mb-1">Pipeline Distribution</p>
-          <p className="text-xs text-slate-400 mb-4">By bid value (next 60 days)</p>
+          <p className="text-xs text-slate-400 mb-3">By bid value (next 60 days)</p>
           <div className="flex items-end gap-3 h-44 justify-center">
             {(() => {
               const ranges = [
@@ -696,9 +829,9 @@ export default function DashboardPage() {
             <span>XX-Large</span>
           </div>
         </div>
-        <div className="bg-white p-4 md:p-6 rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300">
+        <div className="bg-white p-3 md:p-4 rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300">
           <p className="text-sm font-semibold mb-1">Risk Exposure</p>
-          <p className="text-xs text-slate-400 mb-4">Based on AI spec review</p>
+          <p className="text-xs text-slate-400 mb-3">Based on AI spec review</p>
           <div className="relative w-48 h-32 mx-auto">
             <svg className="w-full h-full" viewBox="0 0 200 100" preserveAspectRatio="xMidYMid meet">
               {/* Background arc - always visible, muted gray */}
@@ -793,13 +926,13 @@ export default function DashboardPage() {
       </div>
 
         {/* Lower Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 lg:gap-8">
-        <div className="lg:col-span-2 bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300 p-4 md:p-6">
-          <div className="flex items-center justify-between mb-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 md:gap-4 lg:gap-5 items-stretch">
+        <div className="lg:col-span-2 bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300 p-3 md:p-4 flex flex-col">
+          <div className="flex items-center justify-between mb-3">
             <div>
-              <p className="text-sm font-semibold">Projects</p>
+              <p className="text-sm font-semibold">Premier Projects</p>
               <p className="text-xs text-slate-400">
-                {filteredProjects.length} active, {archivedProjectsList.length} archived
+                Top 3 by contract value • {filteredProjects.length} total active
               </p>
             </div>
             <div className="flex gap-2 items-center">
@@ -819,18 +952,36 @@ export default function DashboardPage() {
               >
                 My Projects
               </Button>
-              <Link href="/projects">
-                <Button className="text-xs px-3 py-1.5 rounded-xl border border-slate-200 text-slate-600 bg-slate-50 hover:bg-slate-100">
-                  View all
-                </Button>
-              </Link>
             </div>
           </div>
-          <div className="divide-y divide-slate-100 text-sm">
+          
+          {/* Search Bar */}
+          <div className="mb-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Input
+                type="text"
+                placeholder="Search all projects..."
+                value={projectSearchQuery}
+                onChange={(e) => setProjectSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && projectSearchQuery.trim()) {
+                    router.push(`/projects?search=${encodeURIComponent(projectSearchQuery.trim())}`);
+                  }
+                }}
+                className="pl-10 pr-4 py-2 text-sm"
+              />
+            </div>
+            <p className="text-xs text-slate-400 mt-1">
+              Press Enter to search all projects • {filteredProjects.length > 3 && `Showing top 3 of ${filteredProjects.length} projects`}
+            </p>
+          </div>
+          <div className="text-sm">
             {topActiveProjects.length === 0 ? (
               <p className="py-4 text-slate-400">No projects yet.</p>
             ) : (
-              topActiveProjects.map((project) => {
+              <div className="space-y-0">
+              {topActiveProjects.map((project, index) => {
                 const isArchived = project.archived === true;
                 const handleRestore = async (e: React.MouseEvent) => {
                   e.preventDefault();
@@ -865,6 +1016,8 @@ export default function DashboardPage() {
                   <div
                     key={project.id}
                     className={`flex items-center py-3 rounded-2xl px-2 -mx-2 transition-all duration-200 ${
+                      index > 0 ? "border-t border-slate-100" : ""
+                    } ${
                       isArchived 
                         ? "opacity-60 bg-slate-50/50" 
                         : "hover:bg-slate-50/80 hover:shadow-sm"
@@ -934,45 +1087,23 @@ export default function DashboardPage() {
                     )}
                   </div>
                 );
-              })
+              })}
+              </div>
             )}
           </div>
         </div>
-        <div className="flex flex-col gap-6">
-          <Link href="/address-book" className="bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] hover:-translate-y-0.5 transition-all duration-300 p-4 md:p-5">
-            <div className="flex items-center justify-between mb-1">
-              <p className="text-sm font-semibold">Company Address Book</p>
-              <span className="text-xs text-slate-400">View all</span>
-            </div>
-            <p className="text-xs text-slate-400 mb-4">Key GC & client contacts</p>
-            <div className="space-y-2 text-xs">
-              {contacts.length === 0 ? (
-                <p className="text-slate-400 py-2">No contacts yet. Add contacts in Settings.</p>
-              ) : (
-                contacts.map((contact) => (
-                  <div key={contact.id} className="flex items-center justify-between hover:bg-slate-50/80 -mx-2 px-2 py-1 rounded-lg transition-all duration-200 hover:shadow-sm">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-slate-700 truncate">{contact.name}</p>
-                      <p className="text-slate-400 truncate">{getContactRole(contact)}</p>
-                    </div>
-                    <span className="px-2 py-0.5 rounded-full bg-slate-50 text-slate-400 border border-slate-100 ml-2 flex-shrink-0">
-                      {getContactBadge(contact.type)}
-                    </span>
-                  </div>
-                ))
-              )}
-            </div>
-          </Link>
+        <div className="flex flex-col gap-3 md:gap-4 h-full">
+          {/* Top Card - Bid & Production Calendar */}
           <Link
             href="/bid-schedule"
-            className="bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] hover:-translate-y-0.5 transition-all duration-300 p-4 md:p-5 text-left w-full"
+            className="bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] hover:-translate-y-0.5 transition-all duration-300 p-3 md:p-4 text-left w-full flex-1 flex flex-col"
           >
             <div className="flex items-center justify-between mb-1">
               <p className="text-sm font-semibold">Bid & Production Calendar</p>
               <span className="text-xs text-slate-400">View calendar</span>
             </div>
             <p className="text-xs text-slate-400 mb-3">This month at a glance</p>
-            <div className="grid grid-cols-3 gap-2 text-center text-[11px] mb-3">
+            <div className="grid grid-cols-3 gap-2 text-center text-[11px] mb-3 flex-shrink-0">
               <div className="rounded-2xl bg-slate-50/60 border border-slate-100/50 shadow-[0_1px_2px_0_rgb(0,0,0,0.03)] py-2">
                 <p className="text-[10px] text-slate-400 mb-1">Bids Due</p>
                 <p className="text-lg font-semibold">{bidsDueThisMonth}</p>
@@ -988,14 +1119,16 @@ export default function DashboardPage() {
                 </p>
               </div>
             </div>
-            <p className="text-[11px] text-slate-400">
+            <p className="text-[11px] text-slate-400 mt-auto">
               Use the calendar view to align estimating effort with shop capacity and backlog.
             </p>
           </Link>
-          <div className="bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300 p-4 md:p-5">
+          
+          {/* Bottom Card - Win / Loss Summary */}
+          <div className="bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300 p-3 md:p-4 flex-1 flex flex-col">
             <p className="text-sm font-semibold mb-1">Win / Loss Summary</p>
-            <p className="text-xs text-slate-400 mb-4">Last 90 days</p>
-            <div className="flex items-end justify-between mb-3">
+            <p className="text-xs text-slate-400 mb-3">{new Date().getFullYear()} (Current Year)</p>
+            <div className="flex items-end justify-between mb-3 flex-shrink-0">
               <div>
                 <p className="text-2xl font-semibold">{Number(winRate || 0).toFixed(0)}%</p>
                 <p className="text-xs text-slate-400">Win rate</p>
@@ -1017,15 +1150,22 @@ export default function DashboardPage() {
                 </div>
               </div>
             </div>
-            <p className="text-[11px] text-slate-400">
+            <p className="text-[11px] text-slate-400 mt-auto">
               As you log more decisions, Quant will trend your competitiveness and margin discipline.
             </p>
           </div>
         </div>
       </div>
 
+      {/* Cost Trend Analysis Section */}
+      {companyId && companyId !== "default" && (
+        <div className="mt-4 md:mt-6">
+          <CostTrendAnalysis companyId={companyId} />
+        </div>
+      )}
+
       {/* Backlog at a Glance Section */}
-      <div className="mt-8">
+      <div className="mt-4 md:mt-6">
         <BacklogAtAGlance companyId={companyId} />
       </div>
 
