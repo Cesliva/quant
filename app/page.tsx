@@ -43,9 +43,9 @@ export default function Home() {
             <Image 
               src="/graphics/logos/quant logo.svg" 
               alt="Quant Estimating AI" 
-              width={540} 
-              height={120}
-              className="h-14 sm:h-16 w-auto"
+              width={800} 
+              height={200}
+              className="h-24 sm:h-28 w-auto"
             />
           </div>
           <div className="flex items-center gap-3">
