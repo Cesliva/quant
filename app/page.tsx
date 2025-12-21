@@ -39,15 +39,14 @@ export default function Home() {
       {/* Top Bar */}
       <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/80 backdrop-blur-xl">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center">
             <Image 
               src="/graphics/logos/quant logo.svg" 
               alt="Quant Estimating AI" 
-              width={180} 
-              height={40}
-              className="h-10 w-auto"
+              width={540} 
+              height={120}
+              className="h-14 sm:h-16 w-auto"
             />
-            <div className="text-xs text-slate-500 hidden sm:block">Built by a 25-year steel estimator</div>
           </div>
           <div className="flex items-center gap-3">
             {user ? (
@@ -78,10 +77,6 @@ export default function Home() {
       <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-20 lg:pb-24">
         <div className="grid lg:grid-cols-12 gap-12 lg:gap-16 items-center">
           <div className="lg:col-span-7 space-y-8">
-            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-600 bg-white shadow-sm">
-              <Sparkles className="w-4 h-4 text-blue-600" />
-              Designed by a 25-year steel estimator to win modern bids
-            </div>
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-semibold leading-tight tracking-tight">
               Hyper-accurate steel estimates,
               <span className="block text-transparent bg-clip-text bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600">
