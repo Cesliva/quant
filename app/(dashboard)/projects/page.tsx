@@ -45,13 +45,21 @@ function ProjectsPageContent() {
   const [showArchived, setShowArchived] = useState(false);
   const [showSampleData, setShowSampleData] = useState(true);
 
-  // Load search query from URL parameter
+  // Load filters from URL parameters
   useEffect(() => {
     const urlSearch = searchParams?.get("search");
     if (urlSearch) {
       setSearchQuery(urlSearch);
     }
+    
+    const urlStatus = searchParams?.get("status");
+    if (urlStatus) {
+      setStatusFilter(urlStatus);
+    }
   }, [searchParams]);
+  
+  // Check if "upcoming" filter is in URL
+  const isUpcomingFilter = searchParams?.get("upcoming") === "true";
 
   // Load showSampleData setting
   useEffect(() => {
@@ -132,6 +140,19 @@ function ProjectsPageContent() {
     if (statusFilter !== "all") {
       filtered = filtered.filter((p) => p.status === statusFilter);
     }
+    
+    // Filter by upcoming (next 7 days) if requested
+    if (isUpcomingFilter) {
+      const now = new Date();
+      const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      filtered = filtered.filter((p) => {
+        if (!p.bidDueDate && !p.bidDate) return false;
+        const bidDate = p.bidDueDate || p.bidDate;
+        if (!bidDate) return false;
+        const date = new Date(bidDate);
+        return date >= now && date <= sevenDaysFromNow && p.status === "active";
+      });
+    }
 
     // Filter by search query
     if (searchQuery) {
@@ -154,7 +175,7 @@ function ProjectsPageContent() {
       if (b.bidDueDate) return 1;
       return (a.projectName || "").localeCompare(b.projectName || "");
     });
-  }, [projects, searchQuery, statusFilter, showArchived, permissions, user]);
+  }, [projects, searchQuery, statusFilter, showArchived, permissions, user, isUpcomingFilter]);
 
   const handleRestore = async (projectId: string, projectName: string) => {
     if (!confirm(`Restore "${projectName}"? It will appear in your active projects list.`)) {

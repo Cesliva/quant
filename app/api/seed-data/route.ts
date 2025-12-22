@@ -38,6 +38,16 @@ function daysAgo(days: number): Date {
   return date;
 }
 
+// Estimator names for seed data
+const ESTIMATOR_NAMES = [
+  "Mike Johnson",
+  "Sarah Chen",
+  "David Rodriguez",
+  "Jennifer Martinez",
+  "Robert Thompson",
+  "Emily Anderson",
+];
+
 // Project data (same as in seed script)
 const PROJECTS = [
   // WON PROJECTS
@@ -128,6 +138,7 @@ const PROJECTS = [
     estimatedValue: 750000,
     winProbability: 65,
     competitionLevel: "high",
+    assignedEstimator: "Mike Johnson",
     createdAt: daysAgo(25),
     updatedAt: daysAgo(2),
     notes: "High-value opportunity. Strong relationship with GC.",
@@ -144,6 +155,7 @@ const PROJECTS = [
     estimatedValue: 520000,
     winProbability: 45,
     competitionLevel: "medium",
+    assignedEstimator: "Sarah Chen",
     createdAt: daysAgo(30),
     updatedAt: daysAgo(8),
   },
@@ -159,6 +171,7 @@ const PROJECTS = [
     estimatedValue: 680000,
     winProbability: 55,
     competitionLevel: "high",
+    assignedEstimator: "David Rodriguez",
     createdAt: daysAgo(35),
     updatedAt: daysAgo(10),
   },
@@ -174,6 +187,7 @@ const PROJECTS = [
     estimatedValue: 950000,
     winProbability: 40,
     competitionLevel: "very-high",
+    assignedEstimator: "Jennifer Martinez",
     createdAt: daysAgo(40),
     updatedAt: daysAgo(15),
     notes: "Complex specs. Multiple RFIs pending.",
@@ -190,6 +204,7 @@ const PROJECTS = [
     estimatedValue: 580000,
     winProbability: 50,
     competitionLevel: "medium",
+    assignedEstimator: "Robert Thompson",
     createdAt: daysAgo(20),
     updatedAt: daysAgo(5),
   },
@@ -621,6 +636,8 @@ export async function POST(request: NextRequest) {
         const projectPath = `companies/${companyId}/projects`;
         const projectId = await createDocument(projectPath, {
           ...projectData,
+          // Also set bidDate from bidDueDate for consistency
+          bidDate: projectData.bidDueDate || projectData.bidDate,
           isSampleData: true, // Mark as sample data for training
           createdAt: Timestamp.fromDate(projectData.createdAt),
           updatedAt: Timestamp.fromDate(projectData.updatedAt),
@@ -636,6 +653,22 @@ export async function POST(request: NextRequest) {
             updatedAt: Timestamp.now(),
           });
           results.linesCreated++;
+        }
+
+        // Create bid event for active projects with assignedEstimator and bidDueDate
+        if (projectData.status === "active" && projectData.assignedEstimator && projectData.bidDueDate) {
+          const bidEventsPath = `companies/${companyId}/bidEvents`;
+          await createDocument(bidEventsPath, {
+            date: projectData.bidDueDate,
+            projectName: projectData.projectName,
+            projectId: projectId,
+            generalContractor: projectData.generalContractor,
+            assignedEstimator: projectData.assignedEstimator,
+            status: "active",
+            estimatedValue: projectData.estimatedValue || 0,
+            createdAt: Timestamp.fromDate(projectData.createdAt),
+            updatedAt: Timestamp.fromDate(projectData.updatedAt),
+          });
         }
 
         results.projectsCreated++;

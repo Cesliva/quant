@@ -200,6 +200,7 @@ export default function BidProductionScheduleModal({
   });
   const [dailyEdits, setDailyEdits] = useState<Record<string, string>>({});
   const [updatingOverrideKey, setUpdatingOverrideKey] = useState<string | null>(null);
+  const [hoveredWeek, setHoveredWeek] = useState<number | null>(null);
 
   const today = useMemo(() => {
     const d = new Date();
@@ -1254,51 +1255,218 @@ export default function BidProductionScheduleModal({
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-amber-500" />
-                Capacity Gap Alerts
+                Capacity Utilization Timeline
               </CardTitle>
+              <p className="text-xs text-gray-500 mt-1">
+                Visual overview of shop capacity vs. scheduled work over time
+              </p>
             </CardHeader>
-            <CardContent className="space-y-3">
-              {gapWeeksCurrent.length === 0 && gapWeeksFuture.length === 0 ? (
-                <p className="text-sm text-gray-500">
-                  No under-utilized weeks detected. Continue monitoring as new work is added.
+            <CardContent>
+              {weeklySummaries.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-8">
+                  No capacity data available. Configure shop capacity in Company Settings.
                 </p>
               ) : (
-                <>
-                  {gapWeeksCurrent.length > 0 && (
-                    <div>
-                      <p className="text-xs uppercase text-gray-500 mb-1">Next 4 Weeks</p>
-                      <ul className="space-y-1 text-sm text-gray-700">
-                        {gapWeeksCurrent.map((week) => (
-                          <li key={`gap-current-${week.weekIndex}`}>
-                            {formatShortLabel(week.startDate)} –{" "}
-                            {formatShortLabel(addDays(week.startDate, 6))}:{" "}
-                            {week.capacityHours > 0
-                              ? Math.round((week.usedHours / week.capacityHours) * 100)
-                              : 0}
-                            % utilization
-                          </li>
-                        ))}
-                      </ul>
+                <div className="space-y-4">
+                  {/* Interactive Timeline Chart */}
+                  <div 
+                    className="relative" 
+                    style={{ height: "300px" }}
+                    onMouseLeave={() => setHoveredWeek(null)}
+                    onMouseMove={(e) => {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const x = e.clientX - rect.left;
+                      const percent = (x / rect.width) * 100;
+                      const weekIndex = Math.round((percent / 100) * (weeklySummaries.length - 1));
+                      const clampedIndex = Math.max(0, Math.min(weekIndex, weeklySummaries.length - 1));
+                      setHoveredWeek(weeklySummaries[clampedIndex]?.weekIndex ?? null);
+                    }}
+                  >
+                    {/* Tooltip */}
+                    {hoveredWeek !== null && (() => {
+                      const week = weeklySummaries.find(w => w.weekIndex === hoveredWeek);
+                      if (!week) return null;
+                      const utilization = week.capacityHours > 0 
+                        ? (week.usedHours / week.capacityHours) * 100 
+                        : 0;
+                      const xPercent = weeklySummaries.length > 1 
+                        ? (hoveredWeek / (weeklySummaries.length - 1)) * 100 
+                        : 50;
+                      return (
+                        <div 
+                          className="absolute top-2 bg-slate-900 text-white text-xs rounded-lg px-3 py-2 shadow-lg z-10 pointer-events-none whitespace-nowrap"
+                          style={{ left: `${xPercent}%`, transform: "translateX(-50%)" }}
+                        >
+                          <div className="font-semibold mb-1">
+                            {formatShortLabel(week.startDate)} – {formatShortLabel(addDays(week.startDate, 6))}
+                          </div>
+                          <div className="space-y-1">
+                            <div>Used: {week.usedHours.toLocaleString()} hrs</div>
+                            <div>Capacity: {week.capacityHours.toLocaleString()} hrs</div>
+                            <div className="font-semibold">Utilization: {Math.round(utilization)}%</div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full">
+                      {/* Grid lines */}
+                      {[0, 25, 50, 75, 100, 125, 150].map((percent) => {
+                        const y = 100 - (percent / 150) * 100;
+                        return (
+                          <line
+                            key={`grid-${percent}`}
+                            x1="0"
+                            y1={y}
+                            x2="100"
+                            y2={y}
+                            stroke="#e5e7eb"
+                            strokeWidth="0.3"
+                          />
+                        );
+                      })}
+                      
+                      {/* Capacity line (100%) */}
+                      <line
+                        x1="0"
+                        y1={100 - (100 / 150) * 100}
+                        x2="100"
+                        y2={100 - (100 / 150) * 100}
+                        stroke="#f59e0b"
+                        strokeWidth="0.5"
+                        strokeDasharray="2,2"
+                      />
+                      
+                      {/* Bars for each week */}
+                      {weeklySummaries.map((week, index) => {
+                        const x = weeklySummaries.length > 1 
+                          ? (index / (weeklySummaries.length - 1)) * 100 
+                          : 50;
+                        const utilization = week.capacityHours > 0 
+                          ? (week.usedHours / week.capacityHours) * 100 
+                          : 0;
+                        const barHeight = Math.min((utilization / 150) * 100, 100);
+                        const barY = 100 - barHeight;
+                        
+                        // Color based on utilization
+                        let barColor = "#10b981"; // Green - good
+                        if (utilization < underUtilizedThreshold * 100) {
+                          barColor = "#f59e0b"; // Amber - under-utilized
+                        } else if (utilization > 100) {
+                          barColor = "#ef4444"; // Red - overbooked
+                        }
+                        
+                        const isHovered = hoveredWeek === week.weekIndex;
+                        
+                        return (
+                          <g key={`week-${week.weekIndex}`}>
+                            {/* Bar */}
+                            <rect
+                              x={x - 1}
+                              y={barY}
+                              width="2"
+                              height={barHeight}
+                              fill={barColor}
+                              opacity={isHovered ? "1" : "0.8"}
+                              className="pointer-events-none"
+                            />
+                            {/* Hover indicator line */}
+                            {isHovered && (
+                              <line
+                                x1={x}
+                                y1="0"
+                                x2={x}
+                                y2="100"
+                                stroke="#3b82f6"
+                                strokeWidth="0.4"
+                                strokeDasharray="2,2"
+                                className="pointer-events-none"
+                              />
+                            )}
+                          </g>
+                        );
+                      })}
+                      
+                      {/* Y-axis labels */}
+                      {[0, 50, 100, 150].map((percent) => {
+                        const y = 100 - (percent / 150) * 100;
+                        return (
+                          <text
+                            key={`y-label-${percent}`}
+                            x="-1"
+                            y={y + 1}
+                            fontSize="2.5"
+                            fill="#6b7280"
+                            textAnchor="end"
+                          >
+                            {percent}%
+                          </text>
+                        );
+                      })}
+                    </svg>
+                    
+                    {/* X-axis labels (weeks) */}
+                    <div className="absolute bottom-0 left-0 right-0 flex justify-between text-xs text-gray-600" style={{ height: "60px", paddingTop: "4px" }}>
+                      {weeklySummaries.filter((_, i) => i % Math.ceil(weeklySummaries.length / 8) === 0 || i === weeklySummaries.length - 1).map((week, idx, arr) => {
+                        const index = idx === arr.length - 1 
+                          ? weeklySummaries.length - 1 
+                          : idx * Math.ceil(weeklySummaries.length / 8);
+                        return (
+                          <div key={`x-label-${index}`} className="flex flex-col items-center">
+                            <div className="text-center font-medium" style={{ fontSize: "9px", transform: "rotate(-45deg)", transformOrigin: "top center", marginTop: "8px" }}>
+                              {formatShortLabel(week.startDate)}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                  )}
-                  {gapWeeksFuture.length > 0 && (
-                    <div>
-                      <p className="text-xs uppercase text-gray-500 mb-1">Beyond 1 Month</p>
-                      <ul className="space-y-1 text-sm text-gray-700">
-                        {gapWeeksFuture.map((week) => (
-                          <li key={`gap-future-${week.weekIndex}`}>
-                            {formatShortLabel(week.startDate)} –{" "}
-                            {formatShortLabel(addDays(week.startDate, 6))}:{" "}
-                            {week.capacityHours > 0
-                              ? Math.round((week.usedHours / week.capacityHours) * 100)
-                              : 0}
-                            % utilization
-                          </li>
-                        ))}
-                      </ul>
+                    
+                    {/* Y-axis label */}
+                    <div className="absolute left-0 top-0 text-xs font-semibold text-gray-700" style={{ transform: "rotate(-90deg)", transformOrigin: "center", left: "-40px", top: "50%" }}>
+                      Utilization %
                     </div>
-                  )}
-                </>
+                  </div>
+                  
+                  {/* Legend */}
+                  <div className="flex flex-wrap items-center gap-4 text-xs text-gray-600 pt-2 border-t border-gray-200">
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded bg-amber-500"></div>
+                      <span>Under-utilized (&lt;{Math.round(underUtilizedThreshold * 100)}%)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded bg-green-500"></div>
+                      <span>Good ({Math.round(underUtilizedThreshold * 100)}% - 100%)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded bg-red-500"></div>
+                      <span>Overbooked (&gt;100%)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-0.5 h-4 bg-amber-500" style={{ borderStyle: "dashed" }}></div>
+                      <span>100% Capacity</span>
+                    </div>
+                  </div>
+                  
+                  {/* Summary stats */}
+                  <div className="grid grid-cols-3 gap-4 pt-4 border-t border-gray-200">
+                    <div className="text-center">
+                      <div className="text-2xl font-semibold text-amber-600">{gapWeeksCurrent.length + gapWeeksFuture.length}</div>
+                      <div className="text-xs text-gray-500">Under-utilized weeks</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-semibold text-green-600">
+                        {weeklySummaries.filter(w => {
+                          const util = w.capacityHours > 0 ? (w.usedHours / w.capacityHours) * 100 : 0;
+                          return util >= underUtilizedThreshold * 100 && util <= 100;
+                        }).length}
+                      </div>
+                      <div className="text-xs text-gray-500">Optimal weeks</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-semibold text-red-600">{overloadWeeks.length}</div>
+                      <div className="text-xs text-gray-500">Overbooked weeks</div>
+                    </div>
+                  </div>
+                </div>
               )}
             </CardContent>
           </Card>

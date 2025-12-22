@@ -73,6 +73,102 @@ export default function EstimatingRowDetail({
   // State for hardware section expanded/collapsed
   const [hardwareExpanded, setHardwareExpanded] = useState<boolean>(false);
   
+  // State for seeded values from previous line
+  const [seededFields, setSeededFields] = useState<Map<string, { value: any; committed: boolean }>>(new Map());
+  const [fieldClickCount, setFieldClickCount] = useState<Map<string, number>>(new Map());
+  
+  // Get previous line's value for a field
+  const getPreviousLineValue = (field: keyof EstimatingLine): any => {
+    if (!lines || lines.length === 0) return undefined;
+    
+    // Sort lines by lineId to get proper sequence (L1, L2, L3, etc.)
+    const sortedLines = [...lines].sort((a, b) => {
+      const aNum = parseInt(a.lineId.replace(/[^0-9]/g, '')) || 0;
+      const bNum = parseInt(b.lineId.replace(/[^0-9]/g, '')) || 0;
+      return aNum - bNum;
+    });
+    
+    // Find current line's position in sorted sequence
+    const currentLineIdNum = parseInt(line.lineId.replace(/[^0-9]/g, '')) || 0;
+    const currentIndex = sortedLines.findIndex(l => {
+      const lNum = parseInt(l.lineId.replace(/[^0-9]/g, '')) || 0;
+      return lNum === currentLineIdNum;
+    });
+    
+    if (currentIndex <= 0) return undefined;
+    
+    // Get the previous line in the sequence
+    const previousLine = sortedLines[currentIndex - 1];
+    
+    // Only return value if previous line is not voided
+    if (previousLine.status === "Void") {
+      // Try to find an earlier non-voided line
+      for (let i = currentIndex - 2; i >= 0; i--) {
+        if (sortedLines[i].status !== "Void") {
+          return sortedLines[i][field];
+        }
+      }
+      return undefined;
+    }
+    
+    return previousLine[field];
+  };
+  
+  // Handle field click - seed with previous value on first click
+  const handleFieldClick = (field: keyof EstimatingLine, currentValue: any) => {
+    const fieldKey = `${line.id}-${field}`;
+    const clickCount = fieldClickCount.get(fieldKey) || 0;
+    const seeded = seededFields.get(fieldKey);
+    
+    // First click: seed with previous line's value if field is empty
+    if (clickCount === 0 && (!currentValue || currentValue === "" || currentValue === 0)) {
+      const previousValue = getPreviousLineValue(field);
+      if (previousValue !== undefined && previousValue !== null && previousValue !== "") {
+        setSeededFields(prev => {
+          const newMap = new Map(prev);
+          newMap.set(fieldKey, { value: previousValue, committed: false });
+          return newMap;
+        });
+        setFieldClickCount(prev => {
+          const newMap = new Map(prev);
+          newMap.set(fieldKey, 1);
+          return newMap;
+        });
+      }
+    }
+    // Second click: commit the seeded value
+    else if (clickCount === 1 && seeded && !seeded.committed) {
+      setSeededFields(prev => {
+        const newMap = new Map(prev);
+        const existing = newMap.get(fieldKey);
+        if (existing) {
+          newMap.set(fieldKey, { ...existing, committed: true });
+        }
+        return newMap;
+      });
+      setFieldClickCount(prev => {
+        const newMap = new Map(prev);
+        newMap.set(fieldKey, 2);
+        return newMap;
+      });
+      // Commit the seeded value
+      onChange(field, seeded.value, line);
+    }
+    else {
+      setFieldClickCount(prev => {
+        const newMap = new Map(prev);
+        newMap.set(fieldKey, clickCount + 1);
+        return newMap;
+      });
+    }
+  };
+  
+  // Clear seeded state when field changes or line changes
+  useEffect(() => {
+    setSeededFields(new Map());
+    setFieldClickCount(new Map());
+  }, [line.id]);
+  
   // Determine if rates are overridden (different from default)
   const isMaterialRateOverridden = Math.abs((currentLine.materialRate || 0) - defaultMaterialRate) > 0.01;
   const isLaborRateOverridden = Math.abs((currentLine.laborRate || 0) - defaultLaborRate) > 0.01;
@@ -441,13 +537,41 @@ export default function EstimatingRowDetail({
       );
     }
 
+    const fieldKey = `${line.id}-${field}`;
+    const seeded = seededFields.get(fieldKey);
+    const hasSeededValue = seeded && !seeded.committed;
+    
+    // Determine display value: show seeded value if exists and not committed, otherwise show actual value
+    const displayValue = hasSeededValue 
+      ? (typeof seeded.value === "number" ? seeded.value : String(seeded.value))
+      : (typeof value === "number" ? (value || 0) : (value as string || ""));
+    
     return (
       <input
         id={fieldId}
         {...fieldDataAttrs}
         type={type}
-        value={typeof value === "number" ? (value || 0) : (value as string || "")}
+        value={displayValue}
+        onClick={(e) => {
+          if (isEditing && !isReadOnly) {
+            handleFieldClick(field, value);
+          }
+        }}
         onChange={(e) => {
+          // User is typing - clear seeded state and use typed value
+          if (hasSeededValue) {
+            setSeededFields(prev => {
+              const newMap = new Map(prev);
+              newMap.delete(fieldKey);
+              return newMap;
+            });
+            setFieldClickCount(prev => {
+              const newMap = new Map(prev);
+              newMap.delete(fieldKey);
+              return newMap;
+            });
+          }
+          
           const newValue = type === "number" 
             ? (e.target.value === "" ? undefined : parseFloat(e.target.value))
             : e.target.value;
@@ -455,12 +579,24 @@ export default function EstimatingRowDetail({
         }}
         onBlur={() => {
           if (isEditing && !isReadOnly) {
+            // If there's a seeded value that wasn't committed, commit it now
+            if (hasSeededValue && seeded) {
+              onChange(field, seeded.value, line);
+              setSeededFields(prev => {
+                const newMap = new Map(prev);
+                const existing = newMap.get(fieldKey);
+                if (existing) {
+                  newMap.set(fieldKey, { ...existing, committed: true });
+                }
+                return newMap;
+              });
+            }
             // Immediate save on blur
             onSave();
           }
         }}
         step={type === "number" ? "any" : undefined}
-        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${hasSeededValue ? "bg-blue-50 border-blue-300" : ""}`}
         readOnly={isReadOnly}
       />
     );

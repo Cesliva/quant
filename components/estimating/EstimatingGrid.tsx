@@ -153,9 +153,21 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
   const [groupByMainMember, setGroupByMainMember] = useState<boolean>(false);
   const highlightedLineRef = useRef<HTMLTableRowElement | null>(null);
+  const [showFloatingAdd, setShowFloatingAdd] = useState(false);
   
   // Track if we should add to history (skip for Firestore updates)
   const skipHistoryRef = useRef(false);
+  
+  // Show floating button after scrolling down
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollY = window.scrollY || document.documentElement.scrollTop;
+      setShowFloatingAdd(scrollY > 200);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
   
   // Handle highlighting and scrolling to line from URL parameter
   useEffect(() => {
@@ -731,9 +743,58 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
         
         // In manual mode, automatically start editing the new line
         if (isManualMode && newId) {
+          // Close any previously open detailed view
+          setExpandedRowId(null);
+          
           setTimeout(() => {
+            // Expand the detail view for the new line
+            setExpandedRowId(newId);
             setEditingId(newId);
             setEditingLine(addedLine);
+            
+            // Scroll to the first input field in the detail view after a short delay
+            // Need to wait for the detail view to render
+            setTimeout(() => {
+              // Find the first input field (Drawing #) in the editing detail view
+              // The field ID format is: field-{lineId}-{fieldName}
+              const firstInput = document.getElementById(`field-${newId}-drawingNumber`) as HTMLInputElement;
+              if (firstInput) {
+                // Scroll to the input field, positioning it at the top left of the viewport
+                firstInput.scrollIntoView({ 
+                  behavior: "smooth", 
+                  block: "start",
+                  inline: "nearest"
+                });
+                // Small additional offset to account for any fixed headers
+                setTimeout(() => {
+                  window.scrollBy({ top: -20, behavior: "smooth" });
+                  // Focus the first input field after scrolling
+                  firstInput.focus();
+                  firstInput.select(); // Select text if any for easy replacement
+                }, 300);
+              } else {
+                // Fallback: scroll to the line row itself or the detail panel
+                const lineElement = document.getElementById(`line-${newId}`);
+                const detailPanel = lineElement?.closest('tr[class*="detail"]') || lineElement?.nextElementSibling;
+                const targetElement = detailPanel || lineElement;
+                if (targetElement) {
+                  targetElement.scrollIntoView({ 
+                    behavior: "smooth", 
+                    block: "start",
+                    inline: "nearest"
+                  });
+                  setTimeout(() => {
+                    window.scrollBy({ top: -20, behavior: "smooth" });
+                    // Try to find and focus first input again after scroll
+                    const retryInput = document.getElementById(`field-${newId}-drawingNumber`) as HTMLInputElement;
+                    if (retryInput) {
+                      retryInput.focus();
+                      retryInput.select();
+                    }
+                  }, 300);
+                }
+              }
+            }, 300); // Increased delay to ensure detail view is rendered
           }, 100);
         }
       }).catch((error: any) => {
@@ -1315,17 +1376,19 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
               Edit Line
             </Button>
           )}
-          <Button 
-            variant="primary" 
-            size="sm" 
-            onClick={handleAddLine}
-            disabled={!isManualMode}
-            title={!isManualMode ? "Enable Manual Entry to add lines manually" : ""}
-            className="flex items-center justify-center"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Add Line
-          </Button>
+          {!showFloatingAdd && (
+            <Button 
+              variant="primary" 
+              size="sm" 
+              onClick={handleAddLine}
+              disabled={!isManualMode}
+              title={!isManualMode ? "Enable Manual Entry to add lines manually" : ""}
+              className="flex items-center justify-center"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add Line
+            </Button>
+          )}
         </div>
       </div>
 
@@ -1370,6 +1433,48 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
           onExpandedRowChange={setExpandedRowId}
         />
       </Card>
+
+      {/* Premium Floating Add Line Button */}
+      {isManualMode && showFloatingAdd && (
+        <div className="fixed bottom-8 right-8 z-50 animate-fade-in-up">
+          <div className="relative group">
+            {/* Subtle glow effect */}
+            <div className="absolute inset-0 bg-blue-500 rounded-full blur-xl opacity-30 group-hover:opacity-50 transition-opacity duration-300"></div>
+            
+            {/* Main button */}
+            <button
+              onClick={handleAddLine}
+              className="relative flex items-center gap-3 px-6 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-full shadow-2xl hover:shadow-blue-500/50 transition-all duration-300 hover:scale-110 active:scale-95 group"
+              title="Add New Line (Always accessible)"
+            >
+              {/* Icon with rotation animation */}
+              <div className="relative">
+                <Plus className="w-6 h-6 transition-transform duration-300 group-hover:rotate-90" />
+                {/* Ripple effect */}
+                <span className="absolute inset-0 rounded-full bg-white opacity-0 group-hover:opacity-20 animate-ping"></span>
+              </div>
+              
+              {/* Text with slide-in animation */}
+              <span className="font-semibold text-sm whitespace-nowrap hidden sm:block opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                Add Line
+              </span>
+              
+              {/* Line count badge - premium detail */}
+              {lines.length > 0 && (
+                <div className="absolute -top-2 -right-2 bg-white text-blue-600 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shadow-lg border-2 border-blue-600 animate-pulse">
+                  {lines.filter(l => l.status !== "Void").length}
+                </div>
+              )}
+            </button>
+            
+            {/* Tooltip on hover */}
+            <div className="absolute bottom-full right-0 mb-2 px-3 py-1.5 bg-slate-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap">
+              Add new estimating line
+              <div className="absolute top-full right-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-slate-900"></div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

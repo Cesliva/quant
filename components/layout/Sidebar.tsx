@@ -19,10 +19,11 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
+import { QMark } from "@/components/ui/QMark";
 
 const navigation = [
   { name: "Structural Steel Estimate", href: "/estimating", icon: ClipboardList },
-  { name: "Misc Metals AI", href: "/misc-metals", icon: Package, aiIcon: Sparkles },
+  // { name: "Misc Metals AI", href: "/misc-metals", icon: Package, aiIcon: Sparkles }, // Removed - will be in a later version
   { name: "AI Spec Review", href: "/spec-review", icon: FileCheck, aiIcon: Sparkles },
   { name: "AI Generated Proposal", href: "/proposal", icon: FileEdit, aiIcon: Sparkles },
   { name: "Import Quotes", href: "/import-quotes", icon: Upload },
@@ -106,7 +107,7 @@ export default function Sidebar() {
         <Link href="/" className="block" title={isCollapsed ? "Quant Estimating AI" : undefined}>
           {isCollapsed ? (
             <div className="flex flex-col items-center">
-              <h2 className="text-lg font-bold text-gray-900">Q</h2>
+              <QMark px={32} className="w-8 h-8" />
             </div>
           ) : (
             <>
@@ -189,8 +190,6 @@ export default function Sidebar() {
             // Map navigation items to project-specific routes
             if (item.name === "Structural Steel Estimate") {
               href = `/projects/${projectId}/estimating`;
-            } else if (item.name === "Misc Metals AI") {
-              href = `/misc-metals?projectId=${projectId}`;
             } else if (item.name === "AI Spec Review") {
               href = `/spec-review?projectId=${projectId}`;
             } else if (item.name === "AI Generated Proposal") {
@@ -208,12 +207,6 @@ export default function Sidebar() {
                 return pathname === `/projects/${projectId}/estimating`;
               }
               return pathname === "/estimating" && !projectIdFromQuery;
-            }
-            if (item.name === "Misc Metals AI") {
-              if (isProjectPage && projectId) {
-                return pathname === "/misc-metals" && projectIdFromQuery === projectId;
-              }
-              return pathname === "/misc-metals" && !projectIdFromQuery;
             }
             if (item.name === "AI Spec Review") {
               if (isProjectPage && projectId) {

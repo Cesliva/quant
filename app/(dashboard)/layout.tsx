@@ -1,14 +1,19 @@
 "use client";
 
 import { Suspense, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/lib/hooks/useAuth";
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
+import { cn } from "@/lib/utils/cn";
 
 function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
+  
+  // Hide sidebar on company dashboard (landing page)
+  const isDashboardPage = pathname === "/dashboard" || pathname === "/";
 
   useEffect(() => {
     // Redirect to login if not authenticated (after loading completes)
@@ -36,19 +41,21 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen">
-      <Suspense fallback={
-        <div className="w-64 bg-white border-r border-gray-200 min-h-screen p-4">
-          <div className="mb-8">
-            <h2 className="text-xl font-bold text-gray-900">Quant Estimating AI</h2>
-            <p className="text-sm text-gray-600">Project Details</p>
+      {!isDashboardPage && (
+        <Suspense fallback={
+          <div className="w-64 bg-white border-r border-gray-200 min-h-screen p-4">
+            <div className="mb-8">
+              <h2 className="text-xl font-bold text-gray-900">Quant Estimating AI</h2>
+              <p className="text-sm text-gray-600">Project Details</p>
+            </div>
           </div>
-        </div>
-      }>
-        <Sidebar />
-      </Suspense>
+        }>
+          <Sidebar />
+        </Suspense>
+      )}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <Header />
-        <main className="flex-1 p-6 overflow-x-auto min-w-0">{children}</main>
+        {!isDashboardPage && <Header />}
+        <main className={cn("flex-1 overflow-x-auto min-w-0", isDashboardPage ? "" : "p-6")}>{children}</main>
       </div>
     </div>
   );

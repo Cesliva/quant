@@ -12,7 +12,7 @@ import { EstimatingLine } from "@/components/estimating/EstimatingGrid";
 import { subscribeToCollection, getProjectPath, getDocument } from "@/lib/firebase/firestore";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
 import CostTrendStreamgraph from "./CostTrendStreamgraph";
-import CostTrendInsights from "./CostTrendInsights";
+import EstimateVsActualCard from "./EstimateVsActualCard";
 import { ChartPoint } from "@/lib/utils/estimateToStreamgraph";
 import { transformToChartPoints } from "@/lib/utils/estimateToStreamgraph";
 
@@ -20,6 +20,8 @@ interface Project {
   id: string;
   projectName?: string;
   projectNumber?: string;
+  status?: string;
+  archived?: boolean;
   approvedBudget?: {
     approvedAt: string;
     version: number;
@@ -277,16 +279,15 @@ export default function CostTrendAnalysis({
   
   try {
     return (
-      <div className="mb-8">
-        <Suspense fallback={
-          <div className="bg-white rounded-3xl border border-slate-100/50 shadow-lg p-6">
-            <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-              <p className="text-slate-600">Loading chart...</p>
-            </div>
+      <Suspense fallback={
+        <div className="bg-white rounded-3xl border border-slate-100/50 shadow-lg p-6">
+          <div className="text-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-slate-600">Loading chart...</p>
           </div>
-        }>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        </div>
+      }>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 lg:gap-5 items-stretch mt-4 md:mt-6 mb-4 md:mb-6">
             <div className="lg:col-span-2">
               <CostTrendStreamgraph
                 lines={flattenedLines as EstimatingLine[]}
@@ -301,16 +302,11 @@ export default function CostTrendAnalysis({
                 }))}
               />
             </div>
-            <div className="lg:col-span-1">
-              <CostTrendInsights
-                points={chartPoints}
-                metric="totalCost"
-                onCategoryClick={handleCategoryClick}
-              />
+            <div className="lg:col-span-1 flex w-full">
+              <EstimateVsActualCard companyId={companyId} />
             </div>
           </div>
         </Suspense>
-      </div>
     );
   } catch (err: any) {
     console.error("[CostTrend] Render error:", err);

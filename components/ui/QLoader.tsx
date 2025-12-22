@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 interface QLoaderProps {
   size?: number; // px
   className?: string;
@@ -8,11 +10,17 @@ interface QLoaderProps {
 export function QLoader({ size = 18, className = "" }: QLoaderProps) {
   return (
     <div
-      className={`inline-flex items-center justify-center rounded-full bg-white/70 text-blue-700 font-black animate-spin ${className}`}
-      style={{ width: size, height: size, fontSize: size * 0.65 }}
+      className={`inline-flex items-center justify-center rounded-full bg-white/70 animate-spin ${className}`}
+      style={{ width: size, height: size }}
       aria-label="Loading"
     >
-      Q
+      <Image
+        src="/graphics/logos/Q.svg"
+        alt="Quant"
+        width={size}
+        height={size}
+        className="w-full h-full"
+      />
     </div>
   );
 }

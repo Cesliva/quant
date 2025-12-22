@@ -14,6 +14,7 @@ import { useUserPermissions } from "@/lib/hooks/useUserPermissions";
 import { loadCompanySettings } from "@/lib/utils/settingsLoader";
 import BacklogAtAGlance from "@/components/dashboard/BacklogAtAGlance";
 import CostTrendAnalysis from "@/components/dashboard/CostTrendAnalysis";
+import EstimatorWorkload from "@/components/dashboard/EstimatorWorkload";
 import Input from "@/components/ui/Input";
 import { Search, Lightbulb, TrendingUp, AlertCircle } from "lucide-react";
 
@@ -417,6 +418,7 @@ export default function DashboardPage() {
   
   const totalProjects = activeProjects.length;
   const activeBidCount = activeProjectsList.filter((p) => p.status === "active").length;
+  const submittedBidCount = activeProjectsList.filter((p) => p.status === "submitted").length;
   const upcomingBidCount = upcomingBids.length;
   
   const now = new Date();
@@ -578,14 +580,14 @@ export default function DashboardPage() {
       value: activeBidCount.toString(),
       sublabel: "In progress",
       className: "bg-emerald-500",
-      href: "/projects",
+      href: "/projects?status=active",
     },
     {
-      label: "Upcoming Bids",
-      value: upcomingBidCount.toString(),
-      sublabel: "Next 7 days",
+      label: "Submitted Bids",
+      value: submittedBidCount.toString(),
+      sublabel: "Awaiting decision",
       className: "bg-orange-500",
-      href: "/projects",
+      href: "/projects?status=submitted",
     },
     {
       label: "Weighted Pipeline",
@@ -1124,44 +1126,18 @@ export default function DashboardPage() {
             </p>
           </Link>
           
-          {/* Bottom Card - Win / Loss Summary */}
-          <div className="bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300 p-3 md:p-4 flex-1 flex flex-col">
-            <p className="text-sm font-semibold mb-1">Win / Loss Summary</p>
-            <p className="text-xs text-slate-400 mb-3">{new Date().getFullYear()} (Current Year)</p>
-            <div className="flex items-end justify-between mb-3 flex-shrink-0">
-              <div>
-                <p className="text-2xl font-semibold">{Number(winRate || 0).toFixed(0)}%</p>
-                <p className="text-xs text-slate-400">Win rate</p>
-              </div>
-              <div className="flex gap-3 items-end text-xs">
-                <div className="flex flex-col items-center">
-                  <div className="w-2 h-6 bg-emerald-400 rounded-full" />
-                  <span className="mt-1 text-slate-400">Wins</span>
-                  <span className="font-medium text-slate-700">
-                    {totalBids > 0 ? Math.round((winRate / 100) * totalBids) : 0}
-                  </span>
-                </div>
-                <div className="flex flex-col items-center">
-                  <div className="w-2 h-10 bg-rose-300 rounded-full" />
-                  <span className="mt-1 text-slate-400">Losses</span>
-                  <span className="font-medium text-slate-700">
-                    {totalBids > 0 ? totalBids - Math.round((winRate / 100) * totalBids) : 0}
-                  </span>
-                </div>
-              </div>
+          {/* Bottom Card - Estimator Workload */}
+          {companyId && companyId !== "default" && (
+            <div className="flex-1">
+              <EstimatorWorkload companyId={companyId} />
             </div>
-            <p className="text-[11px] text-slate-400 mt-auto">
-              As you log more decisions, Quant will trend your competitiveness and margin discipline.
-            </p>
-          </div>
+          )}
         </div>
       </div>
 
       {/* Cost Trend Analysis Section */}
       {companyId && companyId !== "default" && (
-        <div className="mt-4 md:mt-6">
-          <CostTrendAnalysis companyId={companyId} />
-        </div>
+        <CostTrendAnalysis companyId={companyId} />
       )}
 
       {/* Backlog at a Glance Section */}

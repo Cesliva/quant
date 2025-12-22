@@ -336,14 +336,14 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
       description: "Build your estimate",
       color: "bg-blue-500 hover:bg-blue-600",
     },
-    {
-      name: "Misc Metals AI",
-      href: `/misc-metals?projectId=${projectId}`,
-      icon: Package,
-      aiIcon: Sparkles,
-      description: "AI-powered misc metals estimation",
-      color: "bg-indigo-500 hover:bg-indigo-600",
-    },
+    // {
+    //   name: "Misc Metals AI",
+    //   href: `/misc-metals?projectId=${projectId}`,
+    //   icon: Package,
+    //   aiIcon: Sparkles,
+    //   description: "AI-powered misc metals estimation",
+    //   color: "bg-indigo-500 hover:bg-indigo-600",
+    // }, // Removed - will be in a later version
     {
       name: "Structural Steel Estimate Summary",
       href: `/projects/${projectId}/reports`,
