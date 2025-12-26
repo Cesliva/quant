@@ -344,8 +344,9 @@ export default function CostTrendBubbleChart({
   useEffect(() => {
     if (!svgRef.current || bubbleData.length === 0) return;
     
-    const svg = d3.select(svgRef.current);
-    svg.selectAll("*").remove(); // Clear previous render
+    try {
+      const svg = d3.select(svgRef.current);
+      svg.selectAll("*").remove(); // Clear previous render
     
     const width = 600;
     const height = 600;
@@ -677,9 +678,16 @@ export default function CostTrendBubbleChart({
       });
     }
     
+    } catch (error) {
+      console.error("Error rendering bubble chart:", error);
+    }
+    
     // Cleanup function
     return () => {
-      svg.selectAll("*").remove();
+      if (svgRef.current) {
+        const svg = d3.select(svgRef.current);
+        svg.selectAll("*").remove();
+      }
     };
   }, [bubbleData, selectedMetric, selectedProjectData, selectedProjectId]);
   
