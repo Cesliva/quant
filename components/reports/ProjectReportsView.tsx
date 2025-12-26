@@ -97,7 +97,8 @@ interface ApprovedBudget {
   laborWasteFactor: number;
   // Metrics snapshot
   totalWeight: number;
-  totalLaborHours: number;
+  totalLaborHours: number; // Total man hours
+  manHoursPerTon?: number; // Man hours per ton (for easy chart retrieval)
   totalSurfaceArea: number;
   lineItemCount: number;
   // Cost codes for budget tracking
@@ -792,6 +793,7 @@ export default function ProjectReportsView({ companyId, projectId, project, onDa
         laborWasteFactor: financials.laborWasteFactor,
         totalWeight: metrics.totalWeight,
         totalLaborHours: metrics.totalLaborHours,
+        manHoursPerTon: metrics.manHoursPerTon,
         totalSurfaceArea: metrics.totalSurfaceArea,
         lineItemCount: metrics.lineItemCount,
         costCodes: costCodes, // Include cost codes in budget
@@ -882,7 +884,8 @@ export default function ProjectReportsView({ companyId, projectId, project, onDa
     csvRows.push("Metric,Value");
     csvRows.push(`Total Weight (lbs),${formatNumber(approvedBudget.totalWeight, 0)}`);
     csvRows.push(`Total Weight (tons),${formatNumber(approvedBudget.totalWeight / 2000, 2)}`);
-    csvRows.push(`Total Labor Hours,${formatNumber(approvedBudget.totalLaborHours, 1)}`);
+    csvRows.push(`Total Man Hours,${formatNumber(approvedBudget.totalLaborHours, 1)}`);
+    csvRows.push(`Man Hours per Ton,${formatNumber(approvedBudget.manHoursPerTon || 0, 2)}`);
     csvRows.push(`Total Surface Area (SF),${formatNumber(approvedBudget.totalSurfaceArea, 0)}`);
     csvRows.push(`Line Item Count,${approvedBudget.lineItemCount}`);
     csvRows.push("");
@@ -928,11 +931,11 @@ export default function ProjectReportsView({ companyId, projectId, project, onDa
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       {/* Estimate Summary Lock Status Banner */}
       {isLocked && approvedBudget ? (
-        <Card className="border-2 border-green-200 bg-gradient-to-br from-green-50 to-white">
-          <CardHeader className="bg-green-600 text-white rounded-t-lg">
+        <Card className="bg-white rounded-3xl border border-green-200/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] bg-gradient-to-br from-green-50/50 to-white">
+          <CardHeader className="bg-gradient-to-r from-green-600 to-green-700 text-white rounded-t-3xl pb-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Shield className="w-6 h-6" />
@@ -1010,8 +1013,8 @@ export default function ProjectReportsView({ companyId, projectId, project, onDa
           </CardContent>
         </Card>
       ) : (
-        <Card className="border-2 border-amber-200 bg-gradient-to-br from-amber-50 to-white">
-          <CardHeader className="bg-amber-600 text-white rounded-t-lg">
+        <Card className="bg-white rounded-3xl border border-amber-200/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] bg-gradient-to-br from-amber-50/50 to-white">
+          <CardHeader className="bg-gradient-to-r from-amber-600 to-amber-700 text-white rounded-t-3xl pb-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <FileText className="w-6 h-6" />
@@ -1374,22 +1377,22 @@ export default function ProjectReportsView({ companyId, projectId, project, onDa
       )}
 
       {/* Executive Summary */}
-      <Card className="border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-white">
-        <CardHeader className="bg-blue-600 text-white rounded-t-lg">
+      <Card className="bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300">
+        <CardHeader className="pb-4">
           <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2 text-xl">
-              <Target className="w-6 h-6" />
+            <CardTitle className="flex items-center gap-2 text-2xl font-semibold text-slate-900 tracking-tight">
+              <Target className="w-6 h-6 text-blue-600" />
               Executive Summary
             </CardTitle>
             {(project.projectType || project.projectTypeSubCategory) && (
-              <div className="flex items-center gap-2 text-sm">
+              <div className="flex items-center gap-2">
                 {project.projectType && (
-                  <span className="px-3 py-1 bg-white/20 rounded-full font-medium">
+                  <span className="px-3 py-1.5 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
                     {project.projectType}
                   </span>
                 )}
                 {project.projectTypeSubCategory && (
-                  <span className="px-3 py-1 bg-white/10 rounded-full text-white/90">
+                  <span className="px-3 py-1.5 bg-slate-100 text-slate-700 rounded-full text-xs font-medium">
                     {project.projectTypeSubCategory}
                   </span>
                 )}
@@ -1397,107 +1400,107 @@ export default function ProjectReportsView({ companyId, projectId, project, onDa
             )}
           </div>
         </CardHeader>
-        <CardContent className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
-              <div className="text-xs text-gray-600 mb-1">Total Project Cost</div>
-              <div className="text-3xl font-bold text-gray-900">
+        <CardContent className="pt-0">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+            <div className="bg-gradient-to-br from-blue-50 via-white to-blue-100/50 rounded-2xl p-4 md:p-6 border border-blue-100/50 shadow-sm">
+              <div className="text-xs font-medium text-slate-600 uppercase tracking-wide mb-2">Total Project Cost</div>
+              <div className="text-3xl md:text-4xl font-bold text-slate-900 mb-1">
                 {formatCurrency(financials.totalCost)}
               </div>
-              <div className="text-xs text-gray-500 mt-1">Including overhead & profit</div>
+              <div className="text-xs text-slate-500">Including overhead & profit</div>
             </div>
-            <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
-              <div className="text-xs text-gray-600 mb-1">Profit Margin</div>
-              <div className="text-3xl font-bold text-green-600">
+            <div className="bg-gradient-to-br from-green-50 via-white to-green-100/50 rounded-2xl p-4 md:p-6 border border-green-100/50 shadow-sm">
+              <div className="text-xs font-medium text-slate-600 uppercase tracking-wide mb-2">Profit Margin</div>
+              <div className="text-3xl md:text-4xl font-bold text-green-600 mb-1">
                 {formatNumber(metrics.margin, 1)}%
               </div>
-              <div className="text-xs text-gray-500 mt-1">
+              <div className="text-xs text-slate-500">
                 {formatCurrency(financials.profitAmount)} profit
               </div>
             </div>
-            <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
-              <div className="text-xs text-gray-600 mb-1">Win Probability</div>
-              <div className="text-3xl font-bold text-blue-600">
+            <div className="bg-gradient-to-br from-purple-50 via-white to-purple-100/50 rounded-2xl p-4 md:p-6 border border-purple-100/50 shadow-sm">
+              <div className="text-xs font-medium text-slate-600 uppercase tracking-wide mb-2">Win Probability</div>
+              <div className="text-3xl md:text-4xl font-bold text-purple-600 mb-1">
                 {project.probabilityOfWin || 0}%
               </div>
-              <div className="text-xs text-gray-500 mt-1">Based on project settings</div>
+              <div className="text-xs text-slate-500">Based on project settings</div>
             </div>
-            <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
-              <div className="text-xs text-gray-600 mb-1">Line Items</div>
-              <div className="text-3xl font-bold text-gray-900">
+            <div className="bg-gradient-to-br from-slate-50 via-white to-slate-100/50 rounded-2xl p-4 md:p-6 border border-slate-100/50 shadow-sm">
+              <div className="text-xs font-medium text-slate-600 uppercase tracking-wide mb-2">Line Items</div>
+              <div className="text-3xl md:text-4xl font-bold text-slate-900 mb-1">
                 {metrics.lineItemCount}
               </div>
-              <div className="text-xs text-gray-500 mt-1">Active estimate lines</div>
+              <div className="text-xs text-slate-500">Active estimate lines</div>
             </div>
           </div>
         </CardContent>
       </Card>
 
       {/* Cost Breakdown */}
-      <Card>
+      <Card className="bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300">
         <CardHeader 
-          className="cursor-pointer hover:bg-gray-50 transition-colors"
+          className="pb-4 cursor-pointer group"
           onClick={() => toggleSection("costBreakdown")}
         >
           <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <BarChart3 className="w-5 h-5 text-blue-600" />
+            <CardTitle className="flex items-center gap-2 text-2xl font-semibold text-slate-900 tracking-tight group-hover:text-blue-600 transition-colors">
+              <BarChart3 className="w-6 h-6 text-blue-600" />
               Cost Breakdown
             </CardTitle>
-            <div>
+            <button className="p-2 rounded-xl hover:bg-slate-100 transition-colors">
               {expandedSections.costBreakdown ? (
-                <ChevronUp className="w-5 h-5 text-gray-600" />
+                <ChevronUp className="w-5 h-5 text-slate-600" />
               ) : (
-                <ChevronDown className="w-5 h-5 text-gray-600" />
+                <ChevronDown className="w-5 h-5 text-slate-600" />
               )}
-            </div>
+            </button>
           </div>
         </CardHeader>
         {!expandedSections.costBreakdown ? (
-          <CardContent className="p-4">
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-              <div className="bg-white rounded-lg p-3 border border-gray-200">
-                <div className="text-xs text-gray-600 mb-1">Material</div>
-                <div className="text-xl font-bold text-gray-900">
+          <CardContent className="pt-0">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <div className="bg-gradient-to-br from-blue-50 to-white rounded-2xl p-4 border border-blue-100/50 shadow-sm">
+                <div className="text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">Material</div>
+                <div className="text-xl font-bold text-slate-900">
                   {formatCurrency(financials.materialCost)}
                 </div>
-                <div className="text-xs text-gray-500 mt-1">
+                <div className="text-xs text-slate-500 mt-1">
                   {formatNumber((financials.materialCost / financials.subtotal) * 100, 1)}% of subtotal
                 </div>
               </div>
-              <div className="bg-white rounded-lg p-3 border border-gray-200">
-                <div className="text-xs text-gray-600 mb-1">Labor</div>
+              <div className="bg-gradient-to-br from-green-50 to-white rounded-2xl p-4 border border-green-100/50 shadow-sm">
+                <div className="text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">Labor</div>
                 <div className="text-xl font-bold text-green-600">
                   {formatCurrency(financials.laborCost)}
                 </div>
-                <div className="text-xs text-gray-500 mt-1">
+                <div className="text-xs text-slate-500 mt-1">
                   {formatNumber((financials.laborCost / financials.subtotal) * 100, 1)}% of subtotal
                 </div>
               </div>
-              <div className="bg-white rounded-lg p-3 border border-gray-200">
-                <div className="text-xs text-gray-600 mb-1">Coating</div>
-                <div className="text-xl font-bold text-blue-600">
+              <div className="bg-gradient-to-br from-purple-50 to-white rounded-2xl p-4 border border-purple-100/50 shadow-sm">
+                <div className="text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">Coating</div>
+                <div className="text-xl font-bold text-purple-600">
                   {formatCurrency(financials.coatingCost)}
                 </div>
-                <div className="text-xs text-gray-500 mt-1">
+                <div className="text-xs text-slate-500 mt-1">
                   {formatNumber((financials.coatingCost / financials.subtotal) * 100, 1)}% of subtotal
                 </div>
               </div>
-              <div className="bg-white rounded-lg p-3 border border-gray-200">
-                <div className="text-xs text-gray-600 mb-1">Hardware</div>
+              <div className="bg-gradient-to-br from-amber-50 to-white rounded-2xl p-4 border border-amber-100/50 shadow-sm">
+                <div className="text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">Hardware</div>
                 <div className="text-xl font-bold text-amber-600">
                   {formatCurrency(financials.hardwareCost)}
                 </div>
-                <div className="text-xs text-gray-500 mt-1">
+                <div className="text-xs text-slate-500 mt-1">
                   {formatNumber((financials.hardwareCost / financials.subtotal) * 100, 1)}% of subtotal
                 </div>
               </div>
-              <div className="bg-white rounded-lg p-3 border border-gray-200">
-                <div className="text-xs text-gray-600 mb-1">Buyouts</div>
-                <div className="text-xl font-bold text-purple-600">
+              <div className="bg-gradient-to-br from-indigo-50 to-white rounded-2xl p-4 border border-indigo-100/50 shadow-sm">
+                <div className="text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">Buyouts</div>
+                <div className="text-xl font-bold text-indigo-600">
                   {formatCurrency(financials.buyouts)}
                 </div>
-                <div className="text-xs text-gray-500 mt-1">
+                <div className="text-xs text-slate-500 mt-1">
                   {formatNumber((financials.buyouts / financials.subtotal) * 100, 1)}% of subtotal
                 </div>
               </div>
@@ -2097,28 +2100,28 @@ export default function ProjectReportsView({ companyId, projectId, project, onDa
 
       {/* Similar Projects Comparison */}
       {project.projectType && (
-        <Card className="border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-white">
+        <Card className="bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300">
           <CardHeader 
-            className="bg-purple-600 text-white rounded-t-lg cursor-pointer hover:bg-purple-700 transition-colors" 
+            className="pb-4 cursor-pointer group" 
             onClick={() => toggleSection("similarProjects")}
           >
             <div className="flex items-center justify-between">
               <div className="flex-1">
-                <CardTitle className="flex items-center gap-2 text-xl">
-                  <BarChart3 className="w-6 h-6" />
+                <CardTitle className="flex items-center gap-2 text-2xl font-semibold text-slate-900 tracking-tight group-hover:text-purple-600 transition-colors">
+                  <BarChart3 className="w-6 h-6 text-purple-600" />
                   Similar Projects Comparison
                 </CardTitle>
-                <p className="text-sm text-purple-100 mt-1">
+                <p className="text-sm text-slate-600 mt-1">
                   Compare this estimate with similar {project.projectType} projects for strategic advantage
                 </p>
               </div>
-              <div className="ml-4">
+              <button className="p-2 rounded-xl hover:bg-slate-100 transition-colors ml-4">
                 {expandedSections.similarProjects ? (
-                  <ChevronUp className="w-5 h-5" />
+                  <ChevronUp className="w-5 h-5 text-slate-600" />
                 ) : (
-                  <ChevronDown className="w-5 h-5" />
+                  <ChevronDown className="w-5 h-5 text-slate-600" />
                 )}
-              </div>
+              </button>
             </div>
           </CardHeader>
           {!expandedSections.similarProjects ? (
@@ -2232,78 +2235,78 @@ export default function ProjectReportsView({ companyId, projectId, project, onDa
       )}
 
       {/* Sanity Checks - Critical Estimator Validation Metrics */}
-      <Card className="border-2 border-green-200 bg-gradient-to-br from-green-50 to-white">
+      <Card className="bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300">
         <CardHeader 
-          className="bg-green-600 text-white rounded-t-lg cursor-pointer hover:bg-green-700 transition-colors"
+          className="pb-4 cursor-pointer group"
           onClick={() => toggleSection("sanityChecks")}
         >
           <div className="flex items-center justify-between">
             <div className="flex-1">
-              <CardTitle className="flex items-center gap-2 text-xl">
-                <CheckCircle2 className="w-6 h-6" />
+              <CardTitle className="flex items-center gap-2 text-2xl font-semibold text-slate-900 tracking-tight group-hover:text-green-600 transition-colors">
+                <CheckCircle2 className="w-6 h-6 text-green-600" />
                 Sanity Checks & Validation Metrics
               </CardTitle>
-              <p className="text-sm text-green-100 mt-1">
+              <p className="text-sm text-slate-600 mt-1">
                 Critical metrics used by estimators to validate estimate accuracy
               </p>
             </div>
-            <div className="ml-4">
+            <button className="p-2 rounded-xl hover:bg-slate-100 transition-colors ml-4">
               {expandedSections.sanityChecks ? (
-                <ChevronUp className="w-5 h-5" />
+                <ChevronUp className="w-5 h-5 text-slate-600" />
               ) : (
-                <ChevronDown className="w-5 h-5" />
+                <ChevronDown className="w-5 h-5 text-slate-600" />
               )}
-            </div>
+            </button>
           </div>
         </CardHeader>
         {!expandedSections.sanityChecks ? (
-          <CardContent className="p-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-white rounded-lg p-3 border-2 border-green-200">
-                <div className="text-xs text-gray-600 mb-1">Cost per Pound</div>
-                <div className="text-2xl font-bold text-gray-900">
+          <CardContent className="pt-0">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="bg-gradient-to-br from-green-50 to-white rounded-2xl p-4 border border-green-100/50 shadow-sm">
+                <div className="text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">Cost per Pound</div>
+                <div className="text-2xl font-bold text-slate-900">
                   {formatCurrency(metrics.costPerPound)}
                 </div>
-                <div className="text-xs text-gray-500 mt-1">
+                <div className="text-xs text-slate-500 mt-1">
                   {formatCurrency(metrics.costPerTon)} per ton
                 </div>
-                <div className="text-xs text-green-600 mt-1 font-medium">
+                <div className="text-xs text-green-600 mt-2 font-medium">
                   Range: $1.50 - $3.50/lb
                 </div>
               </div>
-              <div className="bg-white rounded-lg p-3 border-2 border-green-200">
-                <div className="text-xs text-gray-600 mb-1">Cost per Ton</div>
-                <div className="text-2xl font-bold text-gray-900">
+              <div className="bg-gradient-to-br from-green-50 to-white rounded-2xl p-4 border border-green-100/50 shadow-sm">
+                <div className="text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">Cost per Ton</div>
+                <div className="text-2xl font-bold text-slate-900">
                   {formatCurrency(metrics.costPerTon)}
                 </div>
-                <div className="text-xs text-gray-500 mt-1">
+                <div className="text-xs text-slate-500 mt-1">
                   {formatCurrency(metrics.costPerPound)} per lb
                 </div>
-                <div className="text-xs text-green-600 mt-1 font-medium">
+                <div className="text-xs text-green-600 mt-2 font-medium">
                   Range: $3,000 - $7,000/ton
                 </div>
               </div>
-              <div className="bg-white rounded-lg p-3 border-2 border-green-200">
-                <div className="text-xs text-gray-600 mb-1">Man Hours per Lb</div>
-                <div className="text-2xl font-bold text-gray-900">
+              <div className="bg-gradient-to-br from-green-50 to-white rounded-2xl p-4 border border-green-100/50 shadow-sm">
+                <div className="text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">Man Hours per Lb</div>
+                <div className="text-2xl font-bold text-slate-900">
                   {formatNumber(metrics.manHoursPerPound, 4)}
                 </div>
-                <div className="text-xs text-gray-500 mt-1">
+                <div className="text-xs text-slate-500 mt-1">
                   {formatNumber(metrics.manHoursPerTon, 1)} hrs per ton
                 </div>
-                <div className="text-xs text-green-600 mt-1 font-medium">
+                <div className="text-xs text-green-600 mt-2 font-medium">
                   Range: 0.001 - 0.005 hrs/lb
                 </div>
               </div>
-              <div className="bg-white rounded-lg p-3 border-2 border-green-200">
-                <div className="text-xs text-gray-600 mb-1">Man Hours per Ton</div>
-                <div className="text-2xl font-bold text-gray-900">
+              <div className="bg-gradient-to-br from-green-50 to-white rounded-2xl p-4 border border-green-100/50 shadow-sm">
+                <div className="text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">Man Hours per Ton</div>
+                <div className="text-2xl font-bold text-slate-900">
                   {formatNumber(metrics.manHoursPerTon, 1)}
                 </div>
-                <div className="text-xs text-gray-500 mt-1">
+                <div className="text-xs text-slate-500 mt-1">
                   {formatNumber(metrics.manHoursPerPound, 4)} hrs per lb
                 </div>
-                <div className="text-xs text-green-600 mt-1 font-medium">
+                <div className="text-xs text-green-600 mt-2 font-medium">
                   Range: 2 - 10 hrs/ton
                 </div>
               </div>
@@ -2527,62 +2530,62 @@ export default function ProjectReportsView({ companyId, projectId, project, onDa
       </Card>
 
       {/* Strategic Financial Analysis */}
-      <Card className="border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-white">
+      <Card className="bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300">
         <CardHeader 
-          className="bg-purple-600 text-white rounded-t-lg cursor-pointer hover:bg-purple-700 transition-colors"
+          className="pb-4 cursor-pointer group"
           onClick={() => toggleSection("strategicAnalysis")}
         >
           <div className="flex items-center justify-between">
             <div className="flex-1">
-              <CardTitle className="flex items-center gap-2 text-xl">
-                <TrendingUp className="w-6 h-6" />
+              <CardTitle className="flex items-center gap-2 text-2xl font-semibold text-slate-900 tracking-tight group-hover:text-purple-600 transition-colors">
+                <TrendingUp className="w-6 h-6 text-purple-600" />
                 Strategic Financial Analysis
               </CardTitle>
-              <p className="text-sm text-purple-100 mt-1">
+              <p className="text-sm text-slate-600 mt-1">
                 Competitive advantage metrics for bidding strategy
               </p>
             </div>
-            <div className="ml-4">
+            <button className="p-2 rounded-xl hover:bg-slate-100 transition-colors ml-4">
               {expandedSections.strategicAnalysis ? (
-                <ChevronUp className="w-5 h-5" />
+                <ChevronUp className="w-5 h-5 text-slate-600" />
               ) : (
-                <ChevronDown className="w-5 h-5" />
+                <ChevronDown className="w-5 h-5 text-slate-600" />
               )}
-            </div>
+            </button>
           </div>
         </CardHeader>
         {!expandedSections.strategicAnalysis ? (
-          <CardContent className="p-4">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="bg-white rounded-lg p-3 border border-gray-200">
-                <div className="text-xs text-gray-600 mb-1">Break-Even Price</div>
-                <div className="text-xl font-bold text-gray-900">
+          <CardContent className="pt-0">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="bg-gradient-to-br from-purple-50 to-white rounded-2xl p-4 border border-purple-100/50 shadow-sm">
+                <div className="text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">Break-Even Price</div>
+                <div className="text-xl font-bold text-slate-900">
                   {formatCurrency(metrics.breakEvenPrice)}
                 </div>
-                <div className="text-xs text-gray-500 mt-1">Minimum to cover costs</div>
+                <div className="text-xs text-slate-500 mt-1">Minimum to cover costs</div>
               </div>
-              <div className="bg-white rounded-lg p-3 border border-gray-200">
-                <div className="text-xs text-gray-600 mb-1">Discount Capacity</div>
+              <div className="bg-gradient-to-br from-green-50 to-white rounded-2xl p-4 border border-green-100/50 shadow-sm">
+                <div className="text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">Discount Capacity</div>
                 <div className="text-xl font-bold text-green-600">
                   {formatCurrency(metrics.discountCapacity)}
                 </div>
-                <div className="text-xs text-gray-500 mt-1">
+                <div className="text-xs text-slate-500 mt-1">
                   {formatNumber(metrics.discountCapacityPercent, 1)}% of total
                 </div>
               </div>
-              <div className="bg-white rounded-lg p-3 border border-gray-200">
-                <div className="text-xs text-gray-600 mb-1">ROI Potential</div>
+              <div className="bg-gradient-to-br from-blue-50 to-white rounded-2xl p-4 border border-blue-100/50 shadow-sm">
+                <div className="text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">ROI Potential</div>
                 <div className="text-xl font-bold text-blue-600">
                   {formatNumber(metrics.roi, 1)}%
                 </div>
-                <div className="text-xs text-gray-500 mt-1">If won at estimate</div>
+                <div className="text-xs text-slate-500 mt-1">If won at estimate</div>
               </div>
-              <div className="bg-white rounded-lg p-3 border border-gray-200">
-                <div className="text-xs text-gray-600 mb-1">Expected Value</div>
-                <div className="text-xl font-bold text-purple-600">
+              <div className="bg-gradient-to-br from-indigo-50 to-white rounded-2xl p-4 border border-indigo-100/50 shadow-sm">
+                <div className="text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">Expected Value</div>
+                <div className="text-xl font-bold text-indigo-600">
                   {formatCurrency(metrics.expectedValue)}
                 </div>
-                <div className="text-xs text-gray-500 mt-1">Risk-adjusted profit</div>
+                <div className="text-xs text-slate-500 mt-1">Risk-adjusted profit</div>
               </div>
             </div>
           </CardContent>
@@ -2768,23 +2771,23 @@ export default function ProjectReportsView({ companyId, projectId, project, onDa
       </Card>
 
       {/* AI Spec Review Summary */}
-      <Card className="mt-6">
+      <Card className="bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300">
         <CardHeader 
-          className="bg-indigo-600 text-white rounded-t-lg cursor-pointer hover:bg-indigo-700 transition-colors"
+          className="pb-4 cursor-pointer group"
           onClick={() => toggleSection("specReview")}
         >
           <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2 text-xl">
-              <FileCheck className="w-6 h-6" />
+            <CardTitle className="flex items-center gap-2 text-2xl font-semibold text-slate-900 tracking-tight group-hover:text-indigo-600 transition-colors">
+              <FileCheck className="w-6 h-6 text-indigo-600" />
               AI Spec Review Summary
             </CardTitle>
-            <div className="ml-4">
+            <button className="p-2 rounded-xl hover:bg-slate-100 transition-colors">
               {expandedSections.specReview ? (
-                <ChevronUp className="w-5 h-5" />
+                <ChevronUp className="w-5 h-5 text-slate-600" />
               ) : (
-                <ChevronDown className="w-5 h-5" />
+                <ChevronDown className="w-5 h-5 text-slate-600" />
               )}
-            </div>
+            </button>
           </div>
         </CardHeader>
         {expandedSections.specReview ? (
