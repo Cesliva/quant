@@ -349,6 +349,41 @@ export default function ProjectReportsView({ companyId, projectId, project, onDa
     return () => unsubscribe();
   }, [companyId, projectId]);
 
+  // Fetch similar projects for comparison
+  useEffect(() => {
+    if (!isFirebaseConfigured() || !companyId || !projectId || !project.projectType) {
+      setSimilarProjects([]);
+      return;
+    }
+
+    setLoadingSimilarProjects(true);
+    
+    const projectsPath = `companies/${companyId}/projects`;
+    const unsubscribe = subscribeToCollection<any>(
+      projectsPath,
+      (allProjects) => {
+        // Filter for similar projects:
+        // 1. Same projectType
+        // 2. Not the current project
+        // 3. Has an approvedBudget (so we can compare metrics)
+        // 4. Not archived
+        const similar = allProjects.filter((p: any) => {
+          return (
+            p.id !== projectId &&
+            p.projectType === project.projectType &&
+            p.approvedBudget &&
+            !p.archived
+          );
+        });
+
+        setSimilarProjects(similar);
+        setLoadingSimilarProjects(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [companyId, projectId, project.projectType]);
+
   // Calculate total buyouts and update financials
   useEffect(() => {
     const totalBuyouts = buyouts.reduce((sum, item) => sum + (item.amount || 0), 0);
