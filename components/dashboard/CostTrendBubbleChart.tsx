@@ -578,21 +578,21 @@ export default function CostTrendBubbleChart({
           const labelY = position.y + (isAbove ? -baseRadius - 20 : baseRadius + 20);
           const labelText = `${isAbove ? '+' : ''}${percentDiff.toFixed(0)}%`;
           
-          // Add background circle for label readability
-          overlayGroup.append("circle")
+          // Add background circle for label readability (append first so it's behind text)
+          const bgCircle = overlayGroup.append("circle")
             .attr("cx", position.x)
             .attr("cy", labelY)
             .attr("r", 12)
             .attr("fill", "white")
             .attr("opacity", 0)
-            .style("pointer-events", "none")
-            .transition()
+            .style("pointer-events", "none");
+          
+          bgCircle.transition()
             .duration(600)
             .delay(300)
-            .attr("opacity", 0.9)
-            .lower(); // Place behind text
+            .attr("opacity", 0.9);
           
-          // Add text label
+          // Add text label (append after circle so it's on top)
           overlayGroup.append("text")
             .attr("x", position.x)
             .attr("y", labelY)
