@@ -28,6 +28,7 @@ import {
   Archive,
   Sparkles,
   Package,
+  Scissors,
 } from "lucide-react";
 import {
   getDocument,
@@ -345,6 +346,13 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
     //   color: "bg-indigo-500 hover:bg-indigo-600",
     // }, // Removed - will be in a later version
     {
+      name: "Material Nesting & Cutting List",
+      href: `/projects/${projectId}/material-nesting`,
+      icon: Scissors,
+      description: "Optimize material into stock lengths",
+      color: "bg-teal-500 hover:bg-teal-600",
+    },
+    {
       name: "Structural Steel Estimate Summary",
       href: `/projects/${projectId}/reports`,
       icon: FileText,
@@ -379,49 +387,45 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
-      <div className="max-w-7xl mx-auto p-6 space-y-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 py-6 md:py-8 text-slate-800">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-4">
-            <div>
-              <div className="flex items-center gap-3 mb-2">
-                <h1 className="text-3xl font-bold text-gray-900">{project.projectName || "Untitled Project"}</h1>
-                <span
-                  className={`px-3 py-1 rounded-full text-xs font-semibold border flex items-center gap-1.5 ${statusConfig.color}`}
-                >
-                  <StatusIcon className="w-3.5 h-3.5" />
-                  {statusConfig.label}
-                </span>
-              </div>
-              <div className="flex items-center gap-4 text-sm text-gray-600">
-                {project.projectNumber && <span className="font-mono">{project.projectNumber}</span>}
-                {project.owner && (
-                  <span className="flex items-center gap-1.5">
-                    <Users className="w-4 h-4" />
-                    {project.owner}
-                  </span>
-                )}
-                {project.generalContractor && (
-                  <span className="flex items-center gap-1.5">
-                    <Building2 className="w-4 h-4" />
-                    {project.generalContractor}
-                  </span>
-                )}
-                {project.location && (
-                  <span className="flex items-center gap-1.5">
-                    <MapPin className="w-4 h-4" />
-                    {project.location}
-                  </span>
-                )}
-              </div>
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4 md:mb-6">
+          <div>
+            <div className="flex items-center gap-3 mb-2">
+              <h1 className="text-4xl font-semibold tracking-tight text-slate-900">{project.projectName || "Untitled Project"}</h1>
+              <span
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold border flex items-center gap-1.5 ${statusConfig.color}`}
+              >
+                <StatusIcon className="w-3.5 h-3.5" />
+                {statusConfig.label}
+              </span>
             </div>
+            <p className="text-slate-500">
+              {project.projectNumber && <span className="font-mono mr-3">{project.projectNumber}</span>}
+              {project.owner && (
+                <span className="flex items-center gap-1.5 inline-flex mr-3">
+                  <Users className="w-4 h-4" />
+                  {project.owner}
+                </span>
+              )}
+              {project.generalContractor && (
+                <span className="flex items-center gap-1.5 inline-flex mr-3">
+                  <Building2 className="w-4 h-4" />
+                  {project.generalContractor}
+                </span>
+              )}
+              {project.location && (
+                <span className="flex items-center gap-1.5 inline-flex">
+                  <MapPin className="w-4 h-4" />
+                  {project.location}
+                </span>
+              )}
+            </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             {project.archived ? (
               <Button
-                variant="outline"
-                size="sm"
                 onClick={async () => {
                   const activeCompanyId = validCompanyId || companyId;
                   if (confirm("Restore this project? It will appear in your active projects list.")) {
@@ -440,15 +444,13 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
                     }
                   }
                 }}
-                className="border-green-300 text-green-700 hover:bg-green-50"
+                className="px-5 py-2.5 rounded-2xl border border-green-200/80 bg-white text-green-700 text-sm font-medium shadow-[0_1px_2px_0_rgb(0,0,0,0.05),0_2px_4px_0_rgb(0,0,0,0.03)] hover:shadow-[0_2px_4px_0_rgb(0,0,0,0.08),0_4px_8px_0_rgb(0,0,0,0.05)] hover:bg-green-50 hover:border-green-300 transition-all duration-200"
               >
                 <Archive className="w-4 h-4 mr-2" />
                 Restore
               </Button>
             ) : (
               <Button
-                variant="outline"
-                size="sm"
                 onClick={async () => {
                   const activeCompanyId = validCompanyId || companyId;
                   if (
@@ -491,7 +493,7 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
                     }
                   }
                 }}
-                className="border-gray-300 text-gray-700 hover:bg-gray-50"
+                className="px-5 py-2.5 rounded-2xl border border-slate-200/80 bg-white text-slate-700 text-sm font-medium shadow-[0_1px_2px_0_rgb(0,0,0,0.05),0_2px_4px_0_rgb(0,0,0,0.03)] hover:shadow-[0_2px_4px_0_rgb(0,0,0,0.08),0_4px_8px_0_rgb(0,0,0,0.05)] hover:bg-slate-50 hover:border-slate-300 transition-all duration-200"
               >
                 <Archive className="w-4 h-4 mr-2" />
                 Archive
@@ -500,25 +502,25 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
           </div>
         </div>
 
-        <div>
+        <div className="mb-4 md:mb-6">
           <ProjectSettingsPanel companyId={validCompanyId || companyId} projectId={projectId} compact />
         </div>
 
         {/* Key Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-4 md:mb-6">
           {/* Bid Due Date */}
-          <Card className="border-l-4 border-l-blue-500">
-            <CardContent className="p-4">
+          <Card className="bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300 border-l-4 border-l-blue-500">
+            <CardContent className="p-4 md:p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-medium text-gray-600 uppercase tracking-wide mb-1">
+                  <p className="text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">
                     Bid Due Date
                   </p>
-                  <p className="text-lg font-semibold text-gray-900">
+                  <p className="text-lg font-semibold text-slate-900">
                     {formatDate(project.bidDueDate)}
                   </p>
                   {daysUntilBid !== null && (
-                    <p className={`text-xs mt-1 ${isUrgent ? "text-orange-600 font-semibold" : "text-gray-500"}`}>
+                    <p className={`text-xs mt-1 ${isUrgent ? "text-orange-600 font-semibold" : "text-slate-500"}`}>
                       {daysUntilBid === 0 
                         ? "Due today!" 
                         : daysUntilBid < 0 
@@ -535,18 +537,18 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
           </Card>
 
           {/* Estimated Value */}
-          <Card className="border-l-4 border-l-green-500">
-            <CardContent className="p-4">
+          <Card className="bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300 border-l-4 border-l-green-500">
+            <CardContent className="p-4 md:p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-medium text-gray-600 uppercase tracking-wide mb-1">
+                  <p className="text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">
                     Estimated Value
                   </p>
-                  <p className="text-lg font-semibold text-gray-900">
+                  <p className="text-lg font-semibold text-slate-900">
                     {formatCurrency(project.estimatedValue)}
                   </p>
                   {project.competitionLevel && (
-                    <p className="text-xs text-gray-500 mt-1 capitalize">
+                    <p className="text-xs text-slate-500 mt-1 capitalize">
                       {project.competitionLevel} competition
                     </p>
                   )}
@@ -559,17 +561,17 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
           </Card>
 
           {/* Win Probability */}
-          <Card className="border-l-4 border-l-purple-500">
-            <CardContent className="p-4">
+          <Card className="bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300 border-l-4 border-l-purple-500">
+            <CardContent className="p-4 md:p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-medium text-gray-600 uppercase tracking-wide mb-1">
+                  <p className="text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">
                     Win Probability
                   </p>
-                  <p className="text-lg font-semibold text-gray-900">
+                  <p className="text-lg font-semibold text-slate-900">
                     {project.probabilityOfWin || 0}%
                   </p>
-                  <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+                  <div className="w-full bg-slate-200 rounded-full h-2 mt-2">
                     <div 
                       className="bg-purple-600 h-2 rounded-full transition-all"
                       style={{ width: `${project.probabilityOfWin || 0}%` }}
@@ -584,17 +586,17 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
           </Card>
 
           {/* Estimating Summary */}
-          <Card className="border-l-4 border-l-amber-500">
-            <CardContent className="p-4">
+          <Card className="bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300 border-l-4 border-l-amber-500">
+            <CardContent className="p-4 md:p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-medium text-gray-600 uppercase tracking-wide mb-1">
+                  <p className="text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">
                     Estimate Total
                   </p>
-                  <p className="text-lg font-semibold text-gray-900">
+                  <p className="text-lg font-semibold text-slate-900">
                     {formatCurrency(estimatingStats.totalCost)}
                   </p>
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-slate-500 mt-1">
                     {estimatingStats.totalLines} line{estimatingStats.totalLines !== 1 ? "s" : ""}
                   </p>
                 </div>
@@ -607,26 +609,26 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
         </div>
 
         {/* Quick Actions */}
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Quick Actions</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="mb-4 md:mb-6">
+          <h2 className="text-2xl font-semibold text-slate-900 mb-4 tracking-tight">Quick Actions</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
             {quickActions.map((action) => {
               const Icon = action.icon;
               const AiIcon = (action as any).aiIcon;
               return (
                 <Link key={action.name} href={action.href}>
-                  <Card className="hover:shadow-lg transition-all cursor-pointer group border-2 hover:border-blue-300 h-full">
-                    <CardContent className="p-6 h-full flex flex-col">
+                  <Card className="bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300 cursor-pointer group h-full hover:-translate-y-1">
+                    <CardContent className="p-4 md:p-6 h-full flex flex-col">
                       <div className={`w-12 h-12 ${action.color} rounded-lg flex items-center justify-center mb-4 group-hover:scale-110 transition-transform relative`}>
                         <Icon className="w-6 h-6 text-white" />
                         {AiIcon && (
                           <AiIcon className="w-4 h-4 text-yellow-300 absolute -top-1 -right-1 drop-shadow-lg" />
                         )}
                       </div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-1 line-clamp-2">
+                      <h3 className="text-lg font-semibold text-slate-900 mb-1 line-clamp-2">
                         {action.name}
                       </h3>
-                      <p className="text-sm text-gray-600 line-clamp-2 flex-grow">{action.description}</p>
+                      <p className="text-sm text-slate-600 line-clamp-2 flex-grow">{action.description}</p>
                     </CardContent>
                   </Card>
                 </Link>
@@ -636,26 +638,26 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
         </div>
 
         {/* Secondary Actions & Project Info - Golden Ratio (1.618:1) */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.618fr] gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.618fr] gap-3 md:gap-4 lg:gap-5 mb-4 md:mb-6">
           {/* Secondary Actions (38.2%) */}
           <div>
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">More Tools</h2>
+            <h2 className="text-2xl font-semibold text-slate-900 mb-4 tracking-tight">More Tools</h2>
             <div className="space-y-2">
               {secondaryActions.map((action) => {
                 const Icon = action.icon;
                 return (
                   <Link key={action.name} href={action.href}>
-                    <Card className="hover:shadow-md transition-all cursor-pointer">
+                    <Card className="bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300 cursor-pointer">
                       <CardContent className="p-4">
                         <div className="flex items-center gap-3">
-                          <div className="p-2 bg-gray-100 rounded-lg">
-                            <Icon className="w-5 h-5 text-gray-600" />
+                          <div className="p-2 bg-slate-100 rounded-lg">
+                            <Icon className="w-5 h-5 text-slate-600" />
                           </div>
                           <div className="flex-1">
-                            <h3 className="text-sm font-semibold text-gray-900">
+                            <h3 className="text-sm font-semibold text-slate-900">
                               {action.name}
                             </h3>
-                            <p className="text-xs text-gray-600">{action.description}</p>
+                            <p className="text-xs text-slate-600">{action.description}</p>
                           </div>
                         </div>
                       </CardContent>
@@ -668,9 +670,9 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
 
           {/* Project Timeline & Info (61.8%) */}
           <div>
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Project Timeline</h2>
-            <Card>
-              <CardContent className="p-6">
+            <h2 className="text-2xl font-semibold text-slate-900 mb-4 tracking-tight">Project Timeline</h2>
+            <Card className="bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300">
+              <CardContent className="p-4 md:p-6">
                 <div className="space-y-4">
                   <div className="flex items-start gap-4">
                     <div className="flex-shrink-0">
@@ -679,11 +681,11 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
                       </div>
                     </div>
                     <div className="flex-1">
-                      <h3 className="font-semibold text-gray-900">Bid Due Date</h3>
-                      <p className="text-sm text-gray-600">{formatDate(project.bidDueDate)}</p>
+                      <h3 className="font-semibold text-slate-900">Bid Due Date</h3>
+                      <p className="text-sm text-slate-600">{formatDate(project.bidDueDate)}</p>
                       {daysUntilBid !== null && (
                         <span className={`inline-block mt-1 px-2 py-0.5 rounded text-xs font-medium ${
-                          isUrgent ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-700"
+                          isUrgent ? "bg-orange-100 text-orange-700" : "bg-slate-100 text-slate-700"
                         }`}>
                           {daysUntilBid === 0 
                             ? "Due today!" 
@@ -703,8 +705,8 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
                         </div>
                       </div>
                       <div className="flex-1">
-                        <h3 className="font-semibold text-gray-900">Decision Date</h3>
-                        <p className="text-sm text-gray-600">{formatDate(project.decisionDate)}</p>
+                        <h3 className="font-semibold text-slate-900">Decision Date</h3>
+                        <p className="text-sm text-slate-600">{formatDate(project.decisionDate)}</p>
                       </div>
                     </div>
                   )}
@@ -717,8 +719,8 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
                         </div>
                       </div>
                       <div className="flex-1">
-                        <h3 className="font-semibold text-gray-900">Delivery Date</h3>
-                        <p className="text-sm text-gray-600">{formatDate(project.deliveryDate)}</p>
+                        <h3 className="font-semibold text-slate-900">Delivery Date</h3>
+                        <p className="text-sm text-slate-600">{formatDate(project.deliveryDate)}</p>
                       </div>
                     </div>
                   )}
@@ -729,24 +731,22 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
         </div>
 
         {/* Project Lifecycle Controls */}
-        <Card className="bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+        <Card className="bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300 bg-gradient-to-r from-blue-50/50 to-purple-50/50 border-blue-200/60">
+          <CardHeader className="pb-4">
+            <CardTitle className="flex items-center gap-2 text-slate-900">
               <Settings className="w-5 h-5" />
               Project Lifecycle
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-0">
             <div className="flex flex-wrap items-center gap-3">
-              <span className="text-sm text-gray-600">Change status:</span>
+              <span className="text-sm text-slate-600">Change status:</span>
               {["draft", "active", "submitted", "won", "lost"].map((status) => {
                 const config = getStatusConfig(status);
                 const isCurrent = project.status === status;
                 return (
                   <Button
                     key={status}
-                    variant={isCurrent ? "primary" : "outline"}
-                    size="sm"
                     onClick={async () => {
                       const activeCompanyId = validCompanyId || companyId;
                       if (!isFirebaseConfigured() || !activeCompanyId || !projectId) {
@@ -777,6 +777,10 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
                       }
                     }}
                     disabled={isCurrent}
+                    className={isCurrent 
+                      ? "px-4 py-2 rounded-2xl bg-blue-500 text-white text-sm font-medium shadow-[0_2px_4px_0_rgb(59,130,246,0.3),0_4px_8px_0_rgb(59,130,246,0.2)] hover:shadow-[0_4px_8px_0_rgb(59,130,246,0.4),0_8px_16px_0_rgb(59,130,246,0.25)] hover:bg-blue-600 transition-all duration-200"
+                      : "px-4 py-2 rounded-2xl border border-slate-200/80 bg-white text-slate-700 text-sm font-medium shadow-[0_1px_2px_0_rgb(0,0,0,0.05),0_2px_4px_0_rgb(0,0,0,0.03)] hover:shadow-[0_2px_4px_0_rgb(0,0,0,0.08),0_4px_8px_0_rgb(0,0,0,0.05)] hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    }
                   >
                     {config.label}
                   </Button>
