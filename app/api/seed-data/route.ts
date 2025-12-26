@@ -395,17 +395,20 @@ function createColumnLine(lineId: string): EstimatingLine {
     "W12x65": 65, "W14x90": 90, "W16x100": 100, "W18x119": 119, "W21x147": 147,
   };
   const weightPerFoot = weightMap[size] || 100;
-  const totalWeight = (weightPerFoot * lengthFt * qty) / 1000;
-  const materialCost = totalWeight * 2000 * MATERIAL_RATE;
-  const laborHours = totalWeight * randomBetween(8, 12);
+  const totalWeight = weightPerFoot * lengthFt * qty; // Weight in pounds (lbs)
+  const materialCost = totalWeight * MATERIAL_RATE; // Material rate is $/lb
+  const laborHours = (totalWeight / 2000) * randomBetween(8, 12); // Labor hours based on tons
   const laborBreakdown = generateLaborBreakdown(laborHours, "Columns");
   const laborCost = laborHours * LABOR_RATE;
   const coatingSystem = randomChoice(["None", "Paint", "Galv"]);
   let coatingCost = 0;
   if (coatingSystem === "Paint") {
-    coatingCost = totalWeight * 2000 * 0.15 * PAINT_RATE;
+    // Paint: surface area × paint rate (need to calculate surface area from weight)
+    // Approximate: 1 lb steel ≈ 0.15 SF surface area
+    coatingCost = totalWeight * 0.15 * PAINT_RATE;
   } else if (coatingSystem === "Galv") {
-    coatingCost = totalWeight * 2000 * GALVANIZE_RATE;
+    // Galvanizing: weight × rate ($/lb)
+    coatingCost = totalWeight * GALVANIZE_RATE;
   }
   return {
     lineId,
@@ -448,17 +451,20 @@ function createBeamLine(lineId: string): EstimatingLine {
     "W16x40": 40, "W18x50": 50, "W21x62": 62, "W24x76": 76, "W27x94": 94,
   };
   const weightPerFoot = weightMap[size] || 60;
-  const totalWeight = (weightPerFoot * lengthFt * qty) / 1000;
-  const materialCost = totalWeight * 2000 * MATERIAL_RATE;
-  const laborHours = totalWeight * randomBetween(7, 11);
+  const totalWeight = weightPerFoot * lengthFt * qty; // Weight in pounds (lbs)
+  const materialCost = totalWeight * MATERIAL_RATE; // Material rate is $/lb
+  const laborHours = (totalWeight / 2000) * randomBetween(7, 11); // Labor hours based on tons
   const laborBreakdown = generateLaborBreakdown(laborHours, "Beams");
   const laborCost = laborHours * LABOR_RATE;
   const coatingSystem = randomChoice(["None", "Paint", "Galv"]);
   let coatingCost = 0;
   if (coatingSystem === "Paint") {
-    coatingCost = totalWeight * 2000 * 0.15 * PAINT_RATE;
+    // Paint: surface area × paint rate (need to calculate surface area from weight)
+    // Approximate: 1 lb steel ≈ 0.15 SF surface area
+    coatingCost = totalWeight * 0.15 * PAINT_RATE;
   } else if (coatingSystem === "Galv") {
-    coatingCost = totalWeight * 2000 * GALVANIZE_RATE;
+    // Galvanizing: weight × rate ($/lb)
+    coatingCost = totalWeight * GALVANIZE_RATE;
   }
   return {
     lineId,
@@ -497,19 +503,21 @@ function createPlateLine(lineId: string): EstimatingLine {
   const plateLength = randomInt(24, 120);
   const plateQty = randomInt(4, 20);
   const plateGrade = randomChoice(["A36", "A572 Gr50", "A992"]);
-  const plateTotalWeight = (thickness * width * plateLength * 0.2833 * plateQty) / 1728;
+  // Plate weight calculation: thickness (in) × width (in) × length (in) × density (0.2833 lbs/in³) × quantity
+  // Result is in pounds (lbs)
+  const plateTotalWeight = (thickness * width * plateLength * 0.2833 * plateQty) / 1728; // Already in lbs
   const plateArea = (width * plateLength * plateQty) / 144;
   const plateSurfaceArea = plateArea * 2;
-  const materialCost = plateTotalWeight * 2000 * MATERIAL_RATE;
-  const laborHours = plateTotalWeight * randomBetween(10, 15);
+  const materialCost = plateTotalWeight * MATERIAL_RATE; // Material rate is $/lb
+  const laborHours = (plateTotalWeight / 2000) * randomBetween(10, 15); // Labor hours based on tons
   const laborBreakdown = generateLaborBreakdown(laborHours, "Plates");
   const laborCost = laborHours * LABOR_RATE;
   const coatingSystem = randomChoice(["None", "Paint", "Powder"]);
   let coatingCost = 0;
   if (coatingSystem === "Paint") {
-    coatingCost = plateSurfaceArea * PAINT_RATE;
+    coatingCost = plateSurfaceArea * PAINT_RATE; // Paint rate is $/SF
   } else if (coatingSystem === "Powder") {
-    coatingCost = plateSurfaceArea * 3.5;
+    coatingCost = plateSurfaceArea * 3.5; // Powder rate is $/SF
   }
   return {
     lineId,
@@ -552,9 +560,9 @@ function createMiscMetalLine(lineId: string): EstimatingLine {
   const lengthFt = randomInt(8, 20);
   const qty = randomInt(10, 50);
   const weightPerFoot = randomBetween(15, 35);
-  const totalWeight = (weightPerFoot * lengthFt * qty) / 1000;
-  const materialCost = totalWeight * 2000 * MATERIAL_RATE;
-  const laborHours = totalWeight * randomBetween(12, 18);
+  const totalWeight = weightPerFoot * lengthFt * qty; // Weight in pounds (lbs)
+  const materialCost = totalWeight * MATERIAL_RATE; // Material rate is $/lb
+  const laborHours = (totalWeight / 2000) * randomBetween(12, 18); // Labor hours based on tons
   const laborBreakdown = generateLaborBreakdown(laborHours, "Misc Metals");
   const laborCost = laborHours * LABOR_RATE;
   const coatingSystem = randomChoice(["None", "Paint"]);
@@ -628,6 +636,8 @@ export async function POST(request: NextRequest) {
     const results = {
       projectsCreated: 0,
       linesCreated: 0,
+      bidEventsCreated: 0,
+      productionEntriesCreated: 0,
       errors: [] as string[],
     };
 
@@ -655,20 +665,71 @@ export async function POST(request: NextRequest) {
           results.linesCreated++;
         }
 
-        // Create bid event for active projects with assignedEstimator and bidDueDate
-        if (projectData.status === "active" && projectData.assignedEstimator && projectData.bidDueDate) {
+        // Create bid events for projects with bidDueDate
+        if (projectData.bidDueDate) {
           const bidEventsPath = `companies/${companyId}/bidEvents`;
+          const bidStatus = projectData.status === "won" ? "won" :
+                           projectData.status === "lost" ? "lost" :
+                           projectData.status === "active" ? "active" : "submitted";
+          
           await createDocument(bidEventsPath, {
             date: projectData.bidDueDate,
             projectName: projectData.projectName,
             projectId: projectId,
             generalContractor: projectData.generalContractor,
-            assignedEstimator: projectData.assignedEstimator,
-            status: "active",
+            bidTime: `${randomInt(8, 16)}:${randomChoice(["00", "30"])}`,
+            status: bidStatus,
             estimatedValue: projectData.estimatedValue || 0,
+            notes: bidStatus === "won" ? "Awarded project" : 
+                   bidStatus === "lost" ? "Lost to competitor" : 
+                   "Bid submitted",
             createdAt: Timestamp.fromDate(projectData.createdAt),
             updatedAt: Timestamp.fromDate(projectData.updatedAt),
           });
+          results.bidEventsCreated++;
+        }
+
+        // Create production entries for won projects with fab windows
+        if (projectData.status === "won" && projectData.fabWindowStart && projectData.fabWindowEnd && projectData.fabHours) {
+          const productionEntriesPath = `companies/${companyId}/productionEntries`;
+          const startDate = new Date(projectData.fabWindowStart);
+          const endDate = new Date(projectData.fabWindowEnd);
+          
+          // Calculate weeks between start and end
+          const weeksDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 7));
+          const weeklyHours = projectData.fabHours / Math.max(weeksDiff, 1);
+          
+          // Create daily overrides for some variation
+          const overrides: Record<string, number> = {};
+          const workingDays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+          let currentDate = new Date(startDate);
+          let dayCount = 0;
+          
+          while (currentDate <= endDate && dayCount < 50) {
+            const dayOfWeek = currentDate.toLocaleDateString("en-US", { weekday: "long" });
+            if (workingDays.includes(dayOfWeek)) {
+              // Add some variation: ±20% on random days
+              if (Math.random() > 0.7) {
+                const dateKey = currentDate.toISOString().split("T")[0];
+                const baseDailyHours = weeklyHours / 5;
+                overrides[dateKey] = baseDailyHours * randomBetween(0.8, 1.2);
+              }
+            }
+            currentDate.setDate(currentDate.getDate() + 1);
+            dayCount++;
+          }
+          
+          await createDocument(productionEntriesPath, {
+            projectName: projectData.projectName,
+            projectId: projectId,
+            startDate: projectData.fabWindowStart,
+            endDate: projectData.fabWindowEnd,
+            totalHours: projectData.fabHours,
+            overrides: Object.keys(overrides).length > 0 ? overrides : undefined,
+            createdAt: Timestamp.fromDate(startDate),
+            updatedAt: Timestamp.fromDate(endDate),
+          });
+          results.productionEntriesCreated++;
         }
 
         results.projectsCreated++;
@@ -679,9 +740,125 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Add additional standalone bid events for variety (not tied to projects)
+    const bidEventsPath = `companies/${companyId}/bidEvents`;
+    const additionalBids = [
+      {
+        date: daysAgo(3).toISOString().split("T")[0],
+        projectName: "Office Park - Building 5",
+        generalContractor: "Swinerton Builders",
+        bidTime: "14:00",
+        status: "submitted" as const,
+        estimatedValue: 450000,
+        notes: "Waiting for decision",
+        createdAt: daysAgo(20),
+        updatedAt: daysAgo(3),
+      },
+      {
+        date: daysAgo(7).toISOString().split("T")[0],
+        projectName: "Mixed-Use Development - Retail",
+        generalContractor: "Webcor Builders",
+        bidTime: "10:30",
+        status: "submitted" as const,
+        estimatedValue: 380000,
+        notes: "Submitted on time",
+        createdAt: daysAgo(25),
+        updatedAt: daysAgo(7),
+      },
+      {
+        date: daysAgo(15).toISOString().split("T")[0],
+        projectName: "Data Center Expansion",
+        generalContractor: "Hensel Phelps",
+        bidTime: "16:00",
+        status: "lost" as const,
+        estimatedValue: 1200000,
+        notes: "Lost to competitor - price too high",
+        createdAt: daysAgo(40),
+        updatedAt: daysAgo(15),
+      },
+      {
+        date: daysAgo(20).toISOString().split("T")[0],
+        projectName: "Parking Structure - Level 3",
+        generalContractor: "Sundt Construction",
+        bidTime: "11:00",
+        status: "lost" as const,
+        estimatedValue: 290000,
+        notes: "Lost - went with local fabricator",
+        createdAt: daysAgo(35),
+        updatedAt: daysAgo(20),
+      },
+      {
+        date: daysAgo(30).toISOString().split("T")[0],
+        projectName: "Stadium Renovation - Seating",
+        generalContractor: "Mortenson Construction",
+        bidTime: "13:30",
+        status: "won" as const,
+        estimatedValue: 850000,
+        notes: "Awarded - starting production next month",
+        createdAt: daysAgo(45),
+        updatedAt: daysAgo(30),
+      },
+    ];
+
+    for (const bidData of additionalBids) {
+      try {
+        await createDocument(bidEventsPath, {
+          ...bidData,
+          createdAt: Timestamp.fromDate(bidData.createdAt),
+          updatedAt: Timestamp.fromDate(bidData.updatedAt),
+        });
+        results.bidEventsCreated++;
+      } catch (error) {
+        console.error(`Error creating bid event ${bidData.projectName}:`, error);
+      }
+    }
+
+    // Add future production entries for upcoming projects
+    const productionEntriesPath = `companies/${companyId}/productionEntries`;
+    const today = new Date();
+    const futureProductionEntries = [
+      {
+        projectName: "Stadium Renovation - Seating",
+        startDate: new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // 30 days from now
+        endDate: new Date(today.getTime() + 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // 90 days from now
+        totalHours: 1800,
+        createdAt: today,
+        updatedAt: today,
+      },
+      {
+        projectName: "Retail Complex - Anchor Store",
+        startDate: new Date(today.getTime() + 15 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // 15 days from now
+        endDate: new Date(today.getTime() + 60 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // 60 days from now
+        totalHours: 980,
+        createdAt: today,
+        updatedAt: today,
+      },
+      {
+        projectName: "School Addition - Gymnasium",
+        startDate: new Date(today.getTime() + 45 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // 45 days from now
+        endDate: new Date(today.getTime() + 105 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // 105 days from now
+        totalHours: 1100,
+        createdAt: today,
+        updatedAt: today,
+      },
+    ];
+
+    for (const prodData of futureProductionEntries) {
+      try {
+        await createDocument(productionEntriesPath, {
+          ...prodData,
+          createdAt: Timestamp.fromDate(prodData.createdAt),
+          updatedAt: Timestamp.fromDate(prodData.updatedAt),
+        });
+        results.productionEntriesCreated++;
+      } catch (error) {
+        console.error(`Error creating production entry ${prodData.projectName}:`, error);
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      message: `Created ${results.projectsCreated} projects with ${results.linesCreated} estimating lines`,
+      message: `Created ${results.projectsCreated} projects with ${results.linesCreated} estimating lines, ${results.bidEventsCreated} bid events, and ${results.productionEntriesCreated} production entries`,
       ...results,
     });
   } catch (error) {
@@ -715,6 +892,8 @@ export async function DELETE(request: NextRequest) {
     const results = {
       projectsDeleted: 0,
       linesDeleted: 0,
+      bidEventsDeleted: 0,
+      productionEntriesDeleted: 0,
       errors: [] as string[],
     };
 
@@ -747,9 +926,37 @@ export async function DELETE(request: NextRequest) {
       }
     }
 
+    // Delete all bid events (they're all sample data)
+    try {
+      const bidEventsRef = collection(db, `companies/${companyId}/bidEvents`);
+      const bidEventsSnapshot = await getDocs(bidEventsRef);
+      for (const bidDoc of bidEventsSnapshot.docs) {
+        await deleteDocument(`companies/${companyId}/bidEvents`, bidDoc.id);
+        results.bidEventsDeleted++;
+      }
+    } catch (error) {
+      const errorMsg = `Error deleting bid events: ${error instanceof Error ? error.message : "Unknown error"}`;
+      results.errors.push(errorMsg);
+      console.error(errorMsg, error);
+    }
+
+    // Delete all production entries (they're all sample data)
+    try {
+      const productionEntriesRef = collection(db, `companies/${companyId}/productionEntries`);
+      const productionEntriesSnapshot = await getDocs(productionEntriesRef);
+      for (const prodDoc of productionEntriesSnapshot.docs) {
+        await deleteDocument(`companies/${companyId}/productionEntries`, prodDoc.id);
+        results.productionEntriesDeleted++;
+      }
+    } catch (error) {
+      const errorMsg = `Error deleting production entries: ${error instanceof Error ? error.message : "Unknown error"}`;
+      results.errors.push(errorMsg);
+      console.error(errorMsg, error);
+    }
+
     return NextResponse.json({
       success: true,
-      message: `Deleted ${results.projectsDeleted} sample projects with ${results.linesDeleted} estimating lines`,
+      message: `Deleted ${results.projectsDeleted} sample projects with ${results.linesDeleted} estimating lines, ${results.bidEventsDeleted} bid events, and ${results.productionEntriesDeleted} production entries`,
       ...results,
     });
   } catch (error) {
