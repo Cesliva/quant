@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Plus, Upload, Edit, Trash2, Copy, Check, X, Undo2, Redo2, Download, Layers } from "lucide-react";
+import { Plus, Upload, Edit, Trash2, Copy, Check, X, Undo2, Redo2, Download, Layers, ChevronDown, ChevronUp } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { subscribeToCollection, createDocument, updateDocument, deleteDocument } from "@/lib/firebase/firestore";
@@ -152,6 +152,9 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
   const [editingLine, setEditingLine] = useState<Partial<EstimatingLine>>({});
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
   const [groupByMainMember, setGroupByMainMember] = useState<boolean>(false);
+  const [showAllLines, setShowAllLines] = useState<boolean>(false);
+  const [sortBy, setSortBy] = useState<string>("lineId");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const highlightedLineRef = useRef<HTMLTableRowElement | null>(null);
   const [showFloatingAdd, setShowFloatingAdd] = useState(false);
   
@@ -273,7 +276,50 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
   };
   
   // Get display lines (grouped or sorted by line ID)
-  const displayLines = groupByMainMember ? groupLinesByMainMember(lines) : sortLinesByLineId(lines);
+  let allDisplayLines = groupByMainMember ? groupLinesByMainMember(lines) : sortLinesByLineId(lines);
+  
+  // Apply custom sorting if specified
+  if (sortBy && sortBy !== "lineId") {
+    allDisplayLines = [...allDisplayLines].sort((a, b) => {
+      let aVal: any = (a as any)[sortBy];
+      let bVal: any = (b as any)[sortBy];
+      
+      // Handle numeric values
+      if (typeof aVal === "number" && typeof bVal === "number") {
+        return sortDirection === "asc" ? aVal - bVal : bVal - aVal;
+      }
+      
+      // Handle string values
+      aVal = aVal?.toString().toLowerCase() || "";
+      bVal = bVal?.toString().toLowerCase() || "";
+      const comparison = aVal.localeCompare(bVal);
+      return sortDirection === "asc" ? comparison : -comparison;
+    });
+  } else if (sortBy === "lineId" && sortDirection === "desc") {
+    // Reverse lineId sort if descending
+    allDisplayLines = [...allDisplayLines].reverse();
+  }
+  
+  // Rollup: Show last 10 entries by default, or all if expanded
+  const displayLines = useMemo(() => {
+    if (showAllLines || allDisplayLines.length <= 10) {
+      return allDisplayLines;
+    }
+    // Show last 10 entries
+    return allDisplayLines.slice(-10);
+  }, [allDisplayLines, showAllLines]);
+  
+  // Handle sort change
+  const handleSortChange = (field: string) => {
+    if (sortBy === field) {
+      // Toggle direction if same field
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      // New field, default to ascending
+      setSortBy(field);
+      setSortDirection("asc");
+    }
+  };
   
   // Debounce save operations
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -579,9 +625,24 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
         const lengthInFeet = lengthFt + (lengthIn / 12);
         
         // Recalculate weight whenever size, length, or quantity changes
+        // Formula: weightPerFoot (lbs/ft) × lengthInFeet (ft) × qty = totalWeight (lbs)
         const qty = calculated.qty || 1;
-        calculated.totalWeight = (calculated.weightPerFoot || 0) * lengthInFeet * qty;
+        const calculatedWeight = (calculated.weightPerFoot || 0) * lengthInFeet * qty;
+        
+        // Always recalculate to fix any incorrect stored values (e.g., from old seed data)
+        calculated.totalWeight = calculatedWeight; // Store in pounds (lbs)
         calculated.totalSurfaceArea = (calculated.surfaceAreaPerFoot || 0) * lengthInFeet * qty;
+        
+        // Debug log to help identify calculation issues
+        if (calculatedWeight > 0 && calculated.totalWeight !== calculatedWeight) {
+          console.log("Weight recalculated:", {
+            weightPerFoot: calculated.weightPerFoot,
+            lengthInFeet,
+            qty,
+            calculatedWeight,
+            previousWeight: calculated.totalWeight
+          });
+        }
         
         // Weight calculation complete
         } catch (error) {
@@ -1359,6 +1420,27 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
               </Button>
             </>
           )}
+          {allDisplayLines.length > 10 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAllLines(!showAllLines)}
+              title={showAllLines ? "Show last 10 entries" : "Show all entries"}
+              className="flex items-center justify-center"
+            >
+              {showAllLines ? (
+                <>
+                  <ChevronUp className="w-4 h-4 mr-2" />
+                  Show Last 10
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="w-4 h-4 mr-2" />
+                  Show All ({allDisplayLines.length})
+                </>
+              )}
+            </Button>
+          )}
           {isManualMode && expandedRowId && !editingId && (
             <Button
               variant="secondary"
@@ -1431,6 +1513,9 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
           totals={totals}
           expandedRowId={expandedRowId}
           onExpandedRowChange={setExpandedRowId}
+          sortBy={sortBy}
+          sortDirection={sortDirection}
+          onSortChange={handleSortChange}
         />
       </Card>
 
