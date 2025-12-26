@@ -437,13 +437,13 @@ export default function EstimatingGridCompact({
                       {isEditing ? (
                         <input
                           type="text"
-                          value={displayLine.itemDescription || ""}
-                          onChange={(e) => onChange("itemDescription", e.target.value, line)}
+                          value={displayLine.elevation || ""}
+                          onChange={(e) => onChange("elevation", e.target.value, line)}
                           className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                           placeholder="Elevation"
                         />
                       ) : (
-                        displayLine.itemDescription || "-"
+                        displayLine.elevation || "-"
                       )}
                     </td>
 

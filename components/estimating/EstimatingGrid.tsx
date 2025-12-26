@@ -54,6 +54,7 @@ export interface EstimatingLine {
   drawingNumber: string;
   detailNumber: string;
   itemDescription: string;
+  elevation?: string; // Foundation, Exterior Ground Level, First Floor, Roof, High Roof, etc.
   category: string; // Columns, Beams, Misc Metals, Plates, etc.
   subCategory: string; // Base Plate, Gusset, Stiffener, Clip, etc.
   

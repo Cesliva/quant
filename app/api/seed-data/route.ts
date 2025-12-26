@@ -32,6 +32,19 @@ function randomChoice<T>(array: T[]): T {
   return array[Math.floor(Math.random() * array.length)];
 }
 
+// Elevation options for building projects
+const ELEVATIONS = [
+  "Foundation",
+  "Exterior Ground Level",
+  "First Floor",
+  "Second Floor",
+  "Third Floor",
+  "Roof",
+  "High Roof",
+  "Mezzanine",
+  "Basement",
+];
+
 function daysAgo(days: number): Date {
   const date = new Date();
   date.setDate(date.getDate() - days);
@@ -415,6 +428,7 @@ function createColumnLine(lineId: string): EstimatingLine {
     drawingNumber: `D-${randomInt(100, 999)}`,
     detailNumber: `DTL-${randomInt(1, 50)}`,
     itemDescription: `${size} ${grade} Column - ${lengthFt}' long`,
+    elevation: randomChoice(ELEVATIONS),
     category: "Columns",
     subCategory: "Main Column",
     materialType: "Material",
@@ -471,6 +485,7 @@ function createBeamLine(lineId: string): EstimatingLine {
     drawingNumber: `D-${randomInt(100, 999)}`,
     detailNumber: `DTL-${randomInt(1, 50)}`,
     itemDescription: `${size} ${grade} Beam - ${lengthFt}' long`,
+    elevation: randomChoice(ELEVATIONS),
     category: "Beams",
     subCategory: "Main Beam",
     materialType: "Material",
@@ -524,6 +539,7 @@ function createPlateLine(lineId: string): EstimatingLine {
     drawingNumber: `D-${randomInt(100, 999)}`,
     detailNumber: `DTL-${randomInt(1, 50)}`,
     itemDescription: `${thickness}" x ${width}" x ${plateLength}" ${plateGrade} Plate`,
+    elevation: randomChoice(ELEVATIONS),
     category: "Plates",
     subCategory: randomChoice(["Base Plate", "Gusset", "Stiffener", "Clip"]),
     materialType: "Plate",
@@ -571,6 +587,7 @@ function createMiscMetalLine(lineId: string): EstimatingLine {
     drawingNumber: `D-${randomInt(100, 999)}`,
     detailNumber: `DTL-${randomInt(1, 50)}`,
     itemDescription: `${size} ${grade} ${type} - ${lengthFt}' long`,
+    elevation: randomChoice(ELEVATIONS),
     category: "Misc Metals",
     subCategory: randomChoice(["Brace", "Clip", "Angle", "Connection"]),
     materialType: "Material",

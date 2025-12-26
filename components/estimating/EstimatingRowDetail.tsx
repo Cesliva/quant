@@ -644,9 +644,9 @@ export default function EstimatingRowDetail({
             </div>
             <div className="col-span-2">
               <label className="block text-xs font-medium text-gray-700 mb-1">
-                <span className="text-blue-600 font-bold">{getNumberFromField("itemDescription")}.</span> Elevation
+                <span className="text-blue-600 font-bold">{getNumberFromField("elevation")}.</span> Elevation
               </label>
-              {renderField("Elevation", "itemDescription", "text")}
+              {renderField("Elevation", "elevation", "text")}
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
