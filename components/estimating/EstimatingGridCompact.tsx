@@ -270,8 +270,8 @@ export default function EstimatingGridCompact({
               key={idx}
               className={`px-2 py-0.5 text-xs rounded-full ${
                 isNumbered
-                  ? "bg-blue-100 text-blue-800 font-medium"
-                  : "bg-gray-100 text-gray-700"
+                  ? "bg-blue-500 text-white font-medium"
+                  : "bg-gray-300 text-gray-800"
               }`}
             >
               {tag.startsWith("#") ? tag : `#${tag}`}
@@ -284,55 +284,54 @@ export default function EstimatingGridCompact({
 
   const getTypeBadge = (type?: string) => {
     if (type === "Material") {
-      return <span className="px-2 py-0.5 bg-blue-100 text-blue-800 text-xs rounded">Material</span>;
+      return <span className="px-2 py-0.5 bg-blue-500 text-white text-xs rounded font-medium">Material</span>;
     } else if (type === "Plate") {
-      return <span className="px-2 py-0.5 bg-purple-100 text-purple-800 text-xs rounded">Plate</span>;
+      return <span className="px-2 py-0.5 bg-purple-500 text-white text-xs rounded font-medium">Plate</span>;
     }
-    return <span className="px-2 py-0.5 bg-gray-100 text-gray-800 text-xs rounded">-</span>;
+    return <span className="px-2 py-0.5 bg-gray-300 text-gray-800 text-xs rounded">-</span>;
   };
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm border-collapse">
-        <thead className="bg-gray-50 border-b-2 border-gray-300">
+    <div className="overflow-x-auto rounded-2xl border border-gray-200/60 bg-white shadow-sm">
+      <table className="w-full text-sm">
+        <thead className="bg-gradient-to-b from-gray-50/50 to-gray-50/30 border-b border-gray-200/60">
           <tr>
-            <th className="sticky left-0 z-10 bg-gray-50 border-r-2 border-gray-300 px-3 py-3 text-left font-semibold text-xs uppercase">
+            <th className="sticky left-0 z-10 bg-gradient-to-b from-gray-50/50 to-gray-50/30 border-r border-gray-200/40 px-4 py-4 text-left">
               <span className="w-4 inline-block"></span>
             </th>
-            <th className="sticky left-12 z-10 bg-gray-50 border-r-2 border-gray-300 px-3 py-3 text-left font-semibold text-xs uppercase">
+            <th className="sticky left-12 z-10 bg-gradient-to-b from-gray-50/50 to-gray-50/30 border-r border-gray-200/40 px-4 py-4 text-left font-medium text-xs text-gray-600 tracking-wide">
               Line ID
             </th>
-            <th className="sticky left-24 z-10 bg-gray-50 border-r-2 border-gray-300 px-3 py-3 text-left font-semibold text-xs uppercase">
-              Drawing #
+            <th className="sticky left-24 z-10 bg-gradient-to-b from-gray-50/50 to-gray-50/30 border-r border-gray-200/40 px-4 py-4 text-left font-medium text-xs text-gray-600 tracking-wide">
+              Drawing
             </th>
-            <th className="sticky left-40 z-10 bg-gray-50 border-r-2 border-gray-300 px-3 py-3 text-left font-semibold text-xs uppercase">
-              Detail #
+            <th className="sticky left-40 z-10 bg-gradient-to-b from-gray-50/50 to-gray-50/30 border-r border-gray-200/40 px-4 py-4 text-left font-medium text-xs text-gray-600 tracking-wide">
+              Detail
             </th>
-            <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700 border-r border-gray-200">Elevation</th>
-            <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700 border-r border-gray-200">Type</th>
-            <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700 border-r border-gray-200">Spec</th>
-            <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700 border-r border-gray-200">
-              <div className="flex items-center gap-1">
+            <th className="px-5 py-4 text-left font-medium text-xs text-gray-600 tracking-wide">Elevation</th>
+            <th className="px-5 py-4 text-left font-medium text-xs text-gray-600 tracking-wide">Type</th>
+            <th className="px-5 py-4 text-left font-medium text-xs text-gray-600 tracking-wide">Spec</th>
+            <th className="px-5 py-4 text-left font-medium text-xs text-gray-600 tracking-wide">
+              <div className="flex items-center gap-1.5">
                 Grade
                 <GradeInfoTooltip materialType={null} />
               </div>
             </th>
-            <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700 border-r border-gray-200">Qty</th>
-            <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700 border-r border-gray-200">Length</th>
-            <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700 bg-blue-50 border-r border-gray-200">Material ($)</th>
-            <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700 bg-blue-50 border-r border-gray-200">Weight (lbs)</th>
-            <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700 bg-purple-50 border-r border-gray-200">Finishes ($)</th>
-            <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700 bg-orange-50 border-r border-gray-200">Hardware ($)</th>
-            <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700 bg-green-50 border-r border-gray-200">Labor (hrs)</th>
-            <th className="px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700 bg-amber-50 border-r border-gray-200">Cost ($)</th>
+            <th className="px-5 py-4 text-left font-medium text-xs text-gray-600 tracking-wide">Qty</th>
+            <th className="px-5 py-4 text-left font-medium text-xs text-gray-600 tracking-wide">Length</th>
+            <th className="px-5 py-4 text-left font-medium text-xs text-gray-600 tracking-wide bg-blue-50/40">Material</th>
+            <th className="px-5 py-4 text-left font-medium text-xs text-gray-600 tracking-wide bg-blue-50/40">Weight</th>
+            <th className="px-5 py-4 text-left font-medium text-xs text-gray-600 tracking-wide bg-purple-50/40">Finishes</th>
+            <th className="px-5 py-4 text-left font-medium text-xs text-gray-600 tracking-wide bg-orange-50/40">Hardware</th>
+            <th className="px-5 py-4 text-left font-medium text-xs text-gray-600 tracking-wide bg-green-50/40">Man Hours</th>
+            <th className="px-5 py-4 text-left font-medium text-xs text-gray-600 tracking-wide bg-amber-50/40">Cost</th>
             <th 
-              className={`px-4 py-3 text-left font-semibold text-xs uppercase text-gray-700 border-r border-gray-200 ${
+              className={`px-5 py-4 text-left font-medium text-xs text-gray-600 tracking-wide ${
                 lines.some(l => l.hashtags && l.hashtags.trim() !== "")
-                  ? "cursor-pointer hover:bg-gray-100 transition-colors"
-                  : "cursor-not-allowed opacity-60"
+                  ? "cursor-pointer hover:bg-gray-100/50 transition-colors rounded-lg"
+                  : "cursor-not-allowed opacity-40"
               }`}
               onClick={() => {
-                // Check if any lines have hashtags before sorting
                 const hasAnyHashtags = lines.some(l => l.hashtags && l.hashtags.trim() !== "");
                 if (hasAnyHashtags && onSortChange) {
                   onSortChange("hashtags");
@@ -341,22 +340,22 @@ export default function EstimatingGridCompact({
               title={
                 lines.some(l => l.hashtags && l.hashtags.trim() !== "")
                   ? "Click to sort by hashtags"
-                  : "Add hashtags in the detailed view to enable sorting"
+                  : "Add hashtags to enable sorting"
               }
             >
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5">
                 Hashtags
                 {sortBy === "hashtags" && (
-                  <span className="text-blue-600">{sortDirection === "asc" ? "↑" : "↓"}</span>
+                  <span className="text-blue-600 text-xs">{sortDirection === "asc" ? "↑" : "↓"}</span>
                 )}
               </div>
             </th>
-            <th className="sticky right-0 z-10 bg-gray-50 border-l-2 border-gray-300 px-3 py-3 text-center font-semibold text-xs uppercase">
+            <th className="sticky right-0 z-10 bg-gradient-to-b from-gray-50/50 to-gray-50/30 border-l border-gray-200/40 px-4 py-4 text-center font-medium text-xs text-gray-600 tracking-wide">
               Actions
             </th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-200">
+        <tbody className="divide-y divide-gray-100/60">
           {lines.length === 0 ? (
             <tr>
               <td colSpan={14} className="px-4 py-8 text-center text-gray-500">
@@ -386,55 +385,55 @@ export default function EstimatingGridCompact({
                   <tr
                     id={`line-${line.id}`}
                     key={line.id}
-                    className={`hover:bg-gray-50 transition-colors ${
-                      line.status === "Void" ? "opacity-50" : ""
-                    } ${isExpanded ? "bg-blue-50" : ""} ${
-                      isSmallPart ? "bg-blue-50/30" : ""
+                    className={`hover:bg-gray-50/50 transition-all duration-150 ${
+                      line.status === "Void" ? "opacity-40" : ""
+                    } ${isExpanded ? "bg-blue-50/50" : ""} ${
+                      isSmallPart ? "bg-blue-50/20" : ""
                     }`}
                   >
                     {/* Expand/Collapse Button */}
-                    <td className={`sticky left-0 z-10 border-r-2 border-gray-300 px-2 py-2 ${
-                      isSmallPart ? "bg-blue-50/30" : "bg-white"
+                    <td className={`sticky left-0 z-10 border-r border-gray-200/40 px-4 py-3 ${
+                      isSmallPart ? "bg-blue-50/20" : "bg-white"
                     }`}>
                       <button
                         onClick={() => toggleRow(line.id || "")}
-                        className="p-1 hover:bg-gray-200 rounded transition-colors"
+                        className="p-1.5 hover:bg-gray-100 rounded-lg transition-all duration-150 active:scale-95"
                         title={isExpanded ? "Collapse details" : "Expand details"}
                       >
                         {isExpanded ? (
-                          <ChevronDown className="w-4 h-4 text-gray-600" />
+                          <ChevronDown className="w-4 h-4 text-gray-500" />
                         ) : (
-                          <ChevronRight className="w-4 h-4 text-gray-600" />
+                          <ChevronRight className="w-4 h-4 text-gray-500" />
                         )}
                       </button>
                     </td>
 
                     {/* Line ID */}
-                    <td className={`sticky left-12 z-10 border-r-2 border-gray-300 px-3 py-2 font-medium ${
-                      isSmallPart ? "bg-blue-50/30" : "bg-white"
+                    <td className={`sticky left-12 z-10 border-r border-gray-200/40 px-4 py-3 font-medium text-gray-900 ${
+                      isSmallPart ? "bg-blue-50/20" : "bg-white"
                     }`}>
                       {isSmallPart && (
-                        <span className="text-blue-600 mr-2">└─</span>
+                        <span className="text-blue-500 mr-2 text-sm">└─</span>
                       )}
                       {line.lineId || "-"}
                     </td>
 
                     {/* Drawing Number */}
-                    <td className={`sticky left-24 z-10 border-r-2 border-gray-300 px-3 py-2 text-gray-700 ${
-                      isSmallPart ? "bg-blue-50/30" : "bg-white"
+                    <td className={`sticky left-24 z-10 border-r border-gray-200/40 px-4 py-3 text-gray-700 ${
+                      isSmallPart ? "bg-blue-50/20" : "bg-white"
                     }`}>
                       {line.drawingNumber || "-"}
                     </td>
 
                     {/* Detail Number */}
-                    <td className={`sticky left-40 z-10 border-r-2 border-gray-300 px-3 py-2 text-gray-700 ${
-                      isSmallPart ? "bg-blue-50/30" : "bg-white"
+                    <td className={`sticky left-40 z-10 border-r border-gray-200/40 px-4 py-3 text-gray-700 ${
+                      isSmallPart ? "bg-blue-50/20" : "bg-white"
                     }`}>
                       {line.detailNumber || "-"}
                     </td>
 
                     {/* Elevation */}
-                    <td className="px-4 py-2 font-medium text-gray-900 border-r border-gray-200">
+                    <td className="px-5 py-3 text-gray-700">
                       {isEditing ? (
                         <input
                           type="text"
@@ -449,7 +448,7 @@ export default function EstimatingGridCompact({
                     </td>
 
                     {/* Type */}
-                    <td className="px-4 py-2 border-r border-gray-200">
+                    <td className="px-5 py-3 text-gray-700">
                       {isEditing ? (
                         <div className="flex gap-1 items-center">
                           <select
@@ -475,7 +474,7 @@ export default function EstimatingGridCompact({
                         </div>
                       ) : (
                         displayLine.materialType === "Material" && displayLine.shapeType ? (
-                          <span className="px-2 py-0.5 bg-blue-100 text-blue-800 text-xs rounded">
+                          <span className="px-2 py-0.5 bg-blue-500 text-white text-xs rounded font-medium">
                             {displayLine.shapeType}
                           </span>
                         ) : (
@@ -485,7 +484,7 @@ export default function EstimatingGridCompact({
                     </td>
 
                     {/* Spec */}
-                    <td className="px-4 py-2 text-gray-700 border-r border-gray-200">
+                    <td className="px-5 py-3 text-gray-700">
                       {isEditing ? (
                         displayLine.materialType === "Material" ? (
                           <input
@@ -531,7 +530,7 @@ export default function EstimatingGridCompact({
                     </td>
 
                     {/* Grade */}
-                    <td className="px-4 py-2 text-gray-700 border-r border-gray-200">
+                    <td className="px-5 py-3 text-gray-700">
                       {isEditing ? (
                         <select
                           value={displayLine.materialType === "Material" ? (displayLine.grade || "") : (displayLine.plateGrade || "")}
@@ -558,7 +557,7 @@ export default function EstimatingGridCompact({
                     </td>
 
                     {/* Quantity */}
-                    <td className="px-4 py-2 text-gray-700 border-r border-gray-200">
+                    <td className="px-5 py-3 text-gray-700">
                       {isEditing ? (
                         <input
                           type="number"
@@ -582,7 +581,7 @@ export default function EstimatingGridCompact({
                     </td>
 
                     {/* Length */}
-                    <td className="px-4 py-2 text-gray-700 border-r border-gray-200">
+                    <td className="px-5 py-3 text-gray-700">
                       {isEditing && displayLine.materialType === "Material" ? (
                         <div className="flex gap-1 items-center text-xs">
                           <input
@@ -613,40 +612,40 @@ export default function EstimatingGridCompact({
                     </td>
 
                     {/* Material Cost */}
-                    <td className="px-4 py-2 text-gray-700 font-medium bg-blue-50 border-r border-gray-200">
+                    <td className="px-5 py-3 text-gray-700 font-medium bg-blue-50/40">
                       ${(displayLine.materialCost || 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}
                     </td>
 
                     {/* Weight */}
-                    <td className="px-4 py-2 text-gray-700 font-medium bg-blue-50 border-r border-gray-200">
+                    <td className="px-5 py-3 text-gray-700 font-medium bg-blue-50/40">
                       {getTotalWeight(displayLine).toLocaleString("en-US", { maximumFractionDigits: 0 })}
                     </td>
 
                     {/* Finishes (Coating Cost) */}
-                    <td className="px-4 py-2 text-gray-700 font-medium bg-purple-50 border-r border-gray-200">
+                    <td className="px-5 py-3 text-gray-700 font-medium bg-purple-50/40">
                       ${(displayLine.coatingCost || 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}
                     </td>
 
                     {/* Hardware Cost */}
-                    <td className="px-4 py-2 text-gray-700 font-medium bg-orange-50 border-r border-gray-200">
+                    <td className="px-5 py-3 text-gray-700 font-medium bg-orange-50/40">
                       ${hardwareCostDisplay.toLocaleString("en-US", { maximumFractionDigits: 2 })}
                     </td>
 
                     {/* Labor */}
-                    <td className="px-4 py-2 text-gray-700 bg-green-50 border-r border-gray-200">
+                    <td className="px-5 py-3 text-gray-700 bg-green-50/40">
                       {(displayLine.totalLabor || 0).toFixed(2)}
                     </td>
 
                     {/* Cost */}
-                    <td className="px-4 py-2 text-gray-900 font-semibold bg-amber-50 border-r border-gray-200">
+                    <td className="px-5 py-3 text-gray-900 font-semibold bg-amber-50/40">
                       ${(displayLine.totalCost || 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}
                     </td>
 
                     {/* Hashtags */}
-                    <td className="px-4 py-2 border-r border-gray-200">{getHashtagsDisplay(displayLine.hashtags)}</td>
+                    <td className="px-5 py-3 text-gray-700">{getHashtagsDisplay(displayLine.hashtags)}</td>
 
                     {/* Actions */}
-                    <td className="sticky right-0 z-10 bg-white border-l-2 border-gray-300 px-3 py-2">
+                    <td className="sticky right-0 z-10 bg-white border-l border-gray-200/40 px-4 py-3">
                       <div className="flex items-center gap-1 justify-center">
                         {isEditing ? (
                           <>

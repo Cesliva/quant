@@ -1340,136 +1340,112 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
       ];
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-end">
-        <div className="flex gap-3 items-center">
-          <input
-            type="file"
-            ref={csvFileInputRef}
-            accept=".csv"
-            onChange={handleCSVFileChange}
-            className="hidden"
-          />
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={handleDownloadCSVTemplate} 
-            className="flex items-center justify-center"
-            title="Download CSV template with all column headers"
-          >
-            <Download className="w-4 h-4 mr-2" />
-            Download CSV Template
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleImportCSV} className="flex items-center justify-center">
-            <Upload className="w-4 h-4 mr-2" />
-            Import CSV
-          </Button>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={() => exportLinesToCSV(lines.filter(l => l.status !== "void"))} 
-            className="flex items-center justify-center"
-            title="Export active lines to CSV"
-            disabled={lines.filter(l => l.status !== "void").length === 0}
-          >
-            <Download className="w-4 h-4 mr-2" />
-            Export CSV
-          </Button>
+    <div className="space-y-6">
+      {/* Apple-style Action Bar */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {/* CSV Actions Group */}
+          <div className="flex items-center gap-1.5 px-2 py-1.5 bg-gray-50/80 rounded-2xl border border-gray-200/60 backdrop-blur-sm">
+            <input
+              type="file"
+              ref={csvFileInputRef}
+              accept=".csv"
+              onChange={handleCSVFileChange}
+              className="hidden"
+            />
+            <button
+              onClick={handleDownloadCSVTemplate}
+              className="p-2 rounded-xl hover:bg-white transition-all duration-200 hover:shadow-sm active:scale-95"
+              title="Download CSV Template"
+            >
+              <Download className="w-4 h-4 text-gray-600" />
+            </button>
+            <div className="w-px h-5 bg-gray-300"></div>
+            <button
+              onClick={handleImportCSV}
+              className="p-2 rounded-xl hover:bg-white transition-all duration-200 hover:shadow-sm active:scale-95"
+              title="Import CSV"
+            >
+              <Upload className="w-4 h-4 text-gray-600" />
+            </button>
+            <button
+              onClick={() => exportLinesToCSV(lines.filter(l => l.status !== "void"))}
+              disabled={lines.filter(l => l.status !== "void").length === 0}
+              className="p-2 rounded-xl hover:bg-white transition-all duration-200 hover:shadow-sm active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Export CSV"
+            >
+              <Download className="w-4 h-4 text-gray-600" />
+            </button>
+          </div>
+
+          {/* Edit Actions Group */}
           {isManualMode && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
+            <div className="flex items-center gap-1.5 px-2 py-1.5 bg-gray-50/80 rounded-2xl border border-gray-200/60 backdrop-blur-sm">
+              <button
                 onClick={undo}
                 disabled={!canUndo}
+                className="p-2 rounded-xl hover:bg-white transition-all duration-200 hover:shadow-sm active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
                 title="Undo (Ctrl+Z)"
-                className="flex items-center justify-center"
               >
-                <Undo2 className="w-4 h-4 mr-2" />
-                Undo
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
+                <Undo2 className="w-4 h-4 text-gray-600" />
+              </button>
+              <button
                 onClick={redo}
                 disabled={!canRedo}
+                className="p-2 rounded-xl hover:bg-white transition-all duration-200 hover:shadow-sm active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
                 title="Redo (Ctrl+Y)"
-                className="flex items-center justify-center"
               >
-                <Redo2 className="w-4 h-4 mr-2" />
-                Redo
-              </Button>
-              <Button
-                variant={groupByMainMember ? "default" : "outline"}
-                size="sm"
-                onClick={() => setGroupByMainMember(!groupByMainMember)}
-                title={groupByMainMember ? "Sort by Line ID (L1, L2, L3...)" : "Group small parts under main members"}
-                className="flex items-center justify-center"
-              >
-                {groupByMainMember ? (
-                  <>
-                    <Layers className="w-4 h-4 mr-2" />
-                    Sort by ID
-                  </>
-                ) : (
-                  <>
-                    <Layers className="w-4 h-4 mr-2" />
-                    Group by Main Member
-                  </>
-                )}
-              </Button>
-            </>
+                <Redo2 className="w-4 h-4 text-gray-600" />
+              </button>
+            </div>
           )}
+        </div>
+
+        {/* View Controls & Primary Action */}
+        <div className="flex items-center gap-2">
+          {isManualMode && (
+            <button
+              onClick={() => setGroupByMainMember(!groupByMainMember)}
+              className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
+                groupByMainMember
+                  ? "bg-blue-100 text-blue-700 border border-blue-200"
+                  : "bg-gray-50/80 text-gray-700 border border-gray-200/60 hover:bg-white"
+              }`}
+              title={groupByMainMember ? "Sort by Line ID" : "Group by Main Member"}
+            >
+              <Layers className="w-4 h-4 inline-block mr-1.5" />
+              {groupByMainMember ? "By ID" : "Grouped"}
+            </button>
+          )}
+          
           {allDisplayLines.length > 10 && (
-            <Button
-              variant="outline"
-              size="sm"
+            <button
               onClick={() => setShowAllLines(!showAllLines)}
+              className="px-4 py-2 rounded-xl text-sm font-medium bg-gray-50/80 text-gray-700 border border-gray-200/60 hover:bg-white transition-all duration-200"
               title={showAllLines ? "Show last 10 entries" : "Show all entries"}
-              className="flex items-center justify-center"
             >
               {showAllLines ? (
                 <>
-                  <ChevronUp className="w-4 h-4 mr-2" />
-                  Show Last 10
+                  <ChevronUp className="w-4 h-4 inline-block mr-1.5" />
+                  Last 10
                 </>
               ) : (
                 <>
-                  <ChevronDown className="w-4 h-4 mr-2" />
-                  Show All ({allDisplayLines.length})
+                  <ChevronDown className="w-4 h-4 inline-block mr-1.5" />
+                  All ({allDisplayLines.length})
                 </>
               )}
-            </Button>
+            </button>
           )}
-          {isManualMode && expandedRowId && !editingId && (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                const lineToEdit = lines.find(l => l.id === expandedRowId);
-                if (lineToEdit) {
-                  handleEdit(lineToEdit);
-                }
-              }}
-              title="Edit expanded line"
-              className="flex items-center justify-center"
-            >
-              <Edit className="w-4 h-4 mr-2" />
-              Edit Line
-            </Button>
-          )}
-          {!showFloatingAdd && (
-            <Button 
-              variant="primary" 
-              size="sm" 
+
+          {!showFloatingAdd && isManualMode && (
+            <button
               onClick={handleAddLine}
-              disabled={!isManualMode}
-              title={!isManualMode ? "Enable Manual Entry to add lines manually" : ""}
-              className="flex items-center justify-center"
+              className="px-5 py-2.5 rounded-xl text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 shadow-lg hover:shadow-xl transition-all duration-200 active:scale-95 flex items-center gap-2"
             >
-              <Plus className="w-4 h-4 mr-2" />
+              <Plus className="w-4 h-4" />
               Add Line
-            </Button>
+            </button>
           )}
         </div>
       </div>
