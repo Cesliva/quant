@@ -2160,14 +2160,16 @@ export default function ProjectReportsView({ companyId, projectId, project, onDa
             </div>
           </CardHeader>
           {!expandedSections.similarProjects ? (
-            <CardContent className="p-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-white rounded-lg p-3 border border-gray-200">
-                  <div className="text-xs text-gray-600 mb-1">Similar Projects</div>
-                  <div className="text-2xl font-bold text-gray-900">
-                    {similarProjects.length}
+            <CardContent className="pt-0">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="bg-gradient-to-br from-purple-50 to-white rounded-2xl p-4 border border-purple-100/50 shadow-sm">
+                  <div className="text-xs font-medium text-slate-600 uppercase tracking-wide mb-1">Similar Projects</div>
+                  <div className="text-2xl font-bold text-slate-900">
+                    {loadingSimilarProjects ? "..." : similarProjects.length}
                   </div>
-                  <div className="text-xs text-gray-500 mt-1">Found for comparison</div>
+                  <div className="text-xs text-slate-500 mt-1">
+                    {loadingSimilarProjects ? "Loading..." : "Found for comparison"}
+                  </div>
                 </div>
                 {similarProjects.length > 0 && (
                   <>
