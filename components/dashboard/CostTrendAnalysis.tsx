@@ -11,7 +11,7 @@ import { useState, useEffect, useMemo, Suspense } from "react";
 import { EstimatingLine } from "@/components/estimating/EstimatingGrid";
 import { subscribeToCollection, getProjectPath, getDocument } from "@/lib/firebase/firestore";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
-import CostTrendStreamgraph from "./CostTrendStreamgraph";
+import CostTrendBubbleChart from "./CostTrendBubbleChart";
 import EstimateVsActualCard from "./EstimateVsActualCard";
 import { ChartPoint } from "@/lib/utils/estimateToStreamgraph";
 import { transformToChartPoints } from "@/lib/utils/estimateToStreamgraph";
@@ -52,6 +52,7 @@ export default function CostTrendAnalysis({
   const [allLines, setAllLines] = useState<Array<{ projectId: string; projectName: string; lines: EstimatingLine[] }>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedMetric, setSelectedMetric] = useState<"laborHoursPerTon" | "costPerTon">("laborHoursPerTon");
   
   // Log component mount
   useEffect(() => {
@@ -289,17 +290,15 @@ export default function CostTrendAnalysis({
       }>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 lg:gap-5 items-stretch mt-4 md:mt-6 mb-4 md:mb-6">
             <div className="lg:col-span-2">
-              <CostTrendStreamgraph
+              <CostTrendBubbleChart
                 lines={flattenedLines as EstimatingLine[]}
-                approvedBudgets={approvedBudgets}
                 companyId={companyId}
-                onCategoryClick={handleCategoryClick}
-                projects={projects.map(p => ({
-                  id: p.id,
-                  name: p.projectName,
-                  status: p.status,
-                  projectNumber: p.projectNumber,
-                }))}
+                projects={projects}
+                allProjectLines={allLines}
+                selectedMetric={selectedMetric}
+                onMetricChange={(metric) => {
+                  setSelectedMetric(metric);
+                }}
               />
             </div>
             <div className="lg:col-span-1 flex w-full">
