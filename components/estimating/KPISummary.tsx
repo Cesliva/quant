@@ -43,6 +43,9 @@ export default function KPISummary({ lines }: KPISummaryProps) {
           <div className="text-2xl font-bold text-gray-900">
             {totals.weight.toLocaleString("en-US", { maximumFractionDigits: 2 })} lbs
           </div>
+          <div className="text-sm font-medium text-gray-700 mt-2">
+            {(totals.weight / 2000).toLocaleString("en-US", { maximumFractionDigits: 2 })} tons
+          </div>
         </div>
       </Card>
       
@@ -57,9 +60,12 @@ export default function KPISummary({ lines }: KPISummaryProps) {
       
       <Card>
         <div className="p-4">
-          <div className="text-sm text-gray-600 mb-1">Total Labor Hours</div>
+          <div className="text-sm text-gray-600 mb-1">Total Man Hours</div>
           <div className="text-2xl font-bold text-gray-900">
             {totals.laborHours.toLocaleString("en-US", { maximumFractionDigits: 2 })} hrs
+          </div>
+          <div className="text-sm text-gray-500 mt-1">
+            {(totals.weight > 0 ? (totals.laborHours / (totals.weight / 2000)) : 0).toLocaleString("en-US", { maximumFractionDigits: 2 })} MH/Ton
           </div>
         </div>
       </Card>
