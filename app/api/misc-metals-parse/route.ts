@@ -312,3 +312,8 @@ function getGalvanizingRate(settings: any): number {
   return galv?.costPerSF ? galv.costPerSF * 0.24 : 0.15; // Rough conversion: 1 lb ≈ 0.24 SF for pipe
 }
 
+
+
+
+
+

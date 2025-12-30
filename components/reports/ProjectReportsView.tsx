@@ -36,6 +36,7 @@ import { EstimatingLine } from "@/components/estimating/EstimatingGrid";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import SpecReviewSummary from "./SpecReviewSummary";
+import ProjectBubbleChart from "@/components/estimating/ProjectBubbleChart";
 import {
   loadCompanySettings,
   loadProjectSettings,
@@ -792,16 +793,7 @@ export default function ProjectReportsView({ companyId, projectId, project, onDa
 
   // Handle lock estimate summary and create budget
   const handleLockEstimateSummary = async () => {
-    // Validate cost codes are filled
-    const emptyCostCodes = costCodes.filter(cc => !cc.code || cc.code.trim() === "");
-    if (emptyCostCodes.length > 0) {
-      const missing = emptyCostCodes.map(cc => cc.description).join(", ");
-      if (!confirm(`Some cost codes are missing: ${missing}\n\nDo you want to continue anyway? You can add cost codes later.`)) {
-        return;
-      }
-    }
-
-    if (!confirm("Are you sure you want to lock this estimate summary? Once locked, it cannot be changed and will create the official budget with cost codes for project management.")) {
+    if (!confirm("Are you sure you want to lock this estimate summary? Once locked, it cannot be changed and will create the official budget for project management.")) {
       return;
     }
 
@@ -1057,14 +1049,6 @@ export default function ProjectReportsView({ companyId, projectId, project, onDa
               </div>
               <div className="flex items-center gap-2">
                 <Button
-                  onClick={() => setShowCostCodeModal(true)}
-                  disabled={isApproving}
-                  className="bg-amber-500 text-white hover:bg-amber-400 font-semibold"
-                >
-                  <FileText className="w-4 h-4 mr-2" />
-                  Set Cost Codes
-                </Button>
-                <Button
                   onClick={handleLockEstimateSummary}
                   disabled={isApproving}
                   className="bg-white text-amber-600 hover:bg-amber-50 font-semibold"
@@ -1083,7 +1067,7 @@ export default function ProjectReportsView({ companyId, projectId, project, onDa
           </CardHeader>
           <CardContent className="p-4">
             <p className="text-sm text-amber-800">
-              Review and adjust values below. Set cost codes, then click "Lock Estimate Summary" to create the official budget for project management.
+              Review and adjust values below, then click "Lock Estimate Summary" to create the official budget for project management.
             </p>
           </CardContent>
         </Card>
@@ -1470,6 +1454,14 @@ export default function ProjectReportsView({ companyId, projectId, project, onDa
           </div>
         </CardContent>
       </Card>
+
+      {/* Quant Labor Fingerprint™ Bubble Chart */}
+      <ProjectBubbleChart
+        lines={lines}
+        companyId={companyId}
+        projectName={project.projectName}
+        currentProjectId={projectId}
+      />
 
       {/* Cost Breakdown */}
       <Card className="bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300">

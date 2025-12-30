@@ -12,15 +12,18 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   
-  // Hide sidebar on company dashboard (landing page)
-  const isDashboardPage = pathname === "/dashboard" || pathname === "/";
+  // Hide sidebar on company dashboard
+  const isDashboardPage = pathname === "/dashboard";
 
   useEffect(() => {
-    // Redirect to login if not authenticated (after loading completes)
-    if (!loading && !user) {
-      router.push("/login");
+    // CRITICAL SECURITY: Immediately redirect to login if not authenticated
+    // This must happen BEFORE any dashboard content is rendered
+    // Also check that user has valid email (required for real authentication)
+    if (!loading && (!user || !user.email || user.uid === "dev-user") && pathname !== "/") {
+      router.replace("/login");
+      return;
     }
-  }, [user, loading, router]);
+  }, [user, loading, router, pathname]);
 
   // Show loading state while checking auth
   if (loading) {
@@ -34,9 +37,18 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Don't render dashboard if not authenticated (will redirect)
-  if (!user) {
-    return null;
+  // CRITICAL SECURITY: Don't render ANY dashboard content if not authenticated
+  // Also verify user has valid email (required for real authentication)
+  // Return loading state while redirect happens
+  if (!user || !user.email || user.uid === "dev-user") {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Redirecting to login...</p>
+        </div>
+      </div>
+    );
   }
 
   return (

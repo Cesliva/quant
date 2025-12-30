@@ -23,9 +23,10 @@ import {
 
 import { useCompanyId } from "@/lib/hooks/useCompanyId";
 import { UserPresence } from "@/components/collaboration/UserPresence";
-import { ActivityFeed } from "@/components/collaboration/ActivityFeed";
-import { CommentsPanel } from "@/components/collaboration/CommentsPanel";
 import { logActivity } from "@/lib/utils/activityLogger";
+import ProjectBubbleChart from "@/components/estimating/ProjectBubbleChart";
+import CategoryComparisonChart from "@/components/estimating/CategoryComparisonChart";
+import ProposalSeedsCard from "@/components/estimating/ProposalSeedsCard";
 
 export default function EstimatingPage() {
   const params = useParams();
@@ -38,7 +39,10 @@ export default function EstimatingPage() {
   const [projectName, setProjectName] = useState<string>("");
   const [projectNumber, setProjectNumber] = useState<string>("");
   const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
+  const [selectedMetric, setSelectedMetric] = useState<"laborHoursPerTon" | "costPerTon">("laborHoursPerTon");
+  const [selectedLineId, setSelectedLineId] = useState<string | null>(lineIdFromUrl || null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [addLineHandler, setAddLineHandler] = useState<(() => void) | null>(null);
 
   // Load company settings
   useEffect(() => {
@@ -176,7 +180,8 @@ export default function EstimatingPage() {
   }, [projectId, companyId]);
 
   return (
-    <div className="space-y-6 pb-24">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="space-y-6 pb-24">
         {/* User Presence */}
         <div className="flex items-center justify-end">
           <UserPresence projectId={projectId} currentPage="estimating" />
@@ -251,24 +256,46 @@ export default function EstimatingPage() {
 
 
       {/* KPI Summary */}
-      <KPISummary lines={lines} />
+      <KPISummary 
+        lines={lines} 
+        onAddLine={addLineHandler || undefined}
+        isManualMode={true}
+      />
 
-      {/* Estimating Grid */}
+      {/* Estimating Grid - Always on top */}
       <EstimatingGrid 
         companyId={companyId} 
         projectId={projectId}
         isManualMode={true}
         highlightLineId={lineIdFromUrl}
+        onAddLineRef={setAddLineHandler}
       />
 
-      {/* Activity Feed and Comments */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        <div className="lg:col-span-2">
-          <CommentsPanel projectId={projectId} section="estimating" />
-        </div>
-        <div className="lg:col-span-2">
-          <ActivityFeed projectId={projectId} maxItems={10} />
-        </div>
+      {/* Progressive Inclusions/Exclusions - Full Width */}
+      <ProposalSeedsCard
+        companyId={companyId}
+        projectId={projectId}
+        selectedLineId={selectedLineId}
+        lines={lines}
+      />
+
+      {/* Charts Side by Side */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <ProjectBubbleChart 
+          lines={lines} 
+          companyId={companyId}
+          projectName={projectName}
+          currentProjectId={projectId}
+          selectedMetric={selectedMetric}
+          onMetricChange={setSelectedMetric}
+        />
+        <CategoryComparisonChart
+          lines={lines}
+          companyId={companyId}
+          currentProjectId={projectId}
+          selectedMetric={selectedMetric}
+        />
+      </div>
       </div>
     </div>
   );

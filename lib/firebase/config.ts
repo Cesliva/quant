@@ -37,24 +37,44 @@ function initializeFirebase() {
   try {
     if (isFirebaseConfigured()) {
       app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-      db = getFirestore(app);
       
-      // Only initialize auth and storage in browser
+      // Initialize Firestore (works in both browser and server)
+      try {
+        db = getFirestore(app);
+      } catch (dbError) {
+        // Firestore might fail in some server contexts, that's okay
+        if (typeof window !== "undefined") {
+          console.warn("Firestore initialization warning:", dbError);
+        }
+      }
+      
+      // Only initialize auth and storage in browser (they require browser APIs)
       if (typeof window !== "undefined") {
-        auth = getAuth(app);
-        storage = getStorage(app);
+        try {
+          auth = getAuth(app);
+          storage = getStorage(app);
+        } catch (browserError) {
+          console.warn("Firebase browser initialization error:", browserError);
+        }
       }
     } else {
-      console.warn(
-        "Firebase is not properly configured. Please set valid Firebase credentials in .env.local"
-      );
-      console.warn(
-        "The app will run in demo mode without Firebase functionality."
-      );
+      // Silently handle missing config - app will run in demo mode
+      if (typeof window !== "undefined") {
+        console.warn(
+          "Firebase is not properly configured. Please set valid Firebase credentials in .env.local"
+        );
+        console.warn(
+          "The app will run in demo mode without Firebase functionality."
+        );
+      }
     }
   } catch (error) {
-    console.error("Firebase initialization error:", error);
-    console.warn("The app will run in demo mode without Firebase functionality.");
+    // Don't crash the app if Firebase initialization fails
+    if (typeof window !== "undefined") {
+      console.error("Firebase initialization error:", error);
+      console.warn("The app will run in demo mode without Firebase functionality.");
+    }
+    // On server, silently fail - API routes will handle their own initialization
   }
 }
 

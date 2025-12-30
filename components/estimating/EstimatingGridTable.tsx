@@ -446,7 +446,7 @@ export default function EstimatingGridTable({
                   <td className="px-2 py-2">{renderCell(line, "hashtags")}</td>
                   <td className="px-2 py-2">
                     <span className={`px-2 py-1 rounded text-xs ${
-                      line.status === "Active" ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"
+                      line.status === "Active" ? "bg-green-500 text-white font-medium" : "bg-gray-400 text-gray-900"
                     }`}>
                       {line.status || "Active"}
                     </span>

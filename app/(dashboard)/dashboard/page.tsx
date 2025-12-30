@@ -17,6 +17,7 @@ import CostTrendAnalysis from "@/components/dashboard/CostTrendAnalysis";
 import EstimatorWorkload from "@/components/dashboard/EstimatorWorkload";
 import Input from "@/components/ui/Input";
 import { Search, Lightbulb, TrendingUp, AlertCircle } from "lucide-react";
+import { PRODUCT_SYSTEM_NAME } from "@/lib/branding";
 
 interface Project {
   id: string;
@@ -57,12 +58,27 @@ export default function DashboardPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
 
-  // Redirect to login if not authenticated
+  // CRITICAL SECURITY: Redirect to login if not authenticated
+  // Also verify user has valid email (required for real authentication)
   useEffect(() => {
-    if (!authLoading && !user) {
-      router.push("/login");
+    if (!authLoading && (!user || !user.email || user.uid === "dev-user")) {
+      router.replace("/login");
+      return;
     }
   }, [user, authLoading, router]);
+
+  // CRITICAL SECURITY: Don't render dashboard content if not authenticated
+  // Also verify user has valid email (required for real authentication)
+  if (!authLoading && (!user || !user.email || user.uid === "dev-user")) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Redirecting to login...</p>
+        </div>
+      </div>
+    );
+  }
   const companyId = useCompanyId();
   const { permissions } = useUserPermissions();
   const [winRate, setWinRate] = useState(0);
@@ -78,6 +94,11 @@ export default function DashboardPage() {
   });
   const [projectFilter, setProjectFilter] = useState<"all" | "mine">("all");
   const [projectSearchQuery, setProjectSearchQuery] = useState("");
+  
+  // Debug: Log filter changes
+  useEffect(() => {
+    console.log("Project filter changed to:", projectFilter);
+  }, [projectFilter]);
   const [pipelineRanges, setPipelineRanges] = useState({
     small: { min: 0, max: 50000 },
     medium: { min: 50000, max: 100000 },
@@ -413,7 +434,10 @@ export default function DashboardPage() {
     .sort((a, b) => new Date(a.bidDate!).getTime() - new Date(b.bidDate!).getTime())
     .slice(0, 3);
 
-  const activeProjectsList = activeProjects.filter((p) => !p.archived);
+  // Filter for active status projects only (not archived, not won/lost)
+  const activeProjectsList = activeProjects.filter((p) => 
+    !p.archived && p.status === "active"
+  );
   const archivedProjectsList = activeProjects.filter((p) => p.archived);
   
   const totalProjects = activeProjects.length;
@@ -465,8 +489,8 @@ export default function DashboardPage() {
     return projects;
   }, [activeProjectsList, projectFilter, user?.uid]);
 
-  // Get top 3 projects by contract value (estimatedValue)
-  const topActiveProjects = useMemo(() => {
+  // Get projects to display - all projects when "all" is selected, all my projects when "mine" is selected
+  const displayedProjects = useMemo(() => {
     return [...filteredProjects]
       .sort((a, b) => {
         const aValue = typeof a.estimatedValue === "string" 
@@ -476,8 +500,7 @@ export default function DashboardPage() {
           ? parseFloat(b.estimatedValue) || 0 
           : b.estimatedValue || 0;
         return bValue - aValue; // Sort descending (highest first)
-      })
-      .slice(0, 3); // Top 3 only
+      });
   }, [filteredProjects]);
 
   const pipelineDistribution = useMemo(() => {
@@ -624,7 +647,12 @@ export default function DashboardPage() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4 md:mb-6">
         <div>
-          <h1 className="text-4xl font-semibold tracking-tight mb-1">Company Dashboard</h1>
+          <div className="flex items-center gap-3 mb-1">
+            <h1 className="text-4xl font-semibold tracking-tight">Company Dashboard</h1>
+            <span className="px-2.5 py-1 text-xs font-medium text-slate-600 bg-slate-100 rounded-md border border-slate-200">
+              {PRODUCT_SYSTEM_NAME}
+            </span>
+          </div>
           <p className="text-slate-500">
             {userFirstName ? `Welcome back ${userFirstName}` : "Welcome back"} ·{" "}
             {new Date().toLocaleDateString("en-US", {
@@ -640,7 +668,7 @@ export default function DashboardPage() {
               Company Settings
             </Button>
           </Link>
-          <Link href="/projects/new/details">
+          <Link href="/projects/new">
             <Button className="px-5 py-2.5 rounded-2xl bg-blue-500 text-white text-sm font-medium shadow-[0_2px_4px_0_rgb(59,130,246,0.3),0_4px_8px_0_rgb(59,130,246,0.2)] hover:shadow-[0_4px_8px_0_rgb(59,130,246,0.4),0_8px_16px_0_rgb(59,130,246,0.25)] hover:bg-blue-600 transition-all duration-200">
               + New Project
             </Button>
@@ -932,28 +960,58 @@ export default function DashboardPage() {
         <div className="lg:col-span-2 bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300 p-3 md:p-4 flex flex-col">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <p className="text-sm font-semibold">Premier Projects</p>
+              <p className="text-sm font-semibold">Active Projects</p>
               <p className="text-xs text-slate-400">
-                Top 3 by contract value • {filteredProjects.length} total active
+                {projectFilter === "all" 
+                  ? `${filteredProjects.length} total active projects`
+                  : `${displayedProjects.length} my projects`
+                }
               </p>
             </div>
-            <div className="flex gap-2 items-center">
-              <Button
-                onClick={() => setProjectFilter("all")}
-                variant={projectFilter === "all" ? "primary" : "outline"}
-                size="sm"
-                className="text-xs px-3 py-1.5 rounded-xl"
+            <div className="flex gap-2 items-center" onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  router.push("/projects");
+                }}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                className={`text-xs px-3 py-1.5 rounded-xl font-medium transition-all duration-200 cursor-pointer relative z-10 ${
+                  projectFilter === "all"
+                    ? "bg-blue-500 text-white shadow-md hover:bg-blue-600"
+                    : "bg-white text-blue-600 border border-blue-200 hover:bg-blue-50"
+                }`}
+                style={{ pointerEvents: "auto", userSelect: "none" }}
               >
                 All Projects
-              </Button>
-              <Button
-                onClick={() => setProjectFilter("mine")}
-                variant={projectFilter === "mine" ? "primary" : "outline"}
-                size="sm"
-                className="text-xs px-3 py-1.5 rounded-xl"
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  console.log("My Projects button clicked, current filter:", projectFilter);
+                  const newFilter: "all" | "mine" = "mine";
+                  setProjectFilter(newFilter);
+                  console.log("Filter set to:", newFilter);
+                }}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                className={`text-xs px-3 py-1.5 rounded-xl font-medium transition-all duration-200 cursor-pointer relative z-10 ${
+                  projectFilter === "mine"
+                    ? "bg-blue-500 text-white shadow-md hover:bg-blue-600"
+                    : "bg-white text-blue-600 border border-blue-200 hover:bg-blue-50"
+                }`}
+                style={{ pointerEvents: "auto", userSelect: "none" }}
               >
                 My Projects
-              </Button>
+              </button>
             </div>
           </div>
           
@@ -979,11 +1037,11 @@ export default function DashboardPage() {
             </p>
           </div>
           <div className="text-sm">
-            {topActiveProjects.length === 0 ? (
+            {displayedProjects.length === 0 ? (
               <p className="py-4 text-slate-400">No projects yet.</p>
             ) : (
               <div className="space-y-0">
-              {topActiveProjects.map((project, index) => {
+              {displayedProjects.map((project, index) => {
                 const isArchived = project.archived === true;
                 const handleRestore = async (e: React.MouseEvent) => {
                   e.preventDefault();
@@ -1139,11 +1197,6 @@ export default function DashboardPage() {
       {companyId && companyId !== "default" && (
         <CostTrendAnalysis companyId={companyId} />
       )}
-
-      {/* Backlog at a Glance Section */}
-      <div className="mt-4 md:mt-6">
-        <BacklogAtAGlance companyId={companyId} />
-      </div>
 
       </div>
     </div>

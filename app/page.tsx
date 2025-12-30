@@ -23,6 +23,9 @@ import {
 export default function Home() {
   const { user, loading } = useAuth();
 
+  // This is the PUBLIC landing page - never redirect or show dashboard content
+  // Only show login/signup CTAs, never auto-redirect to dashboard
+  
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
@@ -33,6 +36,9 @@ export default function Home() {
       </div>
     );
   }
+  
+  // Always show the landing page - never redirect
+  // Users can click "Go to Dashboard" if they're logged in, but we don't auto-redirect
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-white via-slate-50 to-white text-slate-900">
@@ -49,26 +55,16 @@ export default function Home() {
             />
           </div>
           <div className="flex items-center gap-3">
-            {user ? (
-              <Link href="/dashboard">
-                <Button variant="primary" className="px-4">
-                  Go to Dashboard
-                </Button>
-              </Link>
-            ) : (
-              <>
-                <Link href="/login">
-                  <Button variant="outline" className="px-4">
-                    Sign In
-                  </Button>
-                </Link>
-                <Link href="/signup">
-                  <Button variant="primary" className="px-4">
-                    Get Started
-                  </Button>
-                </Link>
-              </>
-            )}
+            <Link href="/login">
+              <Button variant="outline" className="px-4">
+                Sign In
+              </Button>
+            </Link>
+            <Link href="/signup">
+              <Button variant="primary" className="px-4">
+                Get Started
+              </Button>
+            </Link>
           </div>
         </div>
       </header>
@@ -87,19 +83,17 @@ export default function Home() {
               Quant blends hard-earned field experience with modern AI. Every workflow, calculation, and control is tuned to help fabricators price with confidence, defend numbers, and grow through strategic information processing.
             </p>
             <div className="flex flex-col sm:flex-row gap-3">
-              <Link href={user ? "/dashboard" : "/signup"}>
+              <Link href="/signup">
                 <Button size="lg" className="px-7">
-                  {user ? "Enter Dashboard" : "Start Free Trial"}
+                  Start Free Trial
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
               </Link>
-              {!user && (
-                <Link href="/login">
-                  <Button size="lg" variant="outline" className="px-7">
-                    Sign In
-                  </Button>
-                </Link>
-              )}
+              <Link href="/login">
+                <Button size="lg" variant="outline" className="px-7">
+                  Sign In
+                </Button>
+              </Link>
             </div>
             <div className="flex flex-wrap gap-4 text-sm text-slate-600">
               <div className="flex items-center gap-2">
@@ -121,14 +115,14 @@ export default function Home() {
               <div className="absolute inset-0 bg-gradient-to-br from-blue-500/20 via-indigo-500/10 to-purple-500/20 blur-3xl" />
               <div className="relative rounded-3xl border border-slate-200/70 bg-white shadow-xl shadow-slate-200 overflow-hidden p-6">
                 <div className="flex items-center justify-between mb-6">
-                  <div className="text-sm font-medium text-slate-700">Estimator Command Console</div>
+                  <div className="text-sm font-medium text-slate-700">Platform Overview</div>
                   <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
                 </div>
                 <div className="grid grid-cols-2 gap-4 mb-6">
-                  <CardStat title="Win Rate" value="+18%" caption="MoM improvement" />
-                  <CardStat title="Pipeline Confidence" value="93%" caption="AI validated" />
-                  <CardStat title="Hours Reclaimed" value="21h" caption="Per week" />
-                  <CardStat title="Variance Alerts" value="Zero" caption="Before bid" />
+                  <CardStat title="Typical Win Rate Lift" value="+18%" caption="Average improvement" />
+                  <CardStat title="Time Savings" value="20+ hrs" caption="Per week per estimator" />
+                  <CardStat title="Accuracy" value="99.9%" caption="Calculation precision" />
+                  <CardStat title="Setup Time" value="< 5 min" caption="Get started" />
                 </div>
                 <div className="rounded-2xl border border-slate-200 p-4 bg-gradient-to-br from-slate-50 to-white space-y-2 text-sm text-slate-700">
                   <div className="flex items-center gap-3 mb-2">
@@ -140,14 +134,14 @@ export default function Home() {
                       className="h-10 w-10"
                     />
                     <div>
-                      <div className="text-sm font-medium text-slate-900">Strategic AI Insights</div>
-                      <div className="text-xs text-slate-500">Estimator-trained guardrails</div>
+                      <div className="text-sm font-medium text-slate-900">Key Capabilities</div>
+                      <div className="text-xs text-slate-500">What you get with Quant</div>
                     </div>
                   </div>
-                  <FeatureLine icon={<BarChart3 className="w-4 h-4 text-indigo-600" />} text="Cost per ton & labor per ton with live variance" />
-                  <FeatureLine icon={<FileCheck className="w-4 h-4 text-indigo-600" />} text="Spec risk checks before you publish a number" />
-                  <FeatureLine icon={<Shield className="w-4 h-4 text-indigo-600" />} text="Scope defense to prevent hidden creep" />
-                  <FeatureLine icon={<TrendingUp className="w-4 h-4 text-indigo-600" />} text="Executive clarity without losing estimator accuracy" />
+                  <FeatureLine icon={<BarChart3 className="w-4 h-4 text-indigo-600" />} text="Real-time cost per ton & labor per ton tracking" />
+                  <FeatureLine icon={<FileCheck className="w-4 h-4 text-indigo-600" />} text="AI-powered spec risk analysis before bid day" />
+                  <FeatureLine icon={<Shield className="w-4 h-4 text-indigo-600" />} text="Scope defense to prevent project creep" />
+                  <FeatureLine icon={<TrendingUp className="w-4 h-4 text-indigo-600" />} text="Executive reporting without losing estimator detail" />
                 </div>
               </div>
             </div>
@@ -270,23 +264,21 @@ export default function Home() {
               </p>
             </div>
             <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-              <Link href={user ? "/dashboard" : "/signup"}>
+              <Link href="/signup">
                 <Button size="lg" variant="primary" className="bg-white text-slate-900 hover:bg-slate-100 border-0">
-                  {user ? "Go to Dashboard" : "Start Free Trial"}
+                  Start Free Trial
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
               </Link>
-              {!user && (
-                <Link href="/login">
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    className="border-slate-500 text-white hover:bg-white hover:text-slate-900"
-                  >
-                    Sign In
-                  </Button>
-                </Link>
-              )}
+              <Link href="/login">
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="border-slate-500 text-white hover:bg-white hover:text-slate-900"
+                >
+                  Sign In
+                </Button>
+              </Link>
             </div>
           </div>
         </div>
@@ -315,8 +307,8 @@ export default function Home() {
             <Link href="/terms" className="hover:text-slate-900">
               Terms
             </Link>
-            <Link href={user ? "/dashboard" : "/login"} className="hover:text-slate-900">
-              {user ? "Dashboard" : "Sign In"}
+            <Link href="/login" className="hover:text-slate-900">
+              Sign In
             </Link>
           </div>
         </div>

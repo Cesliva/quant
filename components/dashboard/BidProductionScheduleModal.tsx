@@ -385,34 +385,75 @@ export default function BidProductionScheduleModal({
     return { loadSchedules: scheduleMap, dailyTotals: totals };
   }, [productionLoads, effectiveDailyCapacity, workingDaysKey, holidaysKey]);
 
+  // Generate color palette for projects
+  const projectColors = useMemo(() => {
+    const colors = [
+      "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6",
+      "#06b6d4", "#f97316", "#ec4899", "#84cc16", "#6366f1",
+      "#14b8a6", "#f43f5e", "#a855f7", "#22c55e", "#eab308",
+      "#06b6d4", "#f472b6", "#64748b", "#0ea5e9", "#a3e635"
+    ];
+    const colorMap = new Map<string, string>();
+    productionLoads.forEach((load, index) => {
+      colorMap.set(load.key, colors[index % colors.length]);
+    });
+    return colorMap;
+  }, [productionLoads]);
+
   const weeklySummaries = useMemo(() => {
     const summaries: Array<{
       weekIndex: number;
       startDate: Date;
       usedHours: number;
       capacityHours: number;
+      projectBreakdown: Array<{ projectKey: string; projectName: string; hours: number }>;
     }> = [];
 
     for (let i = 0; i < weeksToForecast; i++) {
       const weekStart = addWeeks(startOfCurrentWeek, i);
-      const weekEnd = addDays(weekStart, 6);
       let used = 0;
-    for (let d = 0; d < 7; d++) {
-      const date = addDays(weekStart, d);
-      const dayKey = formatDate(date);
-      if (!isWorkingDayDate(date)) continue;
-      used += dailyTotals[dayKey]?.total ?? 0;
-    }
+      const projectHoursMap = new Map<string, number>();
+      
+      for (let d = 0; d < 7; d++) {
+        const date = addDays(weekStart, d);
+        const dayKey = formatDate(date);
+        if (!isWorkingDayDate(date)) continue;
+        
+        const dayData = dailyTotals[dayKey];
+        if (dayData) {
+          used += dayData.total;
+          // Aggregate project hours for this week
+          dayData.loads.forEach((load) => {
+            const current = projectHoursMap.get(load.loadKey) || 0;
+            projectHoursMap.set(load.loadKey, current + load.hours);
+          });
+        }
+      }
+      
+      // Convert map to array and get project names
+      const projectBreakdown = Array.from(projectHoursMap.entries())
+        .map(([loadKey, hours]) => {
+          const load = productionLoads.find(l => l.key === loadKey);
+          return {
+            projectKey: loadKey,
+            projectName: load?.name || "Unknown",
+            hours,
+          };
+        })
+        .filter(p => p.hours > 0)
+        .sort((a, b) => b.hours - a.hours); // Sort by hours descending
+      
       summaries.push({
         weekIndex: i,
         startDate: weekStart,
         usedHours: used,
         capacityHours: weeklyCapacity,
+        projectBreakdown,
       });
     }
 
     return summaries;
-  }, [dailyTotals, startOfCurrentWeek, weeksToForecast, weeklyCapacity]);
+  }, [dailyTotals, startOfCurrentWeek, weeksToForecast, weeklyCapacity, productionLoads]);
 
   const selectedWeekKey = selectedDate
     ? formatDate(getStartOfWeek(new Date(selectedDate)))
@@ -1304,6 +1345,23 @@ export default function BidProductionScheduleModal({
                             <div>Used: {week.usedHours.toLocaleString()} hrs</div>
                             <div>Capacity: {week.capacityHours.toLocaleString()} hrs</div>
                             <div className="font-semibold">Utilization: {Math.round(utilization)}%</div>
+                            {week.projectBreakdown.length > 0 && (
+                              <div className="mt-2 pt-2 border-t border-gray-700">
+                                <div className="font-semibold mb-1">Projects:</div>
+                                {week.projectBreakdown.map((project) => {
+                                  const projectColor = projectColors.get(project.projectKey) || "#94a3b8";
+                                  return (
+                                    <div key={project.projectKey} className="flex items-center gap-2 text-xs">
+                                      <div 
+                                        className="w-2 h-2 rounded" 
+                                        style={{ backgroundColor: projectColor }}
+                                      />
+                                      <span>{project.projectName}: {project.hours.toFixed(1)} hrs</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                         </div>
                       );
@@ -1336,7 +1394,7 @@ export default function BidProductionScheduleModal({
                         strokeDasharray="2,2"
                       />
                       
-                      {/* Bars for each week */}
+                      {/* Stacked bars for each week showing individual projects */}
                       {weeklySummaries.map((week, index) => {
                         const x = weeklySummaries.length > 1 
                           ? (index / (weeklySummaries.length - 1)) * 100 
@@ -1344,31 +1402,78 @@ export default function BidProductionScheduleModal({
                         const utilization = week.capacityHours > 0 
                           ? (week.usedHours / week.capacityHours) * 100 
                           : 0;
-                        const barHeight = Math.min((utilization / 150) * 100, 100);
-                        const barY = 100 - barHeight;
-                        
-                        // Color based on utilization
-                        let barColor = "#10b981"; // Green - good
-                        if (utilization < underUtilizedThreshold * 100) {
-                          barColor = "#f59e0b"; // Amber - under-utilized
-                        } else if (utilization > 100) {
-                          barColor = "#ef4444"; // Red - overbooked
-                        }
+                        const totalBarHeight = Math.min((utilization / 150) * 100, 100);
+                        const barY = 100 - totalBarHeight;
                         
                         const isHovered = hoveredWeek === week.weekIndex;
+                        const barWidth = isHovered ? 3.5 : 2.5;
+                        const barX = x - (barWidth / 2);
+                        
+                        // Calculate stacked segments for each project based on actual hours
+                        let currentY = barY;
                         
                         return (
                           <g key={`week-${week.weekIndex}`}>
-                            {/* Bar */}
-                            <rect
-                              x={x - 1}
-                              y={barY}
-                              width="2"
-                              height={barHeight}
-                              fill={barColor}
-                              opacity={isHovered ? "1" : "0.8"}
-                              className="pointer-events-none"
-                            />
+                            {/* Stacked project segments */}
+                            {week.projectBreakdown.map((project, pIndex) => {
+                              const projectUtilization = week.capacityHours > 0 
+                                ? (project.hours / week.capacityHours) * 100 
+                                : 0;
+                              const segmentHeight = (projectUtilization / 150) * 100;
+                              const segmentY = currentY;
+                              currentY += segmentHeight;
+                              
+                              const projectColor = projectColors.get(project.projectKey) || "#94a3b8";
+                              
+                              return (
+                                <rect
+                                  key={`project-${project.projectKey}`}
+                                  x={barX}
+                                  y={segmentY}
+                                  width={barWidth}
+                                  height={Math.max(segmentHeight, 0.3)}
+                                  fill={projectColor}
+                                  opacity={isHovered ? "1" : "0.9"}
+                                  stroke="#fff"
+                                  strokeWidth="0.15"
+                                  className="pointer-events-none"
+                                />
+                              );
+                            })}
+                            
+                            {/* Project name labels (show on hover) */}
+                            {isHovered && week.projectBreakdown.length > 0 && (
+                              <g>
+                                {week.projectBreakdown.reduce((acc, project, pIndex) => {
+                                  const projectUtilization = week.capacityHours > 0 
+                                    ? (project.hours / week.capacityHours) * 100 
+                                    : 0;
+                                  const segmentHeight = (projectUtilization / 150) * 100;
+                                  const labelY = barY + acc.accumulatedHeight + (segmentHeight / 2);
+                                  acc.accumulatedHeight += segmentHeight;
+                                  
+                                  if (segmentHeight > 2) { // Only show label if segment is tall enough
+                                    acc.elements.push(
+                                      <text
+                                        key={`label-${project.projectKey}`}
+                                        x={x + 2.5}
+                                        y={labelY}
+                                        fontSize="2.2"
+                                        fill="#1f2937"
+                                        fontWeight="600"
+                                        className="pointer-events-none"
+                                      >
+                                        {project.projectName.length > 18 
+                                          ? project.projectName.substring(0, 18) + "..." 
+                                          : project.projectName}
+                                      </text>
+                                    );
+                                  }
+                                  return acc;
+                                }, { accumulatedHeight: 0, elements: [] as JSX.Element[] }).elements}
+                              </g>
+                            )}
+                            
                             {/* Hover indicator line */}
                             {isHovered && (
                               <line
@@ -1427,23 +1532,49 @@ export default function BidProductionScheduleModal({
                   </div>
                   
                   {/* Legend */}
-                  <div className="flex flex-wrap items-center gap-4 text-xs text-gray-600 pt-2 border-t border-gray-200">
-                    <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 rounded bg-amber-500"></div>
-                      <span>Under-utilized (&lt;{Math.round(underUtilizedThreshold * 100)}%)</span>
+                  <div className="space-y-3 pt-2 border-t border-gray-200">
+                    {/* Utilization Legend */}
+                    <div className="flex flex-wrap items-center gap-4 text-xs text-gray-600">
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded bg-amber-500"></div>
+                        <span>Under-utilized (&lt;{Math.round(underUtilizedThreshold * 100)}%)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded bg-green-500"></div>
+                        <span>Good ({Math.round(underUtilizedThreshold * 100)}% - 100%)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded bg-red-500"></div>
+                        <span>Overbooked (&gt;100%)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-0.5 h-4 bg-amber-500" style={{ borderStyle: "dashed" }}></div>
+                        <span>100% Capacity</span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 rounded bg-green-500"></div>
-                      <span>Good ({Math.round(underUtilizedThreshold * 100)}% - 100%)</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 rounded bg-red-500"></div>
-                      <span>Overbooked (&gt;100%)</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-0.5 h-4 bg-amber-500" style={{ borderStyle: "dashed" }}></div>
-                      <span>100% Capacity</span>
-                    </div>
+                    
+                    {/* Project Colors Legend */}
+                    {productionLoads.length > 0 && (
+                      <div className="pt-2 border-t border-gray-100">
+                        <div className="text-xs font-semibold text-gray-700 mb-2">Projects:</div>
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                          {productionLoads.map((load) => {
+                            const color = projectColors.get(load.key) || "#94a3b8";
+                            return (
+                              <div key={load.key} className="flex items-center gap-2 text-xs">
+                                <div 
+                                  className="w-3 h-3 rounded flex-shrink-0" 
+                                  style={{ backgroundColor: color }}
+                                />
+                                <span className="text-gray-600 truncate" title={load.name}>
+                                  {load.name.length > 20 ? load.name.substring(0, 20) + "..." : load.name}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                   
                   {/* Summary stats */}

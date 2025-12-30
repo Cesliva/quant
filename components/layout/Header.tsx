@@ -6,6 +6,7 @@ import { NotificationBell } from "@/components/collaboration/NotificationBell";
 import { UserAvatar } from "@/components/collaboration/UserAvatar";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useCompanyId } from "@/lib/hooks/useCompanyId";
+import { PRODUCT_SYSTEM_NAME } from "@/lib/branding";
 
 export default function Header() {
   const pathname = usePathname();
@@ -30,8 +31,6 @@ export default function Header() {
       return "AI Generated Proposal";
     } else if (pathname?.includes("/estimating") && !pathname.includes("/projects/")) {
       return "Estimating";
-    } else if (pathname?.includes("/import-quotes")) {
-      return "Import Quotes";
     }
     return "Company Dashboard";
   };
@@ -45,6 +44,9 @@ export default function Header() {
           </Link>
           <span className="text-gray-400">|</span>
           <span className="text-gray-600">Quant Estimating AI</span>
+          <span className="px-2 py-0.5 text-xs font-medium text-gray-500 bg-gray-100 rounded border border-gray-200">
+            {PRODUCT_SYSTEM_NAME}
+          </span>
         </div>
         <div className="flex items-center gap-4">
           {companyId && <NotificationBell />}

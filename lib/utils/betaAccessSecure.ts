@@ -132,17 +132,23 @@ export async function validateBetaCode(
 
   // Check rate limiting if IP provided
   if (ipAddress) {
-    const rateLimitCheck = await checkRateLimit(ipAddress);
-    if (!rateLimitCheck.allowed) {
-      const minutesRemaining = rateLimitCheck.lockedUntil
-        ? Math.ceil(
-            (new Date(rateLimitCheck.lockedUntil).getTime() - Date.now()) / 60000
-          )
-        : 0;
-      return {
-        valid: false,
-        error: `Too many failed attempts. Please try again in ${minutesRemaining} minute${minutesRemaining !== 1 ? "s" : ""}.`,
-      };
+    try {
+      const rateLimitCheck = await checkRateLimit(ipAddress);
+      if (rateLimitCheck && !rateLimitCheck.allowed) {
+        const minutesRemaining = rateLimitCheck.lockedUntil
+          ? Math.ceil(
+              (new Date(rateLimitCheck.lockedUntil).getTime() - Date.now()) / 60000
+            )
+          : 0;
+        return {
+          valid: false,
+          error: `Too many failed attempts. Please try again in ${minutesRemaining} minute${minutesRemaining !== 1 ? "s" : ""}.`,
+        };
+      }
+    } catch (error) {
+      // If rate limit check fails, log but don't block signup
+      console.warn("Rate limit check failed:", error);
+      // Continue with validation - fail open on rate limit errors
     }
   }
 
@@ -253,57 +259,69 @@ async function checkRateLimit(ipAddress: string): Promise<{
   allowed: boolean;
   lockedUntil?: Date | string;
 }> {
-  const config = await getBetaAccessConfig();
-  if (!config) {
-    return { allowed: true };
-  }
-
-  const rateLimitId = ipAddress.replace(/[^a-zA-Z0-9]/g, "_");
-  const rateLimit = await getDocument<RateLimitRecord>(`betaAccessRateLimits/${rateLimitId}`);
-
-  if (!rateLimit) {
-    return { allowed: true };
-  }
-
-  // Check if locked
-  if (rateLimit.lockedUntil) {
-    const lockedUntil = typeof rateLimit.lockedUntil === "string"
-      ? new Date(rateLimit.lockedUntil)
-      : rateLimit.lockedUntil;
-    if (lockedUntil > new Date()) {
-      return { allowed: false, lockedUntil: rateLimit.lockedUntil };
+  try {
+    const config = await getBetaAccessConfig();
+    if (!config) {
+      return { allowed: true };
     }
-    // Lockout expired, reset
-    await clearRateLimit(ipAddress);
+
+    const rateLimitId = ipAddress.replace(/[^a-zA-Z0-9]/g, "_");
+    const rateLimit = await getDocument<RateLimitRecord>(`betaAccessRateLimits/${rateLimitId}`);
+
+    if (!rateLimit) {
+      return { allowed: true };
+    }
+
+    // Check if locked
+    if (rateLimit.lockedUntil) {
+      const lockedUntil = typeof rateLimit.lockedUntil === "string"
+        ? new Date(rateLimit.lockedUntil)
+        : rateLimit.lockedUntil;
+      if (lockedUntil > new Date()) {
+        return { allowed: false, lockedUntil: rateLimit.lockedUntil };
+      }
+      // Lockout expired, reset
+      await clearRateLimit(ipAddress);
+      return { allowed: true };
+    }
+
+    // Check if exceeded attempts
+    if (rateLimit.attempts >= (config.rateLimitAttempts || 5)) {
+      const lockoutDuration = (config.lockoutDurationMinutes || 15) * 60 * 1000;
+      const lockedUntil = new Date(Date.now() + lockoutDuration);
+      
+      await updateDocument(`betaAccessRateLimits`, rateLimitId, {
+        lockedUntil,
+      });
+
+      return { allowed: false, lockedUntil };
+    }
+
+    // Check time window
+    if (rateLimit.lastAttempt) {
+      const lastAttempt = typeof rateLimit.lastAttempt === "string"
+        ? new Date(rateLimit.lastAttempt)
+        : rateLimit.lastAttempt;
+      
+      // Validate the date before using it
+      if (lastAttempt && !isNaN(lastAttempt.getTime())) {
+        const windowMinutes = config.rateLimitWindowMinutes || 15;
+        const windowExpiry = new Date(lastAttempt.getTime() + windowMinutes * 60 * 1000);
+
+        if (windowExpiry < new Date()) {
+          // Window expired, reset attempts
+          await clearRateLimit(ipAddress);
+          return { allowed: true };
+        }
+      }
+    }
+
+    return { allowed: true };
+  } catch (error) {
+    // If any error occurs during rate limit check, fail open (allow the request)
+    console.warn("Error checking rate limit:", error);
     return { allowed: true };
   }
-
-  // Check if exceeded attempts
-  if (rateLimit.attempts >= (config.rateLimitAttempts || 5)) {
-    const lockoutDuration = (config.lockoutDurationMinutes || 15) * 60 * 1000;
-    const lockedUntil = new Date(Date.now() + lockoutDuration);
-    
-    await updateDocument(`betaAccessRateLimits`, rateLimitId, {
-      lockedUntil,
-    });
-
-    return { allowed: false, lockedUntil };
-  }
-
-  // Check time window
-  const lastAttempt = typeof rateLimit.lastAttempt === "string"
-    ? new Date(rateLimit.lastAttempt)
-    : rateLimit.lastAttempt;
-  const windowMinutes = config.rateLimitWindowMinutes || 15;
-  const windowExpiry = new Date(lastAttempt.getTime() + windowMinutes * 60 * 1000);
-
-  if (windowExpiry < new Date()) {
-    // Window expired, reset attempts
-    await clearRateLimit(ipAddress);
-    return { allowed: true };
-  }
-
-  return { allowed: true };
 }
 
 /**

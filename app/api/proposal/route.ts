@@ -101,13 +101,39 @@ export async function POST(request: NextRequest) {
       Project Summary:
       ${projectSummary}
       
-      Generate a comprehensive proposal in Markdown format including:
-      - Executive summary
-      - Project scope
-      - Materials and specifications
-      - Labor and timeline
-      - Pricing breakdown
-      - Terms and conditions`;
+      Return a JSON object with the following structure:
+      {
+        "projectOverview": {
+          "content": "Professional introduction paragraph describing the project and opportunity",
+          "type": "paragraph"
+        },
+        "scopeOfWork": {
+          "content": ["Bullet point 1", "Bullet point 2", "..."],
+          "type": "bullets"
+        },
+        "projectSpecificInclusions": {
+          "content": ["Inclusion 1", "Inclusion 2", "..."],
+          "type": "bullets"
+        },
+        "projectSpecificExclusions": {
+          "content": ["Exclusion 1", "Exclusion 2", "..."],
+          "type": "bullets"
+        },
+        "clarificationsAssumptions": {
+          "content": ["Clarification 1", "Assumption 1", "..."],
+          "type": "bullets"
+        },
+        "commercialTerms": {
+          "content": "Professional paragraph describing pricing, payment terms, and commercial conditions",
+          "type": "paragraph"
+        },
+        "acceptanceSignature": {
+          "content": "Professional closing paragraph with acceptance instructions",
+          "type": "paragraph"
+        }
+      }
+      
+      IMPORTANT: Return ONLY valid JSON, no markdown formatting or code blocks.`;
 
       const completion = await openai.chat.completions.create({
         model: "gpt-4o-mini",
@@ -115,18 +141,29 @@ export async function POST(request: NextRequest) {
           {
             role: "system",
             content:
-              "You are a professional proposal writer for steel fabrication projects. Generate clear, professional proposals in Markdown format.",
+              "You are a professional proposal writer for steel fabrication projects. Generate structured proposal content in JSON format. Return ONLY valid JSON, no markdown or code blocks.",
           },
           { role: "user", content: prompt },
         ],
+        response_format: { type: "json_object" },
       });
 
-      const proposal = completion.choices[0].message.content || "";
+      const proposalContent = completion.choices[0].message.content || "{}";
+      let structuredProposal;
+      
+      try {
+        structuredProposal = JSON.parse(proposalContent);
+      } catch (e) {
+        // Fallback to plain text if JSON parsing fails
+        structuredProposal = { projectOverview: { content: proposalContent, type: "paragraph" } };
+      }
+
       const tokens = completion.usage?.total_tokens || 0;
       const cost = calculateGPT4Cost(tokens, "gpt-4o-mini");
 
       return NextResponse.json({
-        proposal,
+        proposal: proposalContent, // Keep for backward compatibility
+        structuredProposal, // New structured format
         tokens,
         cost,
       });
@@ -267,7 +304,7 @@ Breakdowns available upon request:
       .replace(/{FABRICATION_WEEKS}/g, context.schedule.fabricationWeeks.toString())
       .replace(/{EXCLUSIONS_SECTION}/g, context.exclusions);
 
-    const prompt = `Generate a professional steel fabrication proposal using the following template structure. Fill in any remaining placeholders and expand sections with professional, detailed language.
+    const prompt = `Generate a professional steel fabrication proposal using the following template structure and provided data.
 
 TEMPLATE STRUCTURE:
 ${filledTemplate}
@@ -275,16 +312,46 @@ ${filledTemplate}
 PROVIDED DATA:
 ${JSON.stringify(context, null, 2)}
 
+Return a JSON object with the following structure:
+{
+  "projectOverview": {
+    "content": "Professional introduction paragraph describing the project and opportunity",
+    "type": "paragraph"
+  },
+  "scopeOfWork": {
+    "content": ["Bullet point 1", "Bullet point 2", "..."],
+    "type": "bullets"
+  },
+  "projectSpecificInclusions": {
+    "content": ["Inclusion 1", "Inclusion 2", "..."],
+    "type": "bullets"
+  },
+  "projectSpecificExclusions": {
+    "content": ["Exclusion 1", "Exclusion 2", "..."],
+    "type": "bullets"
+  },
+  "clarificationsAssumptions": {
+    "content": ["Clarification 1", "Assumption 1", "..."],
+    "type": "bullets"
+  },
+  "commercialTerms": {
+    "content": "Professional paragraph describing pricing, payment terms, and commercial conditions",
+    "type": "paragraph"
+  },
+  "acceptanceSignature": {
+    "content": "Professional closing paragraph with acceptance instructions",
+    "type": "paragraph"
+  }
+}
+
 INSTRUCTIONS:
-1. Replace all {PLACEHOLDERS} with actual values from the provided data
+1. Use the provided template structure and data to populate each section
 2. Expand each section with professional, detailed language appropriate for a steel fabrication proposal
 3. Use the project summary to add relevant details to the scope section
 4. If estimating data is provided, reference actual costs and quantities where appropriate
-5. Format the proposal in clean, professional Markdown
-6. Ensure all sections are complete and well-written
-7. Maintain the professional tone throughout
-
-Generate the complete proposal now:`;
+5. Ensure all sections are complete and well-written
+6. Maintain the professional tone throughout
+7. Return ONLY valid JSON, no markdown formatting or code blocks.`;
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -292,13 +359,29 @@ Generate the complete proposal now:`;
         {
           role: "system",
           content:
-            "You are a professional proposal writer for steel fabrication projects. Generate clear, professional proposals following the exact template structure provided. Fill in all placeholders and expand sections with detailed, professional language.",
+            "You are a professional proposal writer for steel fabrication projects. Generate structured proposal content in JSON format. Return ONLY valid JSON, no markdown or code blocks.",
         },
         { role: "user", content: prompt },
       ],
+      response_format: { type: "json_object" },
     });
 
-    const proposal = completion.choices[0].message.content || "";
+    const proposalContent = completion.choices[0].message.content || "{}";
+    let structuredProposal;
+    
+    try {
+      structuredProposal = JSON.parse(proposalContent);
+    } catch (e) {
+      // Fallback: convert filled template to structured format
+      structuredProposal = {
+        projectOverview: { content: filledTemplate.split("\n\n")[0] || "", type: "paragraph" },
+        scopeOfWork: { content: filledTemplate.split("2. SCOPE OF WORK")[1]?.split("3. PRICE")[0]?.trim() || "", type: "paragraph" },
+      };
+    }
+
+    // Also keep the filled template as plain text for backward compatibility
+    const proposal = filledTemplate;
+
     const tokens = completion.usage?.total_tokens || 0;
     const cost = calculateGPT4Cost(tokens, "gpt-4o-mini");
 
@@ -318,7 +401,8 @@ Generate the complete proposal now:`;
     }
 
     return NextResponse.json({
-      proposal,
+      proposal, // Keep for backward compatibility
+      structuredProposal, // New structured format
       tokens,
       cost,
     });

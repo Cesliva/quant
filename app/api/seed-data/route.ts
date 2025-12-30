@@ -19,6 +19,43 @@ const MATERIAL_RATE = 0.85;
 const LABOR_RATE = 45.0;
 const PAINT_RATE = 2.5;
 const GALVANIZE_RATE = 0.55;
+const SHOP_PRIMER_RATE = 1.2; // $/SF for shop primer
+const ZINC_PRIMER_RATE = 1.5; // $/SF for zinc primer
+const POWDER_COAT_RATE = 3.5; // $/SF for powder coat
+const SPECIALTY_COATING_RATE = 4.0; // $/SF for specialty coating
+
+// Coating systems (excluding "None" - always select a coating for seed data)
+const COATING_SYSTEMS = [
+  "Standard Shop Primer",
+  "Zinc Primer",
+  "Paint",
+  "Powder Coat",
+  "Galvanizing",
+  "Specialty Coating"
+];
+
+// SSPC prep options (excluding "None")
+const SSPC_PREP_OPTIONS = [
+  "SSPC-SP 1 - Solvent Cleaning",
+  "SSPC-SP 2 - Hand Tool Cleaning",
+  "SSPC-SP 3 - Power Tool Cleaning",
+  "SSPC-SP 6 - Commercial Blast Cleaning",
+  "SSPC-SP 10 - Near-White Blast Cleaning",
+];
+
+// Map coating systems to appropriate SSPC prep options
+function getSSPCPrepForCoating(coatingSystem: string): string {
+  if (coatingSystem === "Standard Shop Primer" || coatingSystem === "Zinc Primer") {
+    return randomChoice(["SSPC-SP 2 - Hand Tool Cleaning", "SSPC-SP 3 - Power Tool Cleaning"]);
+  } else if (coatingSystem === "Paint") {
+    return randomChoice(["SSPC-SP 6 - Commercial Blast Cleaning", "SSPC-SP 10 - Near-White Blast Cleaning"]);
+  } else if (coatingSystem === "Powder Coat" || coatingSystem === "Specialty Coating") {
+    return randomChoice(["SSPC-SP 6 - Commercial Blast Cleaning", "SSPC-SP 10 - Near-White Blast Cleaning"]);
+  } else if (coatingSystem === "Galvanizing") {
+    return "SSPC-SP 1 - Solvent Cleaning"; // Galvanizing typically uses solvent cleaning
+  }
+  return "SSPC-SP 2 - Hand Tool Cleaning"; // Default
+}
 
 function randomBetween(min: number, max: number): number {
   return Math.random() * (max - min) + min;
@@ -413,16 +450,37 @@ function createColumnLine(lineId: string): EstimatingLine {
   const laborHours = (totalWeight / 2000) * randomBetween(8, 12); // Labor hours based on tons
   const laborBreakdown = generateLaborBreakdown(laborHours, "Columns");
   const laborCost = laborHours * LABOR_RATE;
-  const coatingSystem = randomChoice(["None", "Paint", "Galv"]);
+  
+  // Always select a coating system for seed data (no "None")
+  const coatingSystem = randomChoice(COATING_SYSTEMS);
+  const sspcPrep = getSSPCPrepForCoating(coatingSystem);
+  
+  // Calculate surface area (approximate: 1 lb steel ≈ 0.15 SF surface area)
+  const surfaceArea = totalWeight * 0.15;
+  
   let coatingCost = 0;
+  let coatingRate = 0;
+  
   if (coatingSystem === "Paint") {
-    // Paint: surface area × paint rate (need to calculate surface area from weight)
-    // Approximate: 1 lb steel ≈ 0.15 SF surface area
-    coatingCost = totalWeight * 0.15 * PAINT_RATE;
-  } else if (coatingSystem === "Galv") {
-    // Galvanizing: weight × rate ($/lb)
-    coatingCost = totalWeight * GALVANIZE_RATE;
+    coatingRate = PAINT_RATE;
+    coatingCost = surfaceArea * PAINT_RATE;
+  } else if (coatingSystem === "Galvanizing") {
+    coatingRate = GALVANIZE_RATE;
+    coatingCost = totalWeight * GALVANIZE_RATE; // Galvanizing is per pound
+  } else if (coatingSystem === "Standard Shop Primer") {
+    coatingRate = SHOP_PRIMER_RATE;
+    coatingCost = surfaceArea * SHOP_PRIMER_RATE;
+  } else if (coatingSystem === "Zinc Primer") {
+    coatingRate = ZINC_PRIMER_RATE;
+    coatingCost = surfaceArea * ZINC_PRIMER_RATE;
+  } else if (coatingSystem === "Powder Coat") {
+    coatingRate = POWDER_COAT_RATE;
+    coatingCost = surfaceArea * POWDER_COAT_RATE;
+  } else if (coatingSystem === "Specialty Coating") {
+    coatingRate = SPECIALTY_COATING_RATE;
+    coatingCost = surfaceArea * SPECIALTY_COATING_RATE;
   }
+  
   return {
     lineId,
     drawingNumber: `D-${randomInt(100, 999)}`,
@@ -440,14 +498,14 @@ function createColumnLine(lineId: string): EstimatingLine {
     weightPerFoot,
     totalWeight,
     coatingSystem,
-    sspcPrep: coatingSystem === "Paint" ? randomChoice(["SSPC-SP 6", "SSPC-SP 10"]) : undefined,
+    sspcPrep,
     materialRate: MATERIAL_RATE,
     materialCost,
     laborRate: LABOR_RATE,
     totalLabor: laborHours,
     ...laborBreakdown,
     laborCost,
-    coatingRate: coatingSystem === "Paint" ? PAINT_RATE : coatingSystem === "Galv" ? GALVANIZE_RATE : 0,
+    coatingRate,
     coatingCost,
     totalCost: materialCost + laborCost + coatingCost,
     status: "Active",
@@ -470,16 +528,37 @@ function createBeamLine(lineId: string): EstimatingLine {
   const laborHours = (totalWeight / 2000) * randomBetween(7, 11); // Labor hours based on tons
   const laborBreakdown = generateLaborBreakdown(laborHours, "Beams");
   const laborCost = laborHours * LABOR_RATE;
-  const coatingSystem = randomChoice(["None", "Paint", "Galv"]);
+  
+  // Always select a coating system for seed data (no "None")
+  const coatingSystem = randomChoice(COATING_SYSTEMS);
+  const sspcPrep = getSSPCPrepForCoating(coatingSystem);
+  
+  // Calculate surface area (approximate: 1 lb steel ≈ 0.15 SF surface area)
+  const surfaceArea = totalWeight * 0.15;
+  
   let coatingCost = 0;
+  let coatingRate = 0;
+  
   if (coatingSystem === "Paint") {
-    // Paint: surface area × paint rate (need to calculate surface area from weight)
-    // Approximate: 1 lb steel ≈ 0.15 SF surface area
-    coatingCost = totalWeight * 0.15 * PAINT_RATE;
-  } else if (coatingSystem === "Galv") {
-    // Galvanizing: weight × rate ($/lb)
-    coatingCost = totalWeight * GALVANIZE_RATE;
+    coatingRate = PAINT_RATE;
+    coatingCost = surfaceArea * PAINT_RATE;
+  } else if (coatingSystem === "Galvanizing") {
+    coatingRate = GALVANIZE_RATE;
+    coatingCost = totalWeight * GALVANIZE_RATE; // Galvanizing is per pound
+  } else if (coatingSystem === "Standard Shop Primer") {
+    coatingRate = SHOP_PRIMER_RATE;
+    coatingCost = surfaceArea * SHOP_PRIMER_RATE;
+  } else if (coatingSystem === "Zinc Primer") {
+    coatingRate = ZINC_PRIMER_RATE;
+    coatingCost = surfaceArea * ZINC_PRIMER_RATE;
+  } else if (coatingSystem === "Powder Coat") {
+    coatingRate = POWDER_COAT_RATE;
+    coatingCost = surfaceArea * POWDER_COAT_RATE;
+  } else if (coatingSystem === "Specialty Coating") {
+    coatingRate = SPECIALTY_COATING_RATE;
+    coatingCost = surfaceArea * SPECIALTY_COATING_RATE;
   }
+  
   return {
     lineId,
     drawingNumber: `D-${randomInt(100, 999)}`,
@@ -497,14 +576,14 @@ function createBeamLine(lineId: string): EstimatingLine {
     weightPerFoot,
     totalWeight,
     coatingSystem,
-    sspcPrep: coatingSystem === "Paint" ? randomChoice(["SSPC-SP 6", "SSPC-SP 10"]) : undefined,
+    sspcPrep,
     materialRate: MATERIAL_RATE,
     materialCost,
     laborRate: LABOR_RATE,
     totalLabor: laborHours,
     ...laborBreakdown,
     laborCost,
-    coatingRate: coatingSystem === "Paint" ? PAINT_RATE : coatingSystem === "Galv" ? GALVANIZE_RATE : 0,
+    coatingRate,
     coatingCost,
     totalCost: materialCost + laborCost + coatingCost,
     status: "Active",
@@ -527,13 +606,30 @@ function createPlateLine(lineId: string): EstimatingLine {
   const laborHours = (plateTotalWeight / 2000) * randomBetween(10, 15); // Labor hours based on tons
   const laborBreakdown = generateLaborBreakdown(laborHours, "Plates");
   const laborCost = laborHours * LABOR_RATE;
-  const coatingSystem = randomChoice(["None", "Paint", "Powder"]);
+  
+  // Always select a coating system for seed data (no "None")
+  // For plates, prefer primer or paint (not galvanizing typically)
+  const plateCoatingOptions = ["Standard Shop Primer", "Zinc Primer", "Paint", "Powder Coat"];
+  const coatingSystem = randomChoice(plateCoatingOptions);
+  const sspcPrep = getSSPCPrepForCoating(coatingSystem);
+  
   let coatingCost = 0;
+  let coatingRate = 0;
+  
   if (coatingSystem === "Paint") {
-    coatingCost = plateSurfaceArea * PAINT_RATE; // Paint rate is $/SF
-  } else if (coatingSystem === "Powder") {
-    coatingCost = plateSurfaceArea * 3.5; // Powder rate is $/SF
+    coatingRate = PAINT_RATE;
+    coatingCost = plateSurfaceArea * PAINT_RATE;
+  } else if (coatingSystem === "Standard Shop Primer") {
+    coatingRate = SHOP_PRIMER_RATE;
+    coatingCost = plateSurfaceArea * SHOP_PRIMER_RATE;
+  } else if (coatingSystem === "Zinc Primer") {
+    coatingRate = ZINC_PRIMER_RATE;
+    coatingCost = plateSurfaceArea * ZINC_PRIMER_RATE;
+  } else if (coatingSystem === "Powder Coat") {
+    coatingRate = POWDER_COAT_RATE;
+    coatingCost = plateSurfaceArea * POWDER_COAT_RATE;
   }
+  
   return {
     lineId,
     drawingNumber: `D-${randomInt(100, 999)}`,
@@ -552,14 +648,14 @@ function createPlateLine(lineId: string): EstimatingLine {
     plateSurfaceArea,
     plateTotalWeight,
     coatingSystem,
-    sspcPrep: coatingSystem === "Paint" ? randomChoice(["SSPC-SP 6", "SSPC-SP 10"]) : undefined,
+    sspcPrep,
     materialRate: MATERIAL_RATE,
     materialCost,
     laborRate: LABOR_RATE,
     totalLabor: laborHours,
     ...laborBreakdown,
     laborCost,
-    coatingRate: coatingSystem === "Paint" ? PAINT_RATE : coatingSystem === "Powder" ? 3.5 : 0,
+    coatingRate,
     coatingCost,
     totalCost: materialCost + laborCost + coatingCost,
     status: "Active",
@@ -581,7 +677,30 @@ function createMiscMetalLine(lineId: string): EstimatingLine {
   const laborHours = (totalWeight / 2000) * randomBetween(12, 18); // Labor hours based on tons
   const laborBreakdown = generateLaborBreakdown(laborHours, "Misc Metals");
   const laborCost = laborHours * LABOR_RATE;
-  const coatingSystem = randomChoice(["None", "Paint"]);
+  
+  // Always select a coating system for seed data (no "None")
+  // For misc metals, prefer primer or paint
+  const miscCoatingOptions = ["Standard Shop Primer", "Zinc Primer", "Paint"];
+  const coatingSystem = randomChoice(miscCoatingOptions);
+  const sspcPrep = getSSPCPrepForCoating(coatingSystem);
+  
+  // Calculate surface area (approximate: 1 lb steel ≈ 0.15 SF surface area)
+  const surfaceArea = totalWeight * 0.15;
+  
+  let coatingCost = 0;
+  let coatingRate = 0;
+  
+  if (coatingSystem === "Paint") {
+    coatingRate = PAINT_RATE;
+    coatingCost = surfaceArea * PAINT_RATE;
+  } else if (coatingSystem === "Standard Shop Primer") {
+    coatingRate = SHOP_PRIMER_RATE;
+    coatingCost = surfaceArea * SHOP_PRIMER_RATE;
+  } else if (coatingSystem === "Zinc Primer") {
+    coatingRate = ZINC_PRIMER_RATE;
+    coatingCost = surfaceArea * ZINC_PRIMER_RATE;
+  }
+  
   return {
     lineId,
     drawingNumber: `D-${randomInt(100, 999)}`,
@@ -599,14 +718,16 @@ function createMiscMetalLine(lineId: string): EstimatingLine {
     weightPerFoot,
     totalWeight,
     coatingSystem,
-    sspcPrep: coatingSystem === "Paint" ? randomChoice(["SSPC-SP 6", "SSPC-SP 10"]) : undefined,
+    sspcPrep,
     materialRate: MATERIAL_RATE,
     materialCost,
     laborRate: LABOR_RATE,
     totalLabor: laborHours,
     ...laborBreakdown,
     laborCost,
-    totalCost: materialCost + laborCost,
+    coatingRate,
+    coatingCost,
+    totalCost: materialCost + laborCost + coatingCost,
     status: "Active",
   };
 }
@@ -759,7 +880,9 @@ export async function POST(request: NextRequest) {
 
     // Add additional standalone bid events for variety (not tied to projects)
     const bidEventsPath = `companies/${companyId}/bidEvents`;
+    const today = new Date();
     const additionalBids = [
+      // Past bids
       {
         date: daysAgo(3).toISOString().split("T")[0],
         projectName: "Office Park - Building 5",
@@ -815,6 +938,73 @@ export async function POST(request: NextRequest) {
         createdAt: daysAgo(45),
         updatedAt: daysAgo(30),
       },
+      // Future bids (upcoming)
+      {
+        date: new Date(today.getTime() + 5 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // 5 days from now
+        projectName: "Corporate Headquarters - Expansion",
+        generalContractor: "Turner Construction",
+        bidTime: "15:00",
+        status: "active" as const,
+        estimatedValue: 650000,
+        notes: "High priority - strong relationship with GC",
+        createdAt: daysAgo(10),
+        updatedAt: new Date(),
+      },
+      {
+        date: new Date(today.getTime() + 12 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // 12 days from now
+        projectName: "Apartment Complex - Phase 2",
+        generalContractor: "Lendlease",
+        bidTime: "11:30",
+        status: "active" as const,
+        estimatedValue: 720000,
+        notes: "Multi-phase project opportunity",
+        createdAt: daysAgo(15),
+        updatedAt: new Date(),
+      },
+      {
+        date: new Date(today.getTime() + 18 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // 18 days from now
+        projectName: "Medical Center - Outpatient Wing",
+        generalContractor: "McCarthy Building",
+        bidTime: "14:00",
+        status: "active" as const,
+        estimatedValue: 980000,
+        notes: "Complex healthcare project - multiple RFIs",
+        createdAt: daysAgo(20),
+        updatedAt: new Date(),
+      },
+      {
+        date: new Date(today.getTime() + 25 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // 25 days from now
+        projectName: "Distribution Hub - Loading Docks",
+        generalContractor: "Ryan Companies",
+        bidTime: "10:00",
+        status: "active" as const,
+        estimatedValue: 420000,
+        notes: "Industrial project - standard specs",
+        createdAt: daysAgo(12),
+        updatedAt: new Date(),
+      },
+      {
+        date: new Date(today.getTime() + 32 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // 32 days from now
+        projectName: "University Science Building",
+        generalContractor: "Hoffman Construction",
+        bidTime: "13:00",
+        status: "active" as const,
+        estimatedValue: 1100000,
+        notes: "Large education project - competitive",
+        createdAt: daysAgo(18),
+        updatedAt: new Date(),
+      },
+      {
+        date: new Date(today.getTime() + 40 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // 40 days from now
+        projectName: "Shopping Mall - Food Court Renovation",
+        generalContractor: "Clark Construction",
+        bidTime: "16:30",
+        status: "active" as const,
+        estimatedValue: 380000,
+        notes: "Renovation project - tight schedule",
+        createdAt: daysAgo(8),
+        updatedAt: new Date(),
+      },
     ];
 
     for (const bidData of additionalBids) {
@@ -832,29 +1022,86 @@ export async function POST(request: NextRequest) {
 
     // Add future production entries for upcoming projects
     const productionEntriesPath = `companies/${companyId}/productionEntries`;
-    const today = new Date();
     const futureProductionEntries = [
+      // Current/Active production
+      {
+        projectName: "Bridge Rehabilitation - Deck Replacement",
+        startDate: daysAgo(10).toISOString().split("T")[0], // Started 10 days ago
+        endDate: new Date(today.getTime() + 20 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // Ends in 20 days
+        totalHours: 2100,
+        createdAt: daysAgo(10),
+        updatedAt: today,
+      },
+      {
+        projectName: "Industrial Warehouse - Main Structure",
+        startDate: daysAgo(5).toISOString().split("T")[0], // Started 5 days ago
+        endDate: new Date(today.getTime() + 25 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // Ends in 25 days
+        totalHours: 1450,
+        createdAt: daysAgo(5),
+        updatedAt: today,
+      },
+      // Upcoming production
       {
         projectName: "Stadium Renovation - Seating",
-        startDate: new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // 30 days from now
-        endDate: new Date(today.getTime() + 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // 90 days from now
+        startDate: new Date(today.getTime() + 10 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // 10 days from now
+        endDate: new Date(today.getTime() + 70 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // 70 days from now
         totalHours: 1800,
         createdAt: today,
         updatedAt: today,
       },
       {
         projectName: "Retail Complex - Anchor Store",
-        startDate: new Date(today.getTime() + 15 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // 15 days from now
-        endDate: new Date(today.getTime() + 60 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // 60 days from now
+        startDate: new Date(today.getTime() + 5 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // 5 days from now
+        endDate: new Date(today.getTime() + 50 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // 50 days from now
         totalHours: 980,
         createdAt: today,
         updatedAt: today,
       },
       {
         projectName: "School Addition - Gymnasium",
-        startDate: new Date(today.getTime() + 45 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // 45 days from now
-        endDate: new Date(today.getTime() + 105 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // 105 days from now
+        startDate: new Date(today.getTime() + 20 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // 20 days from now
+        endDate: new Date(today.getTime() + 80 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // 80 days from now
         totalHours: 1100,
+        createdAt: today,
+        updatedAt: today,
+      },
+      {
+        projectName: "Parking Structure - Level 2-4",
+        startDate: new Date(today.getTime() + 15 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // 15 days from now
+        endDate: new Date(today.getTime() + 55 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // 55 days from now
+        totalHours: 1050,
+        createdAt: today,
+        updatedAt: today,
+      },
+      {
+        projectName: "Office Complex - Phase 3",
+        startDate: new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // 30 days from now
+        endDate: new Date(today.getTime() + 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // 90 days from now
+        totalHours: 1650,
+        createdAt: today,
+        updatedAt: today,
+      },
+      {
+        projectName: "Manufacturing Facility - Expansion",
+        startDate: new Date(today.getTime() + 25 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // 25 days from now
+        endDate: new Date(today.getTime() + 75 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // 75 days from now
+        totalHours: 1350,
+        createdAt: today,
+        updatedAt: today,
+      },
+      {
+        projectName: "Hospital Wing - Structural Steel",
+        startDate: new Date(today.getTime() + 35 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // 35 days from now
+        endDate: new Date(today.getTime() + 95 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // 95 days from now
+        totalHours: 1950,
+        createdAt: today,
+        updatedAt: today,
+      },
+      {
+        projectName: "Tech Campus - Building B",
+        startDate: new Date(today.getTime() + 40 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // 40 days from now
+        endDate: new Date(today.getTime() + 100 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // 100 days from now
+        totalHours: 1250,
         createdAt: today,
         updatedAt: today,
       },

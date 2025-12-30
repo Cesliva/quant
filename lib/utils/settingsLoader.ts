@@ -16,6 +16,7 @@ export interface CompanyInfo {
   email?: string;
   licenseNumber?: string;
   taxId?: string;
+  logoUrl?: string;
 }
 
 export interface Estimator {
@@ -30,7 +31,7 @@ export interface CompanySettings {
   companyInfo?: CompanyInfo;
   materialGrades: Array<{ grade: string; costPerPound: number }>;
   laborRates: Array<{ trade: string; rate: number }>;
-  coatingTypes: Array<{ type: string; costPerSF: number }>;
+  coatingTypes: Array<{ type: string; costPerSF?: number; costPerPound?: number }>;
   markupSettings: {
     overheadPercentage: number;
     profitPercentage: number;
@@ -95,12 +96,12 @@ const DEFAULT_SETTINGS: CompanySettings = {
   ],
   coatingTypes: [
     { type: "None", costPerSF: 0 },
-    { type: "Standard Shop Primer", costPerSF: 0.75 },
-    { type: "Zinc Primer", costPerSF: 1.25 },
-    { type: "Paint", costPerSF: 2.50 }, // Cost per gallon × coverage (typically 400 SF/gallon)
-    { type: "Powder Coat", costPerSF: 3.50 }, // Cost per gallon × coverage
-    { type: "Galvanizing", costPerSF: 0.15 }, // Cost per pound (converted to SF equivalent for default)
-    { type: "Specialty Coating", costPerSF: 5.00 },
+    { type: "Standard Shop Primer", costPerSF: 1.2 },
+    { type: "Zinc Primer", costPerSF: 1.5 },
+    { type: "Paint", costPerSF: 2.5 },
+    { type: "Powder Coat", costPerSF: 3.5 },
+    { type: "Galvanizing", costPerPound: 0.55 }, // Galvanizing is priced per pound
+    { type: "Specialty Coating", costPerSF: 4.0 },
   ],
   markupSettings: {
     overheadPercentage: 15,
@@ -262,6 +263,11 @@ export function getCoatingRate(
   const coating = companySettings.coatingTypes.find(
     (c) => c.type.toLowerCase() === coatingType.toLowerCase()
   );
+  
+  // Galvanizing uses costPerPound, others use costPerSF
+  if (coatingType.toLowerCase().includes("galvanizing") || coatingType.toLowerCase().includes("galv")) {
+    return coating?.costPerPound || 0;
+  }
   
   return coating?.costPerSF || 0;
 }

@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import { subscribeToCollection, getDocument } from "@/lib/firebase/firestore";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
-import { getProjectPath } from "@/lib/firebase/firestore";
 import { Briefcase, DollarSign, Calendar } from "lucide-react";
 import Link from "next/link";
 
@@ -95,43 +94,43 @@ export default function BacklogAtAGlance({ companyId }: BacklogAtAGlanceProps) {
   }, [companyId]);
 
   return (
-    <Card className="border border-gray-200 shadow-lg hover:shadow-xl transition-all duration-300 bg-white">
-      <CardHeader className="pb-5">
-        <CardTitle className="flex items-center gap-2 text-lg font-semibold">
-          <Briefcase className="w-5 h-5 text-blue-600" />
+    <Card className="w-full h-full flex flex-col p-2 md:p-3 rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300">
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+          <Briefcase className="w-4 h-4 text-blue-600" />
           Backlog at a Glance
         </CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
+      <CardContent className="flex-1">
+        <div className="space-y-2">
           {/* Total Active Projects */}
-          <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg border border-blue-100">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
-                <Briefcase className="w-5 h-5 text-white" />
+          <div className="flex items-center justify-between p-2 bg-blue-50 rounded-lg border border-blue-100">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                <Briefcase className="w-4 h-4 text-white" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-600">Active Projects</p>
-                <p className="text-2xl font-bold text-gray-900">{totalProjects}</p>
+                <p className="text-xs font-medium text-gray-600">Active Projects</p>
+                <p className="text-lg font-bold text-gray-900">{totalProjects}</p>
               </div>
             </div>
             <Link
               href="/projects"
-              className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+              className="text-xs text-blue-600 hover:text-blue-700 font-medium"
             >
-              View All →
+              View →
             </Link>
           </div>
 
           {/* Total Contract Value */}
-          <div className="flex items-center justify-between p-4 bg-emerald-50 rounded-lg border border-emerald-100">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-emerald-500 rounded-lg flex items-center justify-center">
-                <DollarSign className="w-5 h-5 text-white" />
+          <div className="flex items-center justify-between p-2 bg-emerald-50 rounded-lg border border-emerald-100">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                <DollarSign className="w-4 h-4 text-white" />
               </div>
-              <div>
-                <p className="text-sm font-medium text-gray-600">Total Contract Value</p>
-                <p className="text-2xl font-bold text-gray-900">
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-gray-600">Total Contract Value</p>
+                <p className="text-lg font-bold text-gray-900 truncate">
                   {totalContractValue.toLocaleString("en-US", {
                     style: "currency",
                     currency: "USD",
@@ -144,32 +143,32 @@ export default function BacklogAtAGlance({ companyId }: BacklogAtAGlanceProps) {
 
           {/* Estimated Weeks of Coverage */}
           {estimatedWeeks !== null && weeklyCapacity ? (
-            <div className="flex items-center justify-between p-4 bg-orange-50 rounded-lg border border-orange-100">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-orange-500 rounded-lg flex items-center justify-center">
-                  <Calendar className="w-5 h-5 text-white" />
+            <div className="flex items-center justify-between p-2 bg-orange-50 rounded-lg border border-orange-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Calendar className="w-4 h-4 text-white" />
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Estimated Weeks of Coverage</p>
-                  <p className="text-2xl font-bold text-gray-900">{estimatedWeeks} weeks</p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Based on {weeklyCapacity.toLocaleString()} hours/week capacity
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-gray-600">Weeks Coverage</p>
+                  <p className="text-lg font-bold text-gray-900">{estimatedWeeks} weeks</p>
+                  <p className="text-[10px] text-gray-500 mt-0.5">
+                    {weeklyCapacity.toLocaleString()} hrs/week
                   </p>
                 </div>
               </div>
             </div>
           ) : (
-            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gray-400 rounded-lg flex items-center justify-center">
-                  <Calendar className="w-5 h-5 text-white" />
+            <div className="flex items-center justify-between p-2 bg-gray-50 rounded-lg border border-gray-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-gray-400 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Calendar className="w-4 h-4 text-white" />
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Estimated Weeks of Coverage</p>
-                  <p className="text-sm text-gray-500">
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-gray-600">Weeks Coverage</p>
+                  <p className="text-[10px] text-gray-500">
                     {weeklyCapacity 
-                      ? "No hours data available for active projects"
-                      : "Set weekly capacity in Company Settings to calculate coverage"}
+                      ? "No hours data"
+                      : "Set capacity in Settings"}
                   </p>
                 </div>
               </div>

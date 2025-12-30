@@ -219,7 +219,7 @@ function ProjectsPageContent() {
             </p>
           </div>
           <div className="flex gap-3">
-            <Link href="/projects/new/details">
+            <Link href="/projects/new">
               <Button className="px-5 py-2.5 rounded-2xl bg-blue-500 text-white text-sm font-medium shadow-md hover:bg-blue-600 transition-all duration-200">
                 + New Project
               </Button>
@@ -280,7 +280,7 @@ function ProjectsPageContent() {
                   : "No projects yet."}
               </p>
               {permissions?.canCreateProjects && (
-                <Link href="/projects/new/details">
+                <Link href="/projects/new">
                   <Button className="px-5 py-2.5 rounded-xl bg-blue-500 text-white">
                     Create Your First Project
                   </Button>

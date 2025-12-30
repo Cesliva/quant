@@ -1,15 +1,14 @@
 "use client";
 
 /**
- * Cost Trend Streamgraph Component
+ * Cost Trend Analysis Chart
  * 
- * Displays cost trends by category/subcategory over time using streamgraph visualization
- * 
- * Data Source: Quant EstimatingLine from companies/{companyId}/projects/{projectId}/lines
- * Timeline: Time-based (monthly) OR version-based (approved budgets) OR project-based
+ * Zero-centered diverging streamgraph showing man hours per ton by department
+ * Data flows from zero center in both +y and -y directions like water
+ * Shows collective data with optional individual project overlay
  */
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo } from "react";
 import { 
   ChartPoint, 
   ChartSeries, 
@@ -21,7 +20,7 @@ import {
 import { EstimatingLine } from "@/components/estimating/EstimatingGrid";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
-import { TrendingUp, TrendingDown, AlertTriangle, BarChart3 } from "lucide-react";
+import { BarChart3 } from "lucide-react";
 
 interface CostTrendStreamgraphProps {
   lines: EstimatingLine[];
@@ -33,61 +32,294 @@ interface CostTrendStreamgraphProps {
   projects?: Array<{ id: string; name?: string; status?: string; projectNumber?: string }>;
 }
 
-// Color palette for material categories
+// Refined color palette - softer, more professional
 const MATERIAL_COLORS: Record<string, string> = {
-  "Columns": "#3b82f6",
-  "Beams": "#10b981",
-  "Misc Metals": "#f59e0b",
-  "Plates": "#ef4444",
-  "Uncategorized": "#6b7280",
+  "Columns": "#3b82f6",      // Blue
+  "Beams": "#10b981",        // Green
+  "Misc Metals": "#f59e0b",  // Amber
+  "Plates": "#ef4444",       // Red
+  "Structural": "#8b5cf6",    // Purple
+  "Uncategorized": "#94a3b8", // Gray
 };
 
-// Color palette for labor categories
+// Labor category colors
 const LABOR_COLORS: Record<string, string> = {
-  "Unload": "#0ea5e9",
-  "Cut": "#ef4444",
-  "Cope": "#f97316",
-  "Process": "#eab308",
-  "Drill/Punch": "#84cc16",
-  "Fit": "#22c55e",
-  "Weld": "#14b8a6",
-  "Prep/Clean": "#06b6d4",
-  "Paint": "#3b82f6",
-  "Handle/Move": "#8b5cf6",
-  "Load/Ship": "#a855f7",
+  "Unload": "#3b82f6",        // Blue
+  "Cut": "#10b981",           // Green
+  "Cope": "#8b5cf6",          // Purple
+  "Process Plate": "#f59e0b", // Amber
+  "Drill/Punch": "#ef4444",   // Red
+  "Fit": "#06b6d4",           // Cyan
+  "Weld": "#f97316",          // Orange
+  "Prep/Clean": "#84cc16",    // Lime
+  "Paint": "#ec4899",         // Pink
+  "Handle/Move": "#6366f1",   // Indigo
+  "Load/Ship": "#14b8a6",     // Teal
 };
 
-// Combined color palette
-const CATEGORY_COLORS: Record<string, string> = {
-  ...MATERIAL_COLORS,
-  ...LABOR_COLORS,
-  "Awarded": "#22c55e",
-  "Not Awarded": "#f97316",
-};
+// Labor category definitions
+const LABOR_CATEGORIES = [
+  { key: "Unload", field: "laborUnload" },
+  { key: "Cut", field: "laborCut" },
+  { key: "Cope", field: "laborCope" },
+  { key: "Process Plate", field: "laborProcessPlate" },
+  { key: "Drill/Punch", field: "laborDrillPunch" },
+  { key: "Fit", field: "laborFit" },
+  { key: "Weld", field: "laborWeld" },
+  { key: "Prep/Clean", field: "laborPrepClean" },
+  { key: "Paint", field: "laborPaint" },
+  { key: "Handle/Move", field: "laborHandleMove" },
+  { key: "Load/Ship", field: "laborLoadShip" },
+];
 
-const DEFAULT_COLOR = "#94a3b8";
-
-function getCategoryColor(category: string, index: number): string {
-  return CATEGORY_COLORS[category] || 
-    `hsl(${(index * 137.5) % 360}, 70%, 50%)`; // Golden angle for color distribution
+function getCategoryColor(category: string, index: number, isLabor: boolean = false): string {
+  if (isLabor && LABOR_COLORS[category]) {
+    return LABOR_COLORS[category];
+  }
+  if (!isLabor && MATERIAL_COLORS[category]) {
+    return MATERIAL_COLORS[category];
+  }
+  // Generate distinct color using golden angle
+  const hue = (index * 137.5) % 360;
+  return `hsl(${hue}, 65%, 55%)`;
 }
 
 /**
- * Calculate stacked area chart layout (simplified streamgraph-style)
- * Uses standard stacking with optional baseline centering
+ * Transform lines to chart points grouped by labor categories
+ * X-axis = Labor categories (Unload, Cut, Fit, Weld, etc.)
+ * Y-axis = Man Hours per Ton for each category
+ * Each category flows from zero outward
+ */
+function transformToLaborChartPoints(
+  lines: EstimatingLine[],
+  metric: ChartMetric,
+  approvedBudgets?: ApprovedBudget[]
+): ChartPoint[] {
+  const chartPoints: ChartPoint[] = [];
+  
+  // Filter active lines
+  const activeLines = lines.filter((line) => line.status !== "Void");
+  
+  if (activeLines.length === 0) {
+    return [];
+  }
+  
+  // Calculate total weight across all projects
+  const totalWeight = activeLines.reduce((sum, line) => {
+    const weight = line.materialType === "Material" 
+      ? (line.totalWeight || 0)
+      : (line.plateTotalWeight || 0);
+    return sum + weight;
+  }, 0);
+  
+  // For each labor category, calculate its total MHPT across all projects
+  // Each labor category becomes a timeline point (X-axis position)
+  LABOR_CATEGORIES.forEach((laborCat) => {
+    // Sum labor hours for this category across all lines
+    const totalLaborHours = activeLines.reduce((sum, line) => {
+      const value = (line as any)[laborCat.field] || 0;
+      return sum + (typeof value === "number" ? value : 0);
+    }, 0);
+    
+    // Calculate MHPT for this labor category
+    let value = 0;
+    if (metric === "laborHoursPerTon") {
+      value = totalWeight > 0 ? (totalLaborHours / (totalWeight / 2000)) : 0;
+    } else if (metric === "costPerTon") {
+      const totalCost = activeLines.reduce((sum, line) => sum + (line.totalCost || 0), 0);
+      value = totalWeight > 0 ? (totalCost / (totalWeight / 2000)) : 0;
+    }
+    
+    // Create a chart point for this labor category
+    // The timeline label (t) is the labor category name
+    // The category field can be used for grouping if needed
+    // The value is the MHPT for this labor category
+    if (totalLaborHours > 0 || value > 0) {
+      chartPoints.push({
+        t: laborCat.key, // X-axis position = labor category name
+        category: laborCat.key, // Use same for category
+        value, // Y-axis value = MHPT for this category
+      });
+    }
+  });
+  
+  return chartPoints;
+}
+
+/**
+ * Calculate zero-centered diverging streamgraph layout
+ * Each category's total is split 50/50 between positive (above) and negative (below) sides
+ * Outer bands on both sides equal the total man hours per department
  */
 function calculateStreamgraphLayout(
   series: ChartSeries[],
-  timeline: string[]
+  timeline: string[],
+  isLaborBreakdown: boolean = false
 ): { 
-  paths: Array<{ category: string; subCategory?: string; path: string; color: string; dataPoints?: Array<{x: number, y: number}> }>; 
+  paths: Array<{ category: string; subCategory?: string; path: string; color: string }>; 
+  outerBandPath: string; // Solid line showing total MHPT per project (top + bottom = total)
   maxValue: number;
-  dataPoints?: Array<Array<{x: number, y: number, category: string, value: number}>>;
+  minValue: number;
 } {
   if (series.length === 0 || timeline.length === 0) {
-    return { paths: [], maxValue: 0, dataPoints: [] };
+    return { paths: [], outerBandPath: "", maxValue: 0, minValue: 0 };
   }
   
+  // For labor breakdown: X-axis = labor categories, each flows independently from zero
+  if (isLaborBreakdown) {
+    // Find max absolute value for scaling
+    let maxAbsValue = 0;
+    series.forEach((s) => {
+      s.points.forEach((p) => {
+        maxAbsValue = Math.max(maxAbsValue, Math.abs(p.value));
+      });
+    });
+    
+    const maxValue = maxAbsValue || 1;
+    const minValue = -maxAbsValue;
+    const centerY = 50;
+    
+    // Build data matrix: timeline (labor categories) x series
+    const dataMatrix: number[][] = timeline.map(() => new Array(series.length).fill(0));
+    
+    series.forEach((s, seriesIndex) => {
+      const pointMap = new Map(s.points.map(p => [p.t, p.value]));
+      timeline.forEach((t, timeIndex) => {
+        dataMatrix[timeIndex][seriesIndex] = pointMap.get(t) || 0;
+      });
+    });
+    
+    // Create paths - each series represents a different grouping
+    // In labor breakdown, typically one series with all categories
+    const paths = series.map((s, seriesIndex) => {
+      const topPoints: Array<{x: number, y: number}> = [];
+      const bottomPoints: Array<{x: number, y: number}> = [];
+      
+      timeline.forEach((t, timeIndex) => {
+        const x = timeline.length > 1 
+          ? (timeIndex / (timeline.length - 1)) * 100 
+          : 50;
+        
+        // Get value for this labor category
+        const value = dataMatrix[timeIndex][seriesIndex];
+        const halfValue = value / 2; // Split 50/50
+        
+        // Top point (positive side) - flows from center outward
+        const topY = centerY - ((halfValue / maxValue) * 50);
+        topPoints.push({ x, y: topY });
+        
+        // Bottom point (negative side) - flows from center outward
+        const bottomY = centerY - ((-halfValue / maxValue) * 50);
+        bottomPoints.push({ x, y: bottomY });
+      });
+      
+      // Create path that flows from zero at each category
+      // Start at center, flow out, connect categories, return to center
+      let path = `M ${topPoints[0].x} ${centerY}`; // Start at center
+      path += ` L ${topPoints[0].x} ${topPoints[0].y}`; // Flow out to top
+      
+      // Top curve connecting all categories
+      for (let i = 0; i < topPoints.length - 1; i++) {
+        const current = topPoints[i];
+        const next = topPoints[i + 1];
+        const controlX1 = current.x + (next.x - current.x) * 0.5;
+        const controlY1 = current.y;
+        const controlX2 = current.x + (next.x - current.x) * 0.5;
+        const controlY2 = next.y;
+        path += ` C ${controlX1} ${controlY1}, ${controlX2} ${controlY2}, ${next.x} ${next.y}`;
+      }
+      
+      // Connect back to center at last point
+      const lastTop = topPoints[topPoints.length - 1];
+      path += ` L ${lastTop.x} ${centerY}`;
+      
+      // Bottom curve (negative side) - reverse order
+      const lastBottom = bottomPoints[bottomPoints.length - 1];
+      path += ` L ${lastBottom.x} ${centerY}`;
+      path += ` L ${lastBottom.x} ${lastBottom.y}`;
+      
+      for (let i = bottomPoints.length - 1; i > 0; i--) {
+        const current = bottomPoints[i];
+        const prev = bottomPoints[i - 1];
+        const controlX1 = current.x - (current.x - prev.x) * 0.5;
+        const controlY1 = current.y;
+        const controlX2 = current.x - (current.x - prev.x) * 0.5;
+        const controlY2 = prev.y;
+        path += ` C ${controlX1} ${controlY1}, ${controlX2} ${controlY2}, ${prev.x} ${prev.y}`;
+      }
+      
+      // Connect to first bottom point and back to center
+      const firstBottom = bottomPoints[0];
+      path += ` L ${firstBottom.x} ${firstBottom.y}`;
+      path += ` L ${firstBottom.x} ${centerY}`;
+      path += ' Z'; // Close path
+      
+      return {
+        category: s.category,
+        subCategory: s.subCategory,
+        path,
+        color: getCategoryColor(s.category, seriesIndex, true),
+      };
+    });
+    
+    // Create outer band showing total MHPT per labor category
+    const topOuterPoints: Array<{x: number, y: number}> = [];
+    const bottomOuterPoints: Array<{x: number, y: number}> = [];
+    
+    timeline.forEach((t, timeIndex) => {
+      const x = timeline.length > 1 
+        ? (timeIndex / (timeline.length - 1)) * 100 
+        : 50;
+      
+      // Sum all series values for this timeline point (labor category)
+      const total = series.reduce((sum, s, sIdx) => {
+        return sum + dataMatrix[timeIndex][sIdx];
+      }, 0);
+      
+      const halfTotal = total / 2;
+      
+      // Top point (positive side)
+      const topY = centerY - ((halfTotal / maxValue) * 50);
+      topOuterPoints.push({ x, y: topY });
+      
+      // Bottom point (negative side)
+      const bottomY = centerY - ((-halfTotal / maxValue) * 50);
+      bottomOuterPoints.push({ x, y: bottomY });
+    });
+    
+    // Create outer band path
+    let outerBandPath = `M ${topOuterPoints[0].x} ${centerY}`;
+    outerBandPath += ` L ${topOuterPoints[0].x} ${topOuterPoints[0].y}`;
+    for (let i = 0; i < topOuterPoints.length - 1; i++) {
+      const current = topOuterPoints[i];
+      const next = topOuterPoints[i + 1];
+      const controlX1 = current.x + (next.x - current.x) * 0.5;
+      const controlY1 = current.y;
+      const controlX2 = current.x + (next.x - current.x) * 0.5;
+      const controlY2 = next.y;
+      outerBandPath += ` C ${controlX1} ${controlY1}, ${controlX2} ${controlY2}, ${next.x} ${next.y}`;
+    }
+    const lastTop = topOuterPoints[topOuterPoints.length - 1];
+    outerBandPath += ` L ${lastTop.x} ${centerY}`;
+    outerBandPath += ` L ${bottomOuterPoints[bottomOuterPoints.length - 1].x} ${bottomOuterPoints[bottomOuterPoints.length - 1].y}`;
+    for (let i = bottomOuterPoints.length - 1; i > 0; i--) {
+      const current = bottomOuterPoints[i];
+      const next = bottomOuterPoints[i - 1];
+      const controlX1 = current.x - (current.x - next.x) * 0.5;
+      const controlY1 = current.y;
+      const controlX2 = current.x - (current.x - next.x) * 0.5;
+      const controlY2 = next.y;
+      outerBandPath += ` C ${controlX1} ${controlY1}, ${controlX2} ${controlY2}, ${next.x} ${next.y}`;
+    }
+    const firstBottom = bottomOuterPoints[0];
+    outerBandPath += ` L ${firstBottom.x} ${firstBottom.y}`;
+    outerBandPath += ` L ${firstBottom.x} ${centerY}`;
+    outerBandPath += ' Z';
+    
+    return { paths, outerBandPath, maxValue, minValue };
+  }
+  
+  // Original material categories logic (stacked by project)
   // Build data matrix: timeline x series
   const dataMatrix: number[][] = timeline.map(() => new Array(series.length).fill(0));
   
@@ -98,23 +330,45 @@ function calculateStreamgraphLayout(
     });
   });
   
-  // Calculate cumulative stacks (bottom to top)
-  const cumulative: number[][] = timeline.map(() => new Array(series.length).fill(0));
-  const totals: number[] = new Array(timeline.length).fill(0);
-  
-  timeline.forEach((_, timeIndex) => {
-    let sum = 0;
-    series.forEach((_, seriesIndex) => {
-      cumulative[timeIndex][seriesIndex] = sum;
-      sum += dataMatrix[timeIndex][seriesIndex];
-    });
-    totals[timeIndex] = sum;
+  // Calculate total MHPT per project (sum of all departments)
+  const projectTotals: number[] = timeline.map((_, timeIndex) => {
+    return series.reduce((sum, _, seriesIndex) => {
+      return sum + dataMatrix[timeIndex][seriesIndex];
+    }, 0);
   });
   
-  // Find max value for scaling
-  const maxValue = Math.max(...totals, 1); // Avoid division by zero
+  // Find max total for scaling - split 50/50 above and below center
+  const maxTotal = Math.max(...projectTotals, 1);
+  const maxValue = maxTotal / 2; // Half goes positive, half negative
+  const minValue = -maxTotal / 2;
   
-  // Generate SVG paths with smooth curves (stacked from bottom)
+  // Center line is at 50% (y = 50)
+  const centerY = 50;
+  
+  // Calculate cumulative stacks for positive (above center) and negative (below center)
+  // Each category contributes 50% of its value to positive side, 50% to negative side
+  const positiveCumulative: number[][] = timeline.map(() => new Array(series.length).fill(0));
+  const negativeCumulative: number[][] = timeline.map(() => new Array(series.length).fill(0));
+  
+  timeline.forEach((_, timeIndex) => {
+    let posSum = 0;
+    let negSum = 0;
+    
+    series.forEach((_, seriesIndex) => {
+      const value = dataMatrix[timeIndex][seriesIndex];
+      const halfValue = value / 2; // Split 50/50
+      
+      // Positive side (above center)
+      positiveCumulative[timeIndex][seriesIndex] = posSum;
+      posSum += halfValue;
+      
+      // Negative side (below center) - stored as negative values
+      negativeCumulative[timeIndex][seriesIndex] = -negSum;
+      negSum += halfValue;
+    });
+  });
+  
+  // Generate SVG paths with wave pattern
   const paths = series.map((s, seriesIndex) => {
     const topPoints: Array<{x: number, y: number}> = [];
     const bottomPoints: Array<{x: number, y: number}> = [];
@@ -123,14 +377,27 @@ function calculateStreamgraphLayout(
       const x = timeline.length > 1 
         ? (timeIndex / (timeline.length - 1)) * 100 
         : 50;
-      const bottomY = 100 - ((cumulative[timeIndex][seriesIndex] / maxValue) * 100);
-      const topY = 100 - (((cumulative[timeIndex][seriesIndex] + dataMatrix[timeIndex][seriesIndex]) / maxValue) * 100);
+      
+      const value = dataMatrix[timeIndex][seriesIndex];
+      const halfValue = value / 2;
+      
+      // Positive side (above center)
+      const posBottom = positiveCumulative[timeIndex][seriesIndex];
+      const posTop = posBottom + halfValue;
+      
+      // Negative side (below center)
+      const negTop = negativeCumulative[timeIndex][seriesIndex];
+      const negBottom = negTop - halfValue;
+      
+      // Convert to Y coordinates (centered at 50%)
+      const topY = centerY - ((posTop / maxValue) * 50);
+      const bottomY = centerY - ((negBottom / maxValue) * 50);
       
       topPoints.push({ x, y: topY });
       bottomPoints.push({ x, y: bottomY });
     });
     
-    // Create smooth curve for top edge
+    // Create smooth curve for top edge (positive side)
     let path = `M ${topPoints[0].x} ${topPoints[0].y}`;
     for (let i = 0; i < topPoints.length - 1; i++) {
       const current = topPoints[i];
@@ -142,7 +409,7 @@ function calculateStreamgraphLayout(
       path += ` C ${controlX1} ${controlY1}, ${controlX2} ${controlY2}, ${next.x} ${next.y}`;
     }
     
-    // Close path along bottom (reverse order)
+    // Close path along bottom (negative side, reverse order)
     for (let i = bottomPoints.length - 1; i >= 0; i--) {
       if (i === bottomPoints.length - 1) {
         path += ` L ${bottomPoints[i].x} ${bottomPoints[i].y}`;
@@ -157,26 +424,158 @@ function calculateStreamgraphLayout(
       }
     }
     
-    path += ' Z'; // Close path
+    path += ' Z';
     
     return {
       category: s.category,
       subCategory: s.subCategory,
       path,
       color: getCategoryColor(s.category, seriesIndex),
-      dataPoints: topPoints, // Store for markers
     };
   });
   
-  return { paths, maxValue, dataPoints: series.map((s, seriesIndex) => {
-    return timeline.map((t, timeIndex) => {
-      const x = timeline.length > 1 
-        ? (timeIndex / (timeline.length - 1)) * 100 
-        : 50;
-      const topY = 100 - (((cumulative[timeIndex][seriesIndex] + dataMatrix[timeIndex][seriesIndex]) / maxValue) * 100);
-      return { x, y: topY, category: s.category, value: dataMatrix[timeIndex][seriesIndex] };
-    });
-  }) };
+  // Generate outer band paths (top and bottom) - showing total MHPT per project
+  const topOuterPoints: Array<{x: number, y: number}> = [];
+  const bottomOuterPoints: Array<{x: number, y: number}> = [];
+  
+  timeline.forEach((t, timeIndex) => {
+    const x = timeline.length > 1 
+      ? (timeIndex / (timeline.length - 1)) * 100 
+      : 50;
+    
+    const total = projectTotals[timeIndex];
+    const halfTotal = total / 2;
+    
+    // Top outer band (positive side) - 50% of total
+    const topY = centerY - ((halfTotal / maxValue) * 50);
+    topOuterPoints.push({ x, y: topY });
+    
+    // Bottom outer band (negative side) - 50% of total
+    const bottomY = centerY - ((-halfTotal / maxValue) * 50);
+    bottomOuterPoints.push({ x, y: bottomY });
+  });
+  
+  // Create smooth curves for outer bands - combine into single closed path
+  let outerBandPath = `M ${topOuterPoints[0].x} ${topOuterPoints[0].y}`;
+  
+  // Top curve
+  for (let i = 0; i < topOuterPoints.length - 1; i++) {
+    const current = topOuterPoints[i];
+    const next = topOuterPoints[i + 1];
+    const controlX1 = current.x + (next.x - current.x) * 0.5;
+    const controlY1 = current.y;
+    const controlX2 = current.x + (next.x - current.x) * 0.5;
+    const controlY2 = next.y;
+    outerBandPath += ` C ${controlX1} ${controlY1}, ${controlX2} ${controlY2}, ${next.x} ${next.y}`;
+  }
+  
+  // Connect to bottom (at last point)
+  outerBandPath += ` L ${bottomOuterPoints[bottomOuterPoints.length - 1].x} ${bottomOuterPoints[bottomOuterPoints.length - 1].y}`;
+  
+  // Bottom curve (reverse order)
+  for (let i = bottomOuterPoints.length - 1; i > 0; i--) {
+    const current = bottomOuterPoints[i];
+    const next = bottomOuterPoints[i - 1];
+    const controlX1 = current.x - (current.x - next.x) * 0.5;
+    const controlY1 = current.y;
+    const controlX2 = current.x - (current.x - next.x) * 0.5;
+    const controlY2 = next.y;
+    outerBandPath += ` C ${controlX1} ${controlY1}, ${controlX2} ${controlY2}, ${next.x} ${next.y}`;
+  }
+  
+  outerBandPath += ' Z';
+  
+  return { paths, outerBandPath, maxValue, minValue };
+}
+
+/**
+ * Calculate overlay path for selected project
+ * Returns top and bottom paths showing project's total MHPT
+ * Only shows value at the project's timeline position, 0 elsewhere
+ */
+function calculateProjectOverlay(
+  projectLines: EstimatingLine[],
+  timeline: string[],
+  projectTimelineIndex: number,
+  selectedMetric: ChartMetric,
+  maxValue: number,
+  centerY: number
+): { topPath: string; bottomPath: string } | null {
+  if (projectLines.length === 0 || timeline.length === 0 || projectTimelineIndex === -1) {
+    return null;
+  }
+  
+  // Calculate project totals - aggregate all lines for the project
+  const totalWeight = projectLines.reduce((sum, line) => {
+    const weight = line.materialType === "Material" 
+      ? (line.totalWeight || 0)
+      : (line.plateTotalWeight || 0);
+    return sum + weight;
+  }, 0);
+  
+  const totalLabor = projectLines.reduce((sum, line) => sum + (line.totalLabor || 0), 0);
+  const totalCost = projectLines.reduce((sum, line) => sum + (line.totalCost || 0), 0);
+  
+  // Calculate the metric value for this project
+  let projectValue = 0;
+  if (selectedMetric === "laborHoursPerTon") {
+    projectValue = totalWeight > 0 ? (totalLabor / (totalWeight / 2000)) : 0;
+  } else if (selectedMetric === "costPerTon") {
+    projectValue = totalWeight > 0 ? (totalCost / (totalWeight / 2000)) : 0;
+  } else {
+    return null;
+  }
+  
+  // Create array with project value only at its timeline position, 0 elsewhere
+  const projectTotals: number[] = timeline.map((_, index) => 
+    index === projectTimelineIndex ? projectValue : 0
+  );
+  
+  // Create paths for top and bottom (50/50 split)
+  const topPoints: Array<{x: number, y: number}> = [];
+  const bottomPoints: Array<{x: number, y: number}> = [];
+  
+  timeline.forEach((t, timeIndex) => {
+    const x = timeline.length > 1 
+      ? (timeIndex / (timeline.length - 1)) * 100 
+      : 50;
+    
+    const total = projectTotals[timeIndex];
+    const halfTotal = total / 2;
+    
+    // Top point (positive side)
+    const topY = centerY - ((halfTotal / maxValue) * 50);
+    topPoints.push({ x, y: topY });
+    
+    // Bottom point (negative side)
+    const bottomY = centerY - ((-halfTotal / maxValue) * 50);
+    bottomPoints.push({ x, y: bottomY });
+  });
+  
+  // Create smooth curves
+  let topPath = `M ${topPoints[0].x} ${topPoints[0].y}`;
+  for (let i = 0; i < topPoints.length - 1; i++) {
+    const current = topPoints[i];
+    const next = topPoints[i + 1];
+    const controlX1 = current.x + (next.x - current.x) * 0.5;
+    const controlY1 = current.y;
+    const controlX2 = current.x + (next.x - current.x) * 0.5;
+    const controlY2 = next.y;
+    topPath += ` C ${controlX1} ${controlY1}, ${controlX2} ${controlY2}, ${next.x} ${next.y}`;
+  }
+  
+  let bottomPath = `M ${bottomPoints[0].x} ${bottomPoints[0].y}`;
+  for (let i = 0; i < bottomPoints.length - 1; i++) {
+    const current = bottomPoints[i];
+    const next = bottomPoints[i + 1];
+    const controlX1 = current.x + (next.x - current.x) * 0.5;
+    const controlY1 = current.y;
+    const controlX2 = current.x + (next.x - current.x) * 0.5;
+    const controlY2 = next.y;
+    bottomPath += ` C ${controlX1} ${controlY1}, ${controlX2} ${controlY2}, ${next.x} ${next.y}`;
+  }
+  
+  return { topPath, bottomPath };
 }
 
 export default function CostTrendStreamgraph({
@@ -187,335 +586,184 @@ export default function CostTrendStreamgraph({
   companyId,
   onCategoryClick,
   projects = [],
+  allProjectLines = [],
 }: CostTrendStreamgraphProps) {
-  const [selectedMetric, setSelectedMetric] = useState<ChartMetric>("totalCost");
-  const [awardedFilter, setAwardedFilter] = useState<"all" | "awarded" | "notAwarded">("all");
-  const [includeSubCategories, setIncludeSubCategories] = useState(false);
-  const [visibleCategories, setVisibleCategories] = useState<Set<string>>(new Set());
+  const [selectedMetric, setSelectedMetric] = useState<ChartMetric>("laborHoursPerTon");
   const [viewMode, setViewMode] = useState<"material" | "labor">("material");
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   
-  // Transform data to chart points
-  const chartPoints = useMemo(() => {
-    const points = transformToChartPoints(
-      lines,
-      selectedMetric,
-      "project",
-      approvedBudgets,
-      projectId,
-      projectName
-    );
+  // Get unique projects for dropdown
+  const availableProjects = useMemo(() => {
+    const projectMap = new Map<string, { id: string; name: string }>();
     
-    // Enhance points with project info for display
-    return points.map(point => {
-      if (point.projectId) {
-        const project = projects.find(p => p.id === point.projectId);
-        if (project) {
-          return {
-            ...point,
-            projectName: project.name || project.projectNumber || point.projectName,
-            projectNumber: project.projectNumber,
-          };
-        }
-      }
-      return point;
-    });
-  }, [lines, selectedMetric, approvedBudgets, projectId, projectName, projects]);
-  
-  // Labor categories for breakdown
-  const laborCategories = [
-    { key: "laborUnload", label: "Unload" },
-    { key: "laborCut", label: "Cut" },
-    { key: "laborCope", label: "Cope" },
-    { key: "laborProcessPlate", label: "Process" },
-    { key: "laborDrillPunch", label: "Drill/Punch" },
-    { key: "laborFit", label: "Fit" },
-    { key: "laborWeld", label: "Weld" },
-    { key: "laborPrepClean", label: "Prep/Clean" },
-    { key: "laborPaint", label: "Paint" },
-    { key: "laborHandleMove", label: "Handle/Move" },
-    { key: "laborLoadShip", label: "Load/Ship" },
-  ];
-
-  // Aggregate labor hours per ton by project for labor view
-  const laborSeries = useMemo(() => {
-    if (viewMode !== "labor") return [];
-    
-    // Group lines by project
-    const projectGroups = new Map<string, EstimatingLine[]>();
-    lines.forEach(line => {
-      const projectKey = (line as any)._projectName || (line as any)._projectId || "Unknown";
-      if (!projectGroups.has(projectKey)) {
-        projectGroups.set(projectKey, []);
-      }
-      projectGroups.get(projectKey)!.push(line);
-    });
-    
-    // Create series for each labor category (hours per ton)
-    const seriesData: ChartSeries[] = laborCategories.map(({ key, label }) => {
-      const points: ChartPoint[] = [];
-      
-      projectGroups.forEach((projectLines, projectName) => {
-        // Calculate total hours for this labor category
-        const totalHours = projectLines.reduce((sum, line) => {
-          return sum + ((line as any)[key] || 0);
-        }, 0);
-        
-        // Calculate total weight for this project (convert lbs to tons)
-        const totalWeightLbs = projectLines.reduce((sum, line) => {
-          const weight = line.materialType === "Material" 
-            ? (line.totalWeight || 0)
-            : (line.plateTotalWeight || 0);
-          return sum + weight;
-        }, 0);
-        
-        const totalWeightTons = totalWeightLbs / 2000;
-        
-        // Calculate hours per ton
-        const hoursPerTon = totalWeightTons > 0 ? (totalHours / totalWeightTons) : 0;
-        
-        points.push({
-          t: projectName,
-          category: label,
-          value: hoursPerTon,
+    // Add projects from props
+    projects.forEach(p => {
+      if (p.id && !projectMap.has(p.id)) {
+        projectMap.set(p.id, {
+          id: p.id,
+          name: p.name || p.projectNumber || p.id
         });
-      });
+      }
+    });
+    
+    // Also check lines for project IDs
+    lines.forEach(line => {
+      // Lines might have project context from CostTrendAnalysis wrapper
+      // This will be handled by the parent component
+    });
+    
+    return Array.from(projectMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [projects, lines]);
+  
+  // Filter lines for selected project overlay
+  const selectedProjectLines = useMemo(() => {
+    if (!selectedProjectId || allProjectLines.length === 0) return [];
+    
+    // Find the project's lines from allProjectLines
+    const projectData = allProjectLines.find(p => p.projectId === selectedProjectId);
+    return projectData?.lines || [];
+  }, [selectedProjectId, allProjectLines]);
+  
+  // Transform data to chart points (collective data)
+  const chartPoints = useMemo(() => {
+    if (viewMode === "labor") {
+      // Use labor breakdown transformation
+      return transformToLaborChartPoints(lines, selectedMetric, approvedBudgets);
+    } else {
+      // Use material categories (existing logic)
+      const points = transformToChartPoints(
+        lines,
+        selectedMetric,
+        "project",
+        approvedBudgets,
+        projectId,
+        projectName
+      );
       
-      return {
-        category: label,
-        points: points.sort((a, b) => a.t.localeCompare(b.t)),
+      return points.map(point => {
+        if (point.projectId) {
+          const project = projects.find(p => p.id === point.projectId);
+          if (project) {
+            return {
+              ...point,
+              projectName: project.name || project.projectNumber || point.projectName,
+              projectNumber: project.projectNumber,
+            };
+          }
+        }
+        return point;
+      });
+    }
+  }, [lines, selectedMetric, approvedBudgets, projectId, projectName, projects, viewMode]);
+  
+  // Aggregate per project and split by category
+  // For labor breakdown, we want each labor category as a timeline point, not a series
+  const series = useMemo(() => {
+    if (viewMode === "labor") {
+      // In labor breakdown, each chart point represents a labor category at a timeline position
+      // The timeline IS the labor categories, so we want to show the flow from category to category
+      // Create one series per unique grouping (if any), but typically one series showing all categories
+      
+      // Group points by their category (which should all be the same in labor breakdown)
+      // But actually, each point's t (timeline) is the labor category name
+      // So we want to aggregate by the original grouping if there are multiple projects
+      // For now, create a single series with all points
+      const singleSeries: ChartSeries = {
+        category: "Total",
+        points: chartPoints.sort((a, b) => {
+          // Sort by labor category order
+          const orderA = LABOR_CATEGORIES.findIndex(lc => lc.key === a.t);
+          const orderB = LABOR_CATEGORIES.findIndex(lc => lc.key === b.t);
+          if (orderA === -1 && orderB === -1) return a.t.localeCompare(b.t);
+          if (orderA === -1) return 1;
+          if (orderB === -1) return -1;
+          return orderA - orderB;
+        }),
       };
-    });
-    
-    // Filter out categories with all zeros
-    const filteredSeries = seriesData.filter(s => s.points.some(p => p.value > 0));
-    
-    // Add total man hours per ton series
-    const totalSeriesPoints: ChartPoint[] = [];
-    projectGroups.forEach((projectLines, projectName) => {
-      // Calculate total labor hours for this project
-      const totalHours = projectLines.reduce((sum, line) => {
-        return sum + (line.totalLabor || 0);
-      }, 0);
-      
-      // Calculate total weight for this project (convert lbs to tons)
-      const totalWeightLbs = projectLines.reduce((sum, line) => {
-        const weight = line.materialType === "Material" 
-          ? (line.totalWeight || 0)
-          : (line.plateTotalWeight || 0);
-        return sum + weight;
-      }, 0);
-      
-      const totalWeightTons = totalWeightLbs / 2000;
-      
-      // Calculate total hours per ton
-      const totalHoursPerTon = totalWeightTons > 0 ? (totalHours / totalWeightTons) : 0;
-      
-      totalSeriesPoints.push({
-        t: projectName,
-        category: "Total Man Hours / Ton",
-        value: totalHoursPerTon,
-      });
-    });
-    
-    // Add total series if there's data
-    if (totalSeriesPoints.some(p => p.value > 0)) {
-      filteredSeries.push({
-        category: "Total Man Hours / Ton",
-        points: totalSeriesPoints.sort((a, b) => a.t.localeCompare(b.t)),
-      });
+      return [singleSeries];
     }
-    
-    return filteredSeries;
-  }, [lines, viewMode]);
-
-  // Aggregate per project and split by category/subcategory (material view)
-  const materialSeries = useMemo(() => {
-    if (viewMode !== "material") return [];
-    const aggregated = aggregateToSeries(chartPoints, includeSubCategories);
-    return aggregated;
-  }, [chartPoints, includeSubCategories, viewMode]);
-
-  // Separate total series from labor series for line rendering
-  const { laborSeriesWithoutTotal, totalSeries } = useMemo(() => {
-    if (viewMode !== "labor") {
-      return { laborSeriesWithoutTotal: [], totalSeries: null };
-    }
-    
-    const total = laborSeries.find(s => s.category === "Total Man Hours / Ton");
-    const withoutTotal = laborSeries.filter(s => s.category !== "Total Man Hours / Ton");
-    
-    return {
-      laborSeriesWithoutTotal: withoutTotal,
-      totalSeries: total || null,
-    };
-  }, [laborSeries, viewMode]);
-
-  // Use the appropriate series based on view mode (excluding total for stacked areas)
-  const series = viewMode === "labor" ? laborSeriesWithoutTotal : materialSeries;
-
-  // Update visible categories when series changes
-  useMemo(() => {
-    if (visibleCategories.size === 0 && series.length > 0) {
-      setVisibleCategories(new Set(series.map(s =>
-        includeSubCategories && s.subCategory
-          ? `${s.category}|${s.subCategory}`
-          : s.category
-      )));
-    }
-  }, [series, includeSubCategories, visibleCategories]);
+    return aggregateToSeries(chartPoints, false);
+  }, [chartPoints, viewMode]);
   
   // Get unique timeline values
   const timeline = useMemo(() => {
-    if (viewMode === "labor" && laborSeries.length > 0) {
-      // For labor mode, get timeline from laborSeries
-      const times = new Set(laborSeries[0]?.points.map(p => p.t) || []);
-      return Array.from(times).sort();
-    }
     const times = new Set(chartPoints.map(p => p.t));
     return Array.from(times).sort();
-  }, [chartPoints, viewMode, laborSeries]);
+  }, [chartPoints]);
   
-  // Map timeline label -> project info for display (number/name)
-  const timelineProjectInfo = useMemo(() => {
-    const infoMap = new Map<string, { name?: string; number?: string }>();
-    timeline.forEach((t) => {
-      const point = chartPoints.find(p => p.t === t);
-      if (point?.projectId) {
-        const project = projects.find(p => p.id === point.projectId);
-        if (project) {
-          infoMap.set(t, {
-            name: project.name,
-            number: project.projectNumber,
-          });
-        }
-      }
-    });
-    return infoMap;
-  }, [timeline, chartPoints, projects]);
-
-  // Calculate streamgraph layout with max value cap for cost per ton
-  const { paths, maxValue, dataPoints } = useMemo(() => {
-    const layout = calculateStreamgraphLayout(series, timeline);
-    
-    // For cost per ton, cap max value at 3000 (extremely large project)
-    if (selectedMetric === "costPerTon" && layout.maxValue > 3000) {
-      // Recalculate with capped max value
-      const cappedMax = 3000;
-      return {
-        ...layout,
-        maxValue: cappedMax,
-        // Recalculate paths with new max value
-        paths: layout.paths.map((pathData, seriesIndex) => {
-          // Rebuild path with new max value
-          const s = series[seriesIndex];
-          const pointMap = new Map(s.points.map(p => [p.t, p.value]));
-          
-          const topPoints: Array<{x: number, y: number}> = [];
-          const bottomPoints: Array<{x: number, y: number}> = [];
-          
-          // Calculate cumulative stacks with capped max
-          const cumulative: number[] = [];
-          let sum = 0;
-          timeline.forEach((t, timeIndex) => {
-            cumulative[timeIndex] = sum;
-            sum += (pointMap.get(t) || 0);
-          });
-          
-          timeline.forEach((t, timeIndex) => {
-            const x = timeline.length > 1 
-              ? (timeIndex / (timeline.length - 1)) * 100 
-              : 50;
-            const value = pointMap.get(t) || 0;
-            const bottomY = 100 - ((cumulative[timeIndex] / cappedMax) * 100);
-            const topY = 100 - (((cumulative[timeIndex] + value) / cappedMax) * 100);
-            
-            topPoints.push({ x, y: topY });
-            bottomPoints.push({ x, y: bottomY });
-          });
-          
-          // Rebuild path
-          let path = `M ${topPoints[0].x} ${topPoints[0].y}`;
-          for (let i = 0; i < topPoints.length - 1; i++) {
-            const current = topPoints[i];
-            const next = topPoints[i + 1];
-            const controlX1 = current.x + (next.x - current.x) * 0.5;
-            const controlY1 = current.y;
-            const controlX2 = current.x + (next.x - current.x) * 0.5;
-            const controlY2 = next.y;
-            path += ` C ${controlX1} ${controlY1}, ${controlX2} ${controlY2}, ${next.x} ${next.y}`;
-          }
-          
-          for (let i = bottomPoints.length - 1; i >= 0; i--) {
-            if (i === bottomPoints.length - 1) {
-              path += ` L ${bottomPoints[i].x} ${bottomPoints[i].y}`;
-            } else {
-              const current = bottomPoints[i + 1];
-              const next = bottomPoints[i];
-              const controlX1 = current.x - (current.x - next.x) * 0.5;
-              const controlY1 = current.y;
-              const controlX2 = current.x - (current.x - next.x) * 0.5;
-              const controlY2 = next.y;
-              path += ` C ${controlX1} ${controlY1}, ${controlX2} ${controlY2}, ${next.x} ${next.y}`;
-            }
-          }
-          
-          path += ' Z';
-          
-          return {
-            ...pathData,
-            path,
-            dataPoints: topPoints,
-          };
-        }),
-      };
-    }
-    
-    return layout;
-  }, [series, timeline, selectedMetric]);
+  // Calculate chart layout (collective data)
+  const { paths, outerBandPath, maxValue, minValue } = useMemo(() => {
+    return calculateStreamgraphLayout(series, timeline, viewMode === "labor");
+  }, [series, timeline, viewMode]);
   
-  // Calculate total line path if total series exists
-  const totalLinePath = useMemo(() => {
-    if (!totalSeries || timeline.length === 0) return null;
+  // Get selected project info
+  const selectedProject = useMemo(() => {
+    if (!selectedProjectId) return null;
+    return projects.find(p => p.id === selectedProjectId);
+  }, [selectedProjectId, projects]);
+  
+  // Calculate project overlay if project is selected
+  const projectOverlay = useMemo(() => {
+    if (!selectedProjectId || selectedProjectLines.length === 0 || !selectedProject) return null;
     
-    const pointMap = new Map(totalSeries.points.map(p => [p.t, p.value]));
-    const maxValueForTotal = Math.max(...totalSeries.points.map(p => p.value), 1);
-    // Use the same max value as the stacked areas for consistency
-    const scaleMax = selectedMetric === "costPerTon" && maxValue > 3000 ? 3000 : Math.max(maxValue, maxValueForTotal);
-    
-    const points: Array<{x: number, y: number}> = [];
-    timeline.forEach((t, timeIndex) => {
-      const x = timeline.length > 1 
-        ? (timeIndex / (timeline.length - 1)) * 100 
-        : 50;
-      const value = pointMap.get(t) || 0;
-      const y = 100 - ((value / scaleMax) * 100);
-      points.push({ x, y });
+    // Find which timeline point corresponds to this project
+    const projectName = selectedProject.name || selectedProject.projectNumber || selectedProjectId;
+    const projectTimelineIndex = timeline.findIndex(t => {
+      const tLower = t.toLowerCase();
+      const pLower = projectName.toLowerCase();
+      return tLower.includes(pLower) || pLower.includes(tLower) || tLower === pLower;
     });
     
-    if (points.length === 0) return null;
+    // Debug logging
+    console.log('[CostTrend] Project Overlay Debug:', {
+      selectedProjectId,
+      projectName,
+      timeline,
+      projectTimelineIndex,
+      selectedProjectLinesCount: selectedProjectLines.length,
+      selectedMetric
+    });
     
-    let path = `M ${points[0].x} ${points[0].y}`;
-    for (let i = 0; i < points.length - 1; i++) {
-      const current = points[i];
-      const next = points[i + 1];
-      const controlX1 = current.x + (next.x - current.x) * 0.5;
-      const controlY1 = current.y;
-      const controlX2 = current.x + (next.x - current.x) * 0.5;
-      const controlY2 = next.y;
-      path += ` C ${controlX1} ${controlY1}, ${controlX2} ${controlY2}, ${next.x} ${next.y}`;
+    if (projectTimelineIndex === -1) {
+      console.warn('[CostTrend] Could not find project in timeline:', { projectName, timeline });
+      return null;
     }
     
-    return { path, points, color: "#ef4444" }; // Red line for total
-  }, [totalSeries, timeline, maxValue, selectedMetric]);
+    // Calculate project metrics for debugging
+    const totalWeight = selectedProjectLines.reduce((sum, line) => {
+      const weight = line.materialType === "Material" 
+        ? (line.totalWeight || 0)
+        : (line.plateTotalWeight || 0);
+      return sum + weight;
+    }, 0);
+    const totalLabor = selectedProjectLines.reduce((sum, line) => sum + (line.totalLabor || 0), 0);
+    const projectMHPT = totalWeight > 0 ? (totalLabor / (totalWeight / 2000)) : 0;
+    
+    console.log('[CostTrend] Project Metrics:', {
+      totalWeight,
+      totalLabor,
+      projectMHPT,
+      maxValue
+    });
+    
+    return calculateProjectOverlay(
+      selectedProjectLines,
+      timeline,
+      projectTimelineIndex,
+      selectedMetric,
+      maxValue,
+      50 // centerY
+    );
+  }, [selectedProjectId, selectedProjectLines, selectedProject, timeline, selectedMetric, maxValue]);
   
   // Format metric label
   const getMetricLabel = (metric: ChartMetric): string => {
     switch (metric) {
-      case "totalCost": return "Total Cost ($)";
-      case "costPerTon": return "Cost per Ton ($/ton)";
-      case "laborHoursPerTon": return "Labor Hours per Ton";
+      case "totalCost": return "Total Cost";
+      case "costPerTon": return "Cost per Ton";
+      case "laborHoursPerTon": return "Man Hours per Ton";
       case "pctOfTotal": return "% of Total";
-      case "varianceVsBaseline": return "Variance vs Baseline ($)";
+      case "varianceVsBaseline": return "Variance vs Baseline";
       default: return metric;
     }
   };
@@ -524,7 +772,10 @@ export default function CostTrendStreamgraph({
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Cost Trend Analysis</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <BarChart3 className="w-5 h-5" />
+            Cost Trend Analysis
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-gray-500 text-center py-8">
@@ -536,12 +787,11 @@ export default function CostTrendStreamgraph({
   }
   
   return (
-    <Card className="p-3 md:p-4 rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300">
-      <CardHeader>
-        <div className="flex flex-col gap-3">
+    <Card className="p-4 md:p-6 rounded-2xl border border-slate-200/60 bg-white shadow-sm hover:shadow-md transition-shadow">
+      <CardHeader className="pb-4">
+        <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <BarChart3 className="w-5 h-5" />
+            <CardTitle className="text-xl font-semibold text-gray-900">
               Cost Trend Analysis
             </CardTitle>
             <div className="flex items-center gap-2">
@@ -549,145 +799,171 @@ export default function CostTrendStreamgraph({
                 variant={selectedMetric === "laborHoursPerTon" ? "primary" : "outline"}
                 size="sm"
                 onClick={() => setSelectedMetric("laborHoursPerTon")}
+                className="text-xs"
               >
-              Labor Hours / Ton
-            </Button>
-            <Button
-              variant={selectedMetric === "costPerTon" ? "primary" : "outline"}
-              size="sm"
-              onClick={() => setSelectedMetric("costPerTon")}
-            >
-              Cost / Ton
-            </Button>
+                Man Hours / Ton
+              </Button>
+              <Button
+                variant={selectedMetric === "costPerTon" ? "primary" : "outline"}
+                size="sm"
+                onClick={() => setSelectedMetric("costPerTon")}
+                className="text-xs"
+              >
+                Cost / Ton
+              </Button>
             </div>
           </div>
           
-          {/* View Mode Toggle - Material vs Labor Categories */}
-          <div className="flex items-center justify-between border-t border-gray-100 pt-3">
-            <span className="text-sm text-gray-600">View by:</span>
-            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
-              <button
-                onClick={() => setViewMode("material")}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                  viewMode === "material"
-                    ? "bg-white text-blue-600 shadow-sm"
-                    : "text-gray-600 hover:text-gray-900"
-                }`}
-              >
-                Material Categories
-              </button>
-              <button
-                onClick={() => setViewMode("labor")}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                  viewMode === "labor"
-                    ? "bg-white text-blue-600 shadow-sm"
-                    : "text-gray-600 hover:text-gray-900"
-                }`}
-              >
-                Labor Breakdown
-              </button>
+          {/* View Mode Toggle and Project Selector */}
+          <div className="flex items-center gap-4 flex-wrap">
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-medium text-gray-700">View by:</span>
+              <div className="flex items-center gap-1 bg-gray-50 rounded-lg p-1">
+                <button
+                  onClick={() => setViewMode("material")}
+                  className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
+                    viewMode === "material"
+                      ? "bg-white text-gray-900 shadow-sm"
+                      : "text-gray-600 hover:text-gray-900"
+                  }`}
+                >
+                  Material Categories
+                </button>
+                <button
+                  onClick={() => setViewMode("labor")}
+                  className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
+                    viewMode === "labor"
+                      ? "bg-white text-gray-900 shadow-sm"
+                      : "text-gray-600 hover:text-gray-900"
+                  }`}
+                >
+                  Labor Breakdown
+                </button>
+              </div>
             </div>
+            
+            {/* Project Selector */}
+            {availableProjects.length > 0 && (
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700">Compare Project:</label>
+                <select
+                  value={selectedProjectId}
+                  onChange={(e) => setSelectedProjectId(e.target.value)}
+                  className="px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">All Projects (Collective)</option>
+                  {availableProjects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        
-        {/* Streamgraph Visualization */}
+      
+      <CardContent className="space-y-6">
+        {/* Chart Visualization */}
         <div className="w-full relative" style={{ height: "420px" }}>
-          {/* Y-axis title */}
-          <div className="absolute left-0 top-0 text-xs font-semibold text-gray-700 pl-1" style={{ width: "55px" }}>
-            {viewMode === "labor" ? "Labor Hours / Ton" : getMetricLabel(selectedMetric)}
+          {/* Y-axis label */}
+          <div className="absolute left-0 top-1/2 -translate-y-1/2 -rotate-90 text-sm font-medium text-gray-700 whitespace-nowrap" style={{ width: "420px", left: "-200px" }}>
+            {getMetricLabel(selectedMetric)}
           </div>
           
-          {/* Chart area wrapper - positioned to match the chart space */}
-          <div className="absolute" style={{ top: "20px", left: "55px", right: "16px", bottom: "105px" }}>
-            {/* SVG Chart */}
+          {/* Chart area */}
+          <div className="absolute" style={{ top: "20px", left: "60px", right: "20px", bottom: "80px" }}>
             <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full">
-              {/* Gridlines */}
+              {/* Subtle grid lines */}
               {[0, 0.25, 0.5, 0.75, 1].map((v, idx) => {
                 const y = 100 - v * 100;
                 return (
-                  <line key={`grid-${idx}`} x1="0" y1={y} x2="100" y2={y} stroke="#e5e7eb" strokeWidth="0.5" />
+                  <line
+                    key={`grid-${idx}`}
+                    x1="0"
+                    y1={y}
+                    x2="100"
+                    y2={y}
+                    stroke="#f1f5f9"
+                    strokeWidth="0.5"
+                  />
                 );
               })}
               
-              {/* Chart border */}
-              <rect x="0" y="0" width="100" height="100" fill="none" stroke="#d1d5db" strokeWidth="0.5" />
+              {/* Zero center line (highlighted) */}
+              <line x1="0" y1="50" x2="100" y2="50" stroke="#374151" strokeWidth="1" strokeDasharray="2,2" opacity="0.5" />
               
-              {/* Streamgraph paths (stacked areas) */}
-              {paths.map((pathData, index) => (
-                <path
-                  key={`${pathData.category}-${pathData.subCategory || ""}-${index}`}
-                  d={pathData.path}
-                  fill={pathData.color}
-                  opacity={0.75}
-                  stroke={pathData.color}
-                  strokeWidth="0.3"
-                  className="cursor-pointer hover:opacity-100 transition-opacity"
-                  onClick={() => {
-                    if (onCategoryClick) {
-                      onCategoryClick(pathData.category, pathData.subCategory);
-                    }
-                  }}
-                />
-              ))}
+              {/* Stacked area paths - render in reverse for proper layering */}
+              {paths.slice().reverse().map((pathData, index) => {
+                const color = pathData.color || getCategoryColor(pathData.category, paths.length - 1 - index, viewMode === "labor");
+                return (
+                  <path
+                    key={`${pathData.category}-${pathData.subCategory || "base"}-${index}`}
+                    d={pathData.path}
+                    fill={color}
+                    opacity="0.85"
+                    stroke="white"
+                    strokeWidth="0.5"
+                    className="cursor-pointer hover:opacity-100 transition-opacity"
+                    onClick={() => {
+                      if (onCategoryClick) {
+                        onCategoryClick(pathData.category, pathData.subCategory);
+                      }
+                    }}
+                  />
+                );
+              })}
               
-              {/* Total line overlay (for labor breakdown mode) */}
-              {totalLinePath && (
+              {/* Outer boundary - total MHPT per project (collective) */}
+              {outerBandPath && (
                 <path
-                  d={totalLinePath.path}
+                  d={outerBandPath}
                   fill="none"
-                  stroke={totalLinePath.color}
+                  stroke="#1e293b"
                   strokeWidth="2"
-                  strokeDasharray="4,2"
-                  opacity={0.9}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  opacity="0.9"
                   className="pointer-events-none"
                 />
               )}
+              
+              {/* Selected project overlay - dotted red lines */}
+              {projectOverlay && (
+                <>
+                  <path
+                    d={projectOverlay.topPath}
+                    fill="none"
+                    stroke="#ef4444"
+                    strokeWidth="2"
+                    strokeDasharray="4,4"
+                    strokeLinecap="round"
+                    opacity="0.9"
+                    className="pointer-events-none"
+                  />
+                  <path
+                    d={projectOverlay.bottomPath}
+                    fill="none"
+                    stroke="#ef4444"
+                    strokeWidth="2"
+                    strokeDasharray="4,4"
+                    strokeLinecap="round"
+                    opacity="0.9"
+                    className="pointer-events-none"
+                  />
+                </>
+              )}
             </svg>
-            
-            {/* Data point markers - Perfect circles positioned relative to chart area */}
-            {dataPoints && dataPoints.flat().map((point, index) => (
-              <div
-                key={`marker-${index}`}
-                className="absolute w-3 h-3 rounded-full bg-red-500 border-2 border-white shadow-sm pointer-events-none"
-                style={{
-                  left: `${point.x}%`,
-                  top: `${point.y}%`,
-                  transform: "translate(-50%, -50%)",
-                }}
-              />
-            ))}
-            
-            {/* Total line markers */}
-            {totalLinePath && totalLinePath.points.map((point, index) => (
-              <div
-                key={`total-marker-${index}`}
-                className="absolute w-3 h-3 rounded-full bg-red-500 border-2 border-white shadow-sm pointer-events-none"
-                style={{
-                  left: `${point.x}%`,
-                  top: `${point.y}%`,
-                  transform: "translate(-50%, -50%)",
-                }}
-              />
-            ))}
           </div>
           
-          {/* Y-axis labels (positioned outside SVG) */}
-          <div className="absolute left-0 w-14 flex flex-col justify-between text-right pr-2 text-xs text-gray-500" style={{ top: "20px", bottom: "105px" }}>
-            {[1, 0.75, 0.5, 0.25, 0].map((v, idx) => {
+          {/* Y-axis labels - centered around zero */}
+          <div className="absolute left-0 w-14 flex flex-col justify-between text-right pr-3 text-xs text-gray-600" style={{ top: "20px", bottom: "80px" }}>
+            {/* Positive values (top to center) */}
+            {[1, 0.5, 0].map((v, idx) => {
               const rawValue = maxValue * v;
-              // Format: use K for thousands, M for millions
               let displayValue: string;
-              if (viewMode === "labor") {
-                // Labor hours - no dollar sign
-                if (rawValue >= 1000) {
-                  displayValue = `${(rawValue / 1000).toFixed(1)}K`;
-                } else {
-                  displayValue = rawValue.toFixed(0);
-                }
-              } else if (selectedMetric === "costPerTon") {
-                // For cost per ton, show values up to 3000
+              if (selectedMetric === "costPerTon") {
                 if (rawValue >= 1000) {
                   displayValue = `$${(rawValue / 1000).toFixed(1)}K`;
                 } else {
@@ -702,35 +978,73 @@ export default function CostTrendStreamgraph({
                   displayValue = `$${rawValue.toFixed(0)}`;
                 }
               } else {
-                if (rawValue >= 1000) {
-                  displayValue = `${(rawValue / 1000).toFixed(1)}K`;
-                } else {
-                  displayValue = rawValue.toFixed(1);
-                }
+                displayValue = rawValue.toFixed(0);
               }
+              const yPosition = 100 - (v * 50); // Top half (0% to 50%)
               return (
-                <span key={`y-label-${idx}`} className="leading-none">{displayValue}</span>
+                <span
+                  key={`y-label-pos-${idx}`}
+                  className="leading-none"
+                  style={{ marginTop: idx === 0 ? '0' : 'auto', marginBottom: idx === 2 ? '0' : 'auto' }}
+                >
+                  {displayValue}
+                </span>
+              );
+            })}
+            {/* Zero line */}
+            <span key="y-label-zero" className="leading-none absolute font-semibold" style={{ top: '50%', transform: 'translateY(-50%)' }}>0</span>
+            {/* Negative values (center to bottom) */}
+            {[0.5, 1].map((v, idx) => {
+              const rawValue = -maxValue * v;
+              let displayValue: string;
+              if (selectedMetric === "costPerTon") {
+                if (Math.abs(rawValue) >= 1000) {
+                  displayValue = `-$${(Math.abs(rawValue) / 1000).toFixed(1)}K`;
+                } else {
+                  displayValue = `-$${Math.abs(rawValue).toFixed(0)}`;
+                }
+              } else if (selectedMetric === "totalCost") {
+                if (Math.abs(rawValue) >= 1000000) {
+                  displayValue = `-$${(Math.abs(rawValue) / 1000000).toFixed(1)}M`;
+                } else if (Math.abs(rawValue) >= 1000) {
+                  displayValue = `-$${(Math.abs(rawValue) / 1000).toFixed(0)}K`;
+                } else {
+                  displayValue = `-$${Math.abs(rawValue).toFixed(0)}`;
+                }
+              } else {
+                displayValue = rawValue.toFixed(0);
+              }
+              const yPosition = 50 + (v * 50); // Bottom half (50% to 100%)
+              return (
+                <span
+                  key={`y-label-neg-${idx}`}
+                  className="leading-none"
+                  style={{ marginTop: idx === 0 ? '0' : 'auto', marginBottom: idx === 1 ? '0' : 'auto' }}
+                >
+                  {displayValue}
+                </span>
               );
             })}
           </div>
           
-          {/* X-axis labels (positioned below chart area) - rotated vertically */}
-          <div className="absolute bottom-0 flex justify-between text-xs text-gray-600" style={{ left: "55px", right: "16px", height: "100px" }}>
+          {/* X-axis labels */}
+          <div className="absolute bottom-0 flex justify-between text-xs text-gray-600" style={{ left: "60px", right: "20px", height: "80px" }}>
             {timeline.map((t, index) => {
-              const projectInfo = timelineProjectInfo.get(t);
-              const displayName = projectInfo?.name || projectInfo?.number || t || `Project ${index + 1}`;
-              // Show more of the name since it's vertical now
-              const label = displayName.length > 20 ? `${displayName.substring(0, 18)}..` : displayName;
+              const label = t.length > 15 ? `${t.substring(0, 13)}..` : t;
               return (
-                <div key={`x-label-${index}`} className="flex flex-col items-center" style={{ width: "20px" }}>
-                  <div className="w-0.5 h-2 bg-red-500 mb-1 flex-shrink-0"></div>
-                  <span 
-                    className="font-medium text-gray-700 whitespace-nowrap origin-top-left"
-                    style={{ 
-                      fontSize: "9px",
-                      transform: "rotate(-65deg) translateX(-50%)",
+                <div
+                  key={`x-label-${index}`}
+                  className="flex flex-col items-center justify-end"
+                  style={{ width: `${100 / timeline.length}%` }}
+                >
+                  <div className="w-px h-2 bg-gray-400 mb-1"></div>
+                  <span
+                    className="font-medium text-gray-700 text-[10px] text-center leading-tight"
+                    style={{
+                      transform: "rotate(-45deg)",
                       transformOrigin: "top center",
-                      marginTop: "4px",
+                      width: "60px",
+                      marginTop: "8px",
                     }}
                   >
                     {label}
@@ -742,33 +1056,48 @@ export default function CostTrendStreamgraph({
         </div>
         
         {/* Legend */}
-        <div className="flex flex-wrap gap-3 items-center">
+        <div className="flex flex-wrap gap-4 items-center pt-2 border-t border-gray-100">
+          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+            {viewMode === "labor" ? "Labor Categories" : "Departments"}
+          </span>
           {series.map((s, index) => {
-            const color = getCategoryColor(s.category, index);
+            const color = getCategoryColor(s.category, index, viewMode === "labor");
             return (
-              <div key={`${s.category}-${s.subCategory || "base"}`} className="flex items-center gap-2 text-sm text-gray-700">
-                <span className="inline-block w-3 h-3 rounded" style={{ backgroundColor: color }} />
-                <span className="font-medium">
-                  {s.category}
-                  {includeSubCategories && s.subCategory ? ` • ${s.subCategory}` : ""}
-                </span>
+              <div
+                key={`${s.category}-${s.subCategory || "base"}`}
+                className="flex items-center gap-2 text-sm text-gray-700"
+              >
+                <span
+                  className="inline-block w-3 h-3 rounded-sm"
+                  style={{ backgroundColor: color }}
+                />
+                <span className="font-medium">{s.category}</span>
               </div>
             );
           })}
-          {totalSeries && (
+          <div className="flex items-center gap-2 text-sm text-gray-700 ml-auto">
+            <svg className="w-6 h-3">
+              <path
+                d="M 0 1.5 L 6 1.5"
+                stroke="#1e293b"
+                strokeWidth="2"
+                fill="none"
+              />
+            </svg>
+            <span className="text-xs text-gray-600">Total MHPT (Collective)</span>
+          </div>
+          {projectOverlay && (
             <div className="flex items-center gap-2 text-sm text-gray-700">
-              <svg className="w-4 h-3" viewBox="0 0 16 3" preserveAspectRatio="none">
+              <svg className="w-6 h-3">
                 <path
-                  d="M 0 1.5 L 16 1.5"
+                  d="M 0 1.5 L 6 1.5"
                   stroke="#ef4444"
                   strokeWidth="2"
-                  strokeDasharray="4,2"
+                  strokeDasharray="4,4"
                   fill="none"
                 />
               </svg>
-              <span className="font-semibold text-red-600">
-                {totalSeries.category}
-              </span>
+              <span className="text-xs text-gray-600">Selected Project</span>
             </div>
           )}
         </div>
@@ -776,4 +1105,3 @@ export default function CostTrendStreamgraph({
     </Card>
   );
 }
-

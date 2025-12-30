@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
-import { Save, Building2, DollarSign, Package, Paintbrush, Settings2, Plus, Trash2, Info, AlertCircle, TrendingUp, BookOpen, Database } from "lucide-react";
+import { Save, Building2, DollarSign, Package, Paintbrush, Settings2, Plus, Trash2, Info, AlertCircle, TrendingUp, BookOpen, Database, Upload as UploadIcon, X, Image } from "lucide-react";
 import CompanyAddressBook from "@/components/settings/CompanyAddressBook";
 import { 
   loadCompanySettings, 
@@ -16,6 +16,7 @@ import {
 } from "@/lib/utils/settingsLoader";
 import { validateCompanySettings, getFieldError, type ValidationError } from "@/lib/utils/validation";
 import { useCompanyId } from "@/lib/hooks/useCompanyId";
+import { uploadFileToStorage, deleteFileFromStorage } from "@/lib/firebase/storage";
 
 type TabType = "company" | "labor" | "material" | "coating" | "markup" | "advanced" | "executive" | "addressbook";
 
@@ -34,7 +35,8 @@ interface MaterialGrade {
 interface CoatingType {
   id: string;
   type: string;
-  costPerSF: number;
+  costPerSF?: number; // For coatings priced per square foot
+  costPerPound?: number; // For coatings priced per pound (e.g., Galvanizing)
 }
 
 function SettingsPageContent() {
@@ -57,7 +59,12 @@ function SettingsPageContent() {
     email: "",
     licenseNumber: "",
     taxId: "",
+    logoUrl: "",
   });
+  
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
 
   const [laborRates, setLaborRates] = useState<LaborRate[]>([
     { id: "1", trade: "Fabricator", rate: 45 },
@@ -73,10 +80,13 @@ function SettingsPageContent() {
   ]);
 
   const [coatingTypes, setCoatingTypes] = useState<CoatingType[]>([
-    { id: "1", type: "Galvanized", costPerSF: 2.50 },
-    { id: "2", type: "Paint (Primer + Topcoat)", costPerSF: 3.25 },
-    { id: "3", type: "Powder Coat", costPerSF: 4.00 },
-    { id: "4", type: "None", costPerSF: 0 },
+    { id: "1", type: "None", costPerSF: 0 },
+    { id: "2", type: "Standard Shop Primer", costPerSF: 1.2 },
+    { id: "3", type: "Zinc Primer", costPerSF: 1.5 },
+    { id: "4", type: "Paint", costPerSF: 2.5 },
+    { id: "5", type: "Powder Coat", costPerSF: 3.5 },
+    { id: "6", type: "Galvanizing", costPerPound: 0.55 },
+    { id: "7", type: "Specialty Coating", costPerSF: 4.0 },
   ]);
 
   const [markupSettings, setMarkupSettings] = useState({
@@ -143,7 +153,12 @@ function SettingsPageContent() {
           email: settings.companyInfo.email || "",
           licenseNumber: settings.companyInfo.licenseNumber || "",
           taxId: settings.companyInfo.taxId || "",
+          logoUrl: settings.companyInfo.logoUrl || "",
         });
+        // Set logo preview if logo exists
+        if (settings.companyInfo.logoUrl) {
+          setLogoPreview(settings.companyInfo.logoUrl);
+        }
       }
       
       // Load labor rates
@@ -172,9 +187,10 @@ function SettingsPageContent() {
       if (settings.coatingTypes && settings.coatingTypes.length > 0) {
         setCoatingTypes(
           settings.coatingTypes.map((coating, index) => ({
-            id: index.toString(),
+            id: (index + 1).toString(),
             type: coating.type,
-            costPerSF: coating.costPerSF,
+            costPerSF: (coating as any).costPerSF,
+            costPerPound: (coating as any).costPerPound,
           }))
         );
       }
@@ -282,6 +298,7 @@ function SettingsPageContent() {
           email: companySettings.email || undefined,
           licenseNumber: companySettings.licenseNumber || undefined,
           taxId: companySettings.taxId || undefined,
+          logoUrl: companySettings.logoUrl || undefined,
         },
         materialGrades: materialGrades.map(({ id, ...rest }) => rest),
         laborRates: laborRates.map(({ id, ...rest }) => rest),
@@ -309,6 +326,123 @@ function SettingsPageContent() {
       alert("Failed to save settings. Please try again.");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleLogoUpload = async () => {
+    if (!logoFile || !companyId) return;
+    
+    setIsUploadingLogo(true);
+    try {
+      // Delete old logo if exists
+      if (companySettings.logoUrl) {
+        try {
+          const oldPath = companySettings.logoUrl.split('/o/')[1]?.split('?')[0];
+          if (oldPath) {
+            await deleteFileFromStorage(decodeURIComponent(oldPath));
+          }
+        } catch (error) {
+          console.warn("Failed to delete old logo:", error);
+        }
+      }
+      
+      // Upload new logo
+      const timestamp = Date.now();
+      const fileExtension = logoFile.name.split('.').pop();
+      const logoPath = `companies/${companyId}/logo/company-logo-${timestamp}.${fileExtension}`;
+      const downloadURL = await uploadFileToStorage(logoFile, logoPath);
+      
+      // Update settings with new logo URL
+      setCompanySettings({ ...companySettings, logoUrl: downloadURL });
+      setLogoPreview(downloadURL);
+      setLogoFile(null);
+      
+      // Save immediately
+      const settingsToSave: CompanySettings = {
+        companyInfo: {
+          ...companySettings,
+          logoUrl: downloadURL,
+        },
+        materialGrades: materialGrades.map(({ id, ...rest }) => rest),
+        laborRates: laborRates.map(({ id, ...rest }) => rest),
+        coatingTypes: coatingTypes.map(({ id, ...rest }) => rest),
+        markupSettings,
+        advancedSettings,
+        shopCapacityHoursPerWeek: executiveSettings.shopCapacityHoursPerWeek || undefined,
+        shopCapacityHoursPerDay: executiveSettings.shopCapacityHoursPerDay || undefined,
+        backlogForecastWeeks: executiveSettings.backlogForecastWeeks || undefined,
+        underUtilizedThreshold: executiveSettings.underUtilizedThreshold || undefined,
+        workingDays:
+          executiveSettings.workingDays && executiveSettings.workingDays.length > 0
+            ? executiveSettings.workingDays
+            : undefined,
+        holidays:
+          executiveSettings.holidays?.filter((date) => date && date.trim() !== "") || undefined,
+        pipelineRanges: pipelineRanges,
+      };
+      
+      await saveCompanySettings(companyId, settingsToSave);
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus("unsaved"), 3000);
+      
+      alert("Logo uploaded successfully!");
+    } catch (error: any) {
+      console.error("Failed to upload logo:", error);
+      alert(`Failed to upload logo: ${error.message || "Please try again."}`);
+    } finally {
+      setIsUploadingLogo(false);
+    }
+  };
+
+  const handleLogoRemove = async () => {
+    if (!companyId || !companySettings.logoUrl) return;
+    
+    if (!confirm("Are you sure you want to remove the company logo?")) return;
+    
+    try {
+      // Delete from storage
+      const logoPath = companySettings.logoUrl.split('/o/')[1]?.split('?')[0];
+      if (logoPath) {
+        await deleteFileFromStorage(decodeURIComponent(logoPath));
+      }
+      
+      // Update settings
+      setCompanySettings({ ...companySettings, logoUrl: "" });
+      setLogoPreview(null);
+      setLogoFile(null);
+      
+      // Save
+      const settingsToSave: CompanySettings = {
+        companyInfo: {
+          ...companySettings,
+          logoUrl: undefined,
+        },
+        materialGrades: materialGrades.map(({ id, ...rest }) => rest),
+        laborRates: laborRates.map(({ id, ...rest }) => rest),
+        coatingTypes: coatingTypes.map(({ id, ...rest }) => rest),
+        markupSettings,
+        advancedSettings,
+        shopCapacityHoursPerWeek: executiveSettings.shopCapacityHoursPerWeek || undefined,
+        shopCapacityHoursPerDay: executiveSettings.shopCapacityHoursPerDay || undefined,
+        backlogForecastWeeks: executiveSettings.backlogForecastWeeks || undefined,
+        underUtilizedThreshold: executiveSettings.underUtilizedThreshold || undefined,
+        workingDays:
+          executiveSettings.workingDays && executiveSettings.workingDays.length > 0
+            ? executiveSettings.workingDays
+            : undefined,
+        holidays:
+          executiveSettings.holidays?.filter((date) => date && date.trim() !== "") || undefined,
+        pipelineRanges: pipelineRanges,
+      };
+      
+      await saveCompanySettings(companyId, settingsToSave);
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus("unsaved"), 3000);
+      
+      alert("Logo removed successfully!");
+    } catch (error: any) {
+      console.error("Failed to remove logo:", error);
+      alert(`Failed to remove logo: ${error.message || "Please try again."}`);
     }
   };
 
@@ -418,7 +552,7 @@ function SettingsPageContent() {
   const addCoatingType = () => {
     const newCoating: CoatingType = {
       id: Date.now().toString(),
-      type: "",
+      type: "None",
       costPerSF: 0,
     };
     setCoatingTypes([...coatingTypes, newCoating]);
@@ -695,6 +829,80 @@ function SettingsPageContent() {
                     placeholder="XX-XXXXXXX"
                   />
                 </div>
+
+                {/* Company Logo Upload */}
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Company Logo
+                  </label>
+                  <div className="space-y-3">
+                    {logoPreview && (
+                      <div className="relative inline-block">
+                        <img
+                          src={logoPreview}
+                          alt="Company Logo"
+                          className="h-20 w-auto border border-gray-200 rounded-lg p-2 bg-white object-contain"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleLogoRemove}
+                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors shadow-md"
+                          title="Remove logo"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-3">
+                      <label className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                        <UploadIcon className="w-4 h-4" />
+                        <span className="text-sm font-medium">
+                          {logoPreview ? "Replace Logo" : "Upload Logo"}
+                        </span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              // Validate file type
+                              if (!file.type.startsWith('image/')) {
+                                alert("Please select an image file");
+                                return;
+                              }
+                              // Validate file size (max 5MB)
+                              if (file.size > 5 * 1024 * 1024) {
+                                alert("Logo file must be less than 5MB");
+                                return;
+                              }
+                              setLogoFile(file);
+                              // Create preview
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                setLogoPreview(reader.result as string);
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                        />
+                      </label>
+                      {logoFile && (
+                        <Button
+                          type="button"
+                          onClick={handleLogoUpload}
+                          disabled={isUploadingLogo}
+                          size="sm"
+                        >
+                          {isUploadingLogo ? "Uploading..." : "Save Logo"}
+                        </Button>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      Upload a company logo to appear on all document headers. Recommended: PNG or JPG, max 5MB, transparent background preferred.
+                    </p>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -857,51 +1065,90 @@ function SettingsPageContent() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {coatingTypes.map((coating) => (
-                  <div key={coating.id} className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
-                    <div className="flex-1 grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Coating Type
-                        </label>
-                        <Input
-                          value={coating.type}
-                          onChange={(e) =>
-                            updateCoatingType(coating.id, "type", e.target.value)
-                          }
-                          placeholder="e.g., Galvanized, Paint"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Cost per Square Foot ($/SF)
-                        </label>
-                        <div className="relative">
-                          <span className="absolute left-3 top-2 text-gray-500">$</span>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            value={coating.costPerSF}
+                {coatingTypes.map((coating) => {
+                  const isGalvanizing = coating.type.toLowerCase().includes("galvanizing") || coating.type.toLowerCase().includes("galv");
+                  return (
+                    <div key={coating.id} className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
+                      <div className="flex-1 grid grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Coating Type
+                          </label>
+                          <select
+                            value={coating.type}
                             onChange={(e) =>
-                              updateCoatingType(coating.id, "costPerSF", parseFloat(e.target.value) || 0)
+                              updateCoatingType(coating.id, "type", e.target.value)
                             }
-                            placeholder="0.00"
-                            className="pl-8"
-                          />
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          >
+                            <option value="None">None</option>
+                            <option value="Standard Shop Primer">Standard Shop Primer</option>
+                            <option value="Zinc Primer">Zinc Primer</option>
+                            <option value="Paint">Paint</option>
+                            <option value="Powder Coat">Powder Coat</option>
+                            <option value="Galvanizing">Galvanizing</option>
+                            <option value="Specialty Coating">Specialty Coating</option>
+                          </select>
+                        </div>
+                        {isGalvanizing ? (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Cost per Pound ($/lb)
+                            </label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-2 text-gray-500">$</span>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                value={coating.costPerPound || 0}
+                                onChange={(e) =>
+                                  updateCoatingType(coating.id, "costPerPound", parseFloat(e.target.value) || 0)
+                                }
+                                placeholder="0.00"
+                                className="pl-8"
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Cost per Square Foot ($/SF)
+                            </label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-2 text-gray-500">$</span>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                value={coating.costPerSF || 0}
+                                onChange={(e) =>
+                                  updateCoatingType(coating.id, "costPerSF", parseFloat(e.target.value) || 0)
+                                }
+                                placeholder="0.00"
+                                className="pl-8"
+                              />
+                            </div>
+                          </div>
+                        )}
+                        <div className="flex items-end">
+                          <div className="text-xs text-gray-500">
+                            {isGalvanizing 
+                              ? "Galvanizing is priced per pound"
+                              : "Most coatings are priced per square foot"}
+                          </div>
                         </div>
                       </div>
+                      {coatingTypes.length > 1 && (
+                        <button
+                          onClick={() => removeCoatingType(coating.id)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Remove coating"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
-                    {coatingTypes.length > 1 && (
-                      <button
-                        onClick={() => removeCoatingType(coating.id)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Remove coating"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </CardContent>
           </Card>

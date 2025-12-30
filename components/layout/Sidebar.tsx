@@ -26,7 +26,6 @@ const navigation = [
   // { name: "Misc Metals AI", href: "/misc-metals", icon: Package, aiIcon: Sparkles }, // Removed - will be in a later version
   { name: "AI Spec Review", href: "/spec-review", icon: FileCheck, aiIcon: Sparkles },
   { name: "AI Generated Proposal", href: "/proposal", icon: FileEdit, aiIcon: Sparkles },
-  { name: "Import Quotes", href: "/import-quotes", icon: Upload },
 ];
 
 export default function Sidebar() {
@@ -44,41 +43,26 @@ export default function Sidebar() {
   const isProjectDashboard = pathname === `/projects/${projectIdFromParams}`;
   const isProjectSubPage = isProjectPage && !isProjectDashboard;
   const isReportsPage = pathname === `/projects/${projectIdFromParams}/reports`;
-  const isProjectDetailsPage = pathname === `/projects/${projectIdFromParams}/details`;
+  const isProjectDetailsPage = false; // Details page removed - consolidated into dashboard
+  
+  // Check if we're on the settings page
+  const isSettingsPage = pathname === "/settings" || pathname?.startsWith("/settings");
 
-  // Collapsed state - ALWAYS start collapsed
-  // Version 2: Force collapsed by default, only expand if user explicitly toggles AFTER this update
+  // Collapsed state - ALWAYS start collapsed by default on all pages
   const [isCollapsed, setIsCollapsed] = useState(true);
 
   useEffect(() => {
-    // Migration: Force reset to collapsed for all users (version 2)
-    const migrationVersion = localStorage.getItem("sidebarMigrationV2");
-    
-    if (migrationVersion !== "done") {
-      // First time after this update - force collapsed and clear old preferences
-      localStorage.removeItem("sidebarCollapsed");
-      localStorage.removeItem("sidebarUserToggled");
-      localStorage.setItem("sidebarMigrationV2", "done");
-      setIsCollapsed(true);
-      return;
-    }
-    
-    // After migration, respect user's explicit toggle choice
-    const hasUserToggled = localStorage.getItem("sidebarUserToggled") === "true";
-    const saved = localStorage.getItem("sidebarCollapsed");
-    
-    if (hasUserToggled && saved !== null) {
-      setIsCollapsed(saved === "true");
-    } else {
-      setIsCollapsed(true);
-    }
-  }, []);
+    // Always start collapsed on every page load/navigation
+    // Clear any saved expanded state to ensure default collapsed behavior
+    setIsCollapsed(true);
+    localStorage.removeItem("sidebarCollapsed");
+    localStorage.removeItem("sidebarUserToggled");
+  }, [pathname]); // Reset to collapsed on every route change
 
   const toggleSidebar = () => {
     const newState = !isCollapsed;
     setIsCollapsed(newState);
-    localStorage.setItem("sidebarCollapsed", String(newState));
-    localStorage.setItem("sidebarUserToggled", "true");
+    // Don't persist state - always reset to collapsed on page navigation
   };
 
   return (
@@ -134,7 +118,7 @@ export default function Sidebar() {
           {!isCollapsed && <span>Company Dashboard</span>}
         </Link>
         
-        {isProjectPage && projectId && (
+        {!isSettingsPage && isProjectPage && projectId && (
           <>
             <Link
               href={`/projects/${projectId}`}
@@ -149,20 +133,6 @@ export default function Sidebar() {
             >
               <Building2 className="w-5 h-5 flex-shrink-0" />
               {!isCollapsed && <span>Project Dashboard</span>}
-            </Link>
-            <Link
-              href={`/projects/${projectId}/details`}
-              className={cn(
-                "flex items-center rounded-lg transition-colors",
-                isCollapsed ? "justify-center px-2 py-3" : "gap-3 px-4 py-3",
-                isProjectDetailsPage
-                  ? "bg-gray-100 text-blue-600 font-medium"
-                  : "text-gray-700 hover:bg-gray-50"
-              )}
-              title={isCollapsed ? "Project Details" : undefined}
-            >
-              <FileText className="w-5 h-5 flex-shrink-0" />
-              {!isCollapsed && <span>Project Details</span>}
             </Link>
             <Link
               href={`/projects/${projectId}/reports`}
@@ -180,7 +150,7 @@ export default function Sidebar() {
             </Link>
           </>
         )}
-        {navigation.map((item) => {
+        {!isSettingsPage && navigation.map((item) => {
           const Icon = item.icon;
           const AiIcon = (item as any).aiIcon;
           
@@ -194,8 +164,6 @@ export default function Sidebar() {
               href = `/spec-review?projectId=${projectId}`;
             } else if (item.name === "AI Generated Proposal") {
               href = `/proposal?projectId=${projectId}`;
-            } else if (item.name === "Import Quotes") {
-              href = `/import-quotes?projectId=${projectId}`;
             }
           }
           
@@ -219,12 +187,6 @@ export default function Sidebar() {
                 return pathname === "/proposal" && projectIdFromQuery === projectId;
               }
               return pathname === "/proposal" && !projectIdFromQuery;
-            }
-            if (item.name === "Import Quotes") {
-              if (isProjectPage && projectId) {
-                return pathname === "/import-quotes" && projectIdFromQuery === projectId;
-              }
-              return pathname === "/import-quotes" && !projectIdFromQuery;
             }
             // Fallback: check if pathname starts with the base href (without query params)
             const baseHref = item.href.split("?")[0];

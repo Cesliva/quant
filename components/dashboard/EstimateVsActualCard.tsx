@@ -98,14 +98,14 @@ export default function EstimateVsActualCard({ companyId }: EstimateVsActualCard
 
   if (loading) {
     return (
-      <Card className="w-full h-full flex flex-col p-3 md:p-4 rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300">
-        <CardHeader>
-          <CardTitle>Estimate vs Actual</CardTitle>
+      <Card className="w-full h-full flex flex-col p-2 md:p-3 rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Estimate vs Actual</CardTitle>
         </CardHeader>
         <CardContent className="flex-1">
-          <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-slate-600">Loading...</p>
+          <div className="text-center py-4">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto mb-2"></div>
+            <p className="text-xs text-slate-600">Loading...</p>
           </div>
         </CardContent>
       </Card>
@@ -114,17 +114,17 @@ export default function EstimateVsActualCard({ companyId }: EstimateVsActualCard
 
   if (completedProjects.length === 0) {
     return (
-      <Card className="w-full h-full flex flex-col cursor-pointer p-3 md:p-4 rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300">
+      <Card className="w-full h-full flex flex-col cursor-pointer p-2 md:p-3 rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300">
         <Link href="/estimate-vs-actual" className="flex flex-col flex-1">
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center justify-between text-sm">
               <span>Estimate vs Actual</span>
-              <ArrowRight className="w-4 h-4 text-slate-400" />
+              <ArrowRight className="w-3 h-3 text-slate-400" />
             </CardTitle>
           </CardHeader>
           <CardContent className="flex-1 flex items-center justify-center">
-            <p className="text-sm text-slate-500 text-center">
-              No completed projects yet. Complete projects to see estimate vs actual comparisons.
+            <p className="text-xs text-slate-500 text-center">
+              No completed projects yet.
             </p>
           </CardContent>
         </Link>
@@ -133,71 +133,61 @@ export default function EstimateVsActualCard({ companyId }: EstimateVsActualCard
   }
 
   return (
-    <Card className="w-full h-full flex flex-col cursor-pointer p-3 md:p-4 rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300">
+    <Card className="w-full h-full flex flex-col cursor-pointer p-2 md:p-3 rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300">
       <Link href="/estimate-vs-actual" className="flex flex-col flex-1">
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center justify-between text-sm">
             <span>Estimate vs Actual</span>
-            <ArrowRight className="w-4 h-4 text-slate-400" />
+            <ArrowRight className="w-3 h-3 text-slate-400" />
           </CardTitle>
-          <p className="text-xs text-slate-500 mt-1">
-            Latest {completedProjects.length} completed projects
+          <p className="text-[10px] text-slate-500 mt-0.5">
+            Latest {completedProjects.length} completed
           </p>
         </CardHeader>
-        <CardContent className="flex-1 flex flex-col space-y-3">
-          {completedProjects.map((project) => {
+        <CardContent className="flex-1 flex flex-col space-y-2 overflow-y-auto">
+          {completedProjects.slice(0, 3).map((project) => {
             const isOver = project.variance > 0;
             const isUnder = project.variance < 0;
             
             return (
               <div
                 key={project.id}
-                className="border border-slate-200 rounded-lg p-3 bg-white hover:bg-slate-50 transition-colors"
+                className="border border-slate-200 rounded-lg p-2 bg-white hover:bg-slate-50 transition-colors"
               >
-                <div className="flex items-start justify-between mb-2">
+                <div className="flex items-start justify-between mb-1">
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-slate-900 text-sm truncate">
+                    <p className="font-medium text-slate-900 text-xs truncate">
                       {project.projectName || project.projectNumber || "Untitled Project"}
                     </p>
-                    {project.projectNumber && (
-                      <p className="text-xs text-slate-500">{project.projectNumber}</p>
-                    )}
                   </div>
-                  <div className={`flex items-center gap-1 ml-2 ${
+                  <div className={`flex items-center gap-0.5 ml-2 ${
                     isOver ? "text-red-600" : isUnder ? "text-green-600" : "text-slate-600"
                   }`}>
                     {isOver ? (
-                      <TrendingUp className="w-4 h-4" />
+                      <TrendingUp className="w-3 h-3" />
                     ) : isUnder ? (
-                      <TrendingDown className="w-4 h-4" />
+                      <TrendingDown className="w-3 h-3" />
                     ) : null}
-                    <span className="text-sm font-semibold">
+                    <span className="text-xs font-semibold">
                       {isOver ? "+" : ""}
                       {project.variancePercent.toFixed(1)}%
                     </span>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="grid grid-cols-2 gap-1 text-[10px]">
                   <div>
-                    <span className="text-slate-500">Estimate:</span>
+                    <span className="text-slate-500">Est:</span>
                     <span className="ml-1 font-medium text-slate-700">
                       ${(project.estimate / 1000).toFixed(0)}K
                     </span>
                   </div>
                   <div>
-                    <span className="text-slate-500">Actual:</span>
+                    <span className="text-slate-500">Act:</span>
                     <span className="ml-1 font-medium text-slate-700">
                       ${(project.actual / 1000).toFixed(0)}K
                     </span>
                   </div>
                 </div>
-                {project.variance !== 0 && (
-                  <div className="mt-2 text-xs">
-                    <span className={isOver ? "text-red-600" : "text-green-600"}>
-                      {isOver ? "Over" : "Under"} by ${Math.abs(project.variance).toLocaleString()}
-                    </span>
-                  </div>
-                )}
               </div>
             );
           })}

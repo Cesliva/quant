@@ -120,9 +120,10 @@ export default function ProjectReportsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="text-gray-500">Loading estimating summary...</div>
+          <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-600">Loading estimating summary...</p>
         </div>
       </div>
     );
@@ -130,9 +131,9 @@ export default function ProjectReportsPage() {
 
   if (!project) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="text-gray-500 mb-4">Project not found</div>
+          <div className="text-slate-500 mb-4">Project not found</div>
           <Link href="/">
             <Button variant="outline">Return to Dashboard</Button>
           </Link>
@@ -140,6 +141,16 @@ export default function ProjectReportsPage() {
       </div>
     );
   }
+
+  const formatCurrency = (value?: string | number) => {
+    if (!value) return "$0";
+    const num = typeof value === "string" ? parseFloat(value) : value;
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 0,
+    }).format(num);
+  };
 
   return (
     <>
@@ -156,75 +167,69 @@ export default function ProjectReportsPage() {
           }
         }
       `}</style>
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-7xl mx-auto p-6 space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between no-print">
-          <div className="flex items-center gap-4">
-            <Link href={`/projects/${projectId}`}>
-              <Button variant="outline" size="sm">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Back to Project
-              </Button>
-            </Link>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 py-6 md:py-8 text-slate-800">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          {/* Header */}
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4 md:mb-6 no-print">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-                <FileText className="w-8 h-8 text-blue-600" />
-                Estimating Summary
-              </h1>
-              <div className="mt-1 text-sm text-gray-600">
-                {project.projectNumber && <span className="font-medium">{project.projectNumber}</span>}
-                {project.projectNumber && project.projectName && " - "}
-                {project.projectName || "Untitled Project"}
+              <div className="flex items-center gap-3 mb-1">
+                <h1 className="text-4xl font-semibold tracking-tight text-slate-900">Estimating Summary</h1>
               </div>
+              <p className="text-slate-500">
+                {project.projectNumber && <span className="font-mono mr-3">{project.projectNumber}</span>}
+                {project.projectName || "Untitled Project"}
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <Link href={`/projects/${projectId}`}>
+                <Button className="px-5 py-2.5 rounded-2xl border border-slate-200/80 bg-white text-slate-700 text-sm font-medium shadow-[0_1px_2px_0_rgb(0,0,0,0.05),0_2px_4px_0_rgb(0,0,0,0.03)] hover:shadow-[0_2px_4px_0_rgb(0,0,0,0.08),0_4px_8px_0_rgb(0,0,0,0.05)] hover:bg-slate-50 hover:border-slate-300 transition-all duration-200">
+                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  Back to Project
+                </Button>
+              </Link>
+              <Button 
+                className="px-5 py-2.5 rounded-2xl border border-slate-200/80 bg-white text-slate-700 text-sm font-medium shadow-[0_1px_2px_0_rgb(0,0,0,0.05),0_2px_4px_0_rgb(0,0,0,0.03)] hover:shadow-[0_2px_4px_0_rgb(0,0,0,0.08),0_4px_8px_0_rgb(0,0,0,0.05)] hover:bg-slate-50 hover:border-slate-300 transition-all duration-200"
+                onClick={() => {
+                  if (reportsData && project) {
+                    exportReportsToPDF(
+                      reportsData.financials,
+                      reportsData.metrics,
+                      project.projectName || "Untitled Project",
+                      project.projectNumber || "",
+                      companyName,
+                      reportsData.buyouts,
+                      {
+                        projectType: project.projectType,
+                        projectTypeSubCategory: project.projectTypeSubCategory,
+                        probabilityOfWin: project.probabilityOfWin
+                      }
+                    );
+                  }
+                }}
+                disabled={!reportsData}
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Export PDF
+              </Button>
+              <Button 
+                className="px-5 py-2.5 rounded-2xl border border-slate-200/80 bg-white text-slate-700 text-sm font-medium shadow-[0_1px_2px_0_rgb(0,0,0,0.05),0_2px_4px_0_rgb(0,0,0,0.03)] hover:shadow-[0_2px_4px_0_rgb(0,0,0,0.08),0_4px_8px_0_rgb(0,0,0,0.05)] hover:bg-slate-50 hover:border-slate-300 transition-all duration-200"
+                onClick={() => {
+                  window.print();
+                }}
+              >
+                <Printer className="w-4 h-4 mr-2" />
+                Print
+              </Button>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => {
-                if (reportsData && project) {
-                  exportReportsToPDF(
-                    reportsData.financials,
-                    reportsData.metrics,
-                    project.projectName || "Untitled Project",
-                    project.projectNumber || "",
-                    companyName,
-                    reportsData.buyouts,
-                    {
-                      projectType: project.projectType,
-                      projectTypeSubCategory: project.projectTypeSubCategory,
-                      probabilityOfWin: project.probabilityOfWin
-                    }
-                  );
-                }
-              }}
-              disabled={!reportsData}
-            >
-              <Download className="w-4 h-4 mr-2" />
-              Export PDF
-            </Button>
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => {
-                window.print();
-              }}
-            >
-              <Printer className="w-4 h-4 mr-2" />
-              Print
-            </Button>
-          </div>
-        </div>
 
-        {/* Reports View */}
-        <ProjectReportsView 
-          companyId={companyId} 
-          projectId={projectId} 
-          project={project}
-          onDataReady={(data) => setReportsData(data)}
-        />
+          {/* Reports View */}
+          <ProjectReportsView 
+            companyId={companyId} 
+            projectId={projectId} 
+            project={project}
+            onDataReady={(data) => setReportsData(data)}
+          />
         </div>
       </div>
     </>

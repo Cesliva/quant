@@ -13,6 +13,7 @@ import { subscribeToCollection, getProjectPath, getDocument } from "@/lib/fireba
 import { isFirebaseConfigured } from "@/lib/firebase/config";
 import CostTrendBubbleChart from "./CostTrendBubbleChart";
 import EstimateVsActualCard from "./EstimateVsActualCard";
+import BacklogAtAGlance from "./BacklogAtAGlance";
 import { ChartPoint } from "@/lib/utils/estimateToStreamgraph";
 import { transformToChartPoints } from "@/lib/utils/estimateToStreamgraph";
 
@@ -301,8 +302,13 @@ export default function CostTrendAnalysis({
                 }}
               />
             </div>
-            <div className="lg:col-span-1 flex w-full">
-              <EstimateVsActualCard companyId={companyId} />
+            <div className="lg:col-span-1 flex flex-col gap-3 md:gap-4 w-full">
+              <div className="flex-1">
+                <EstimateVsActualCard companyId={companyId} />
+              </div>
+              <div className="flex-1">
+                <BacklogAtAGlance companyId={companyId} />
+              </div>
             </div>
           </div>
         </Suspense>

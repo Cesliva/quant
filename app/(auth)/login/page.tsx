@@ -17,16 +17,19 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const { signIn, user, loading: authLoading } = useAuth();
+  const { signIn, user, loading: authLoading, signOut } = useAuth();
   const router = useRouter();
 
+  // CRITICAL SECURITY: On login page, we should NEVER auto-redirect
+  // Users must explicitly sign in through the form
+  // Only redirect if they came here while already authenticated (e.g., direct URL)
+  // But we'll still show the form first to ensure they want to continue
   useEffect(() => {
-    // Only redirect if user is authenticated and auth is not loading
-    // This prevents redirecting before authentication state is determined
-    if (user && !authLoading) {
-      router.push("/dashboard");
-    }
-  }, [user, authLoading, router]);
+    // CRITICAL: Don't auto-redirect on login page - always show the form
+    // This prevents bypassing authentication
+    // Users must explicitly submit the login form
+    // If they're already authenticated, they can still use the form or navigate away
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,8 +37,31 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const userCredential = await signIn(email, password);
+      // CRITICAL SECURITY: Require explicit email and password
+      if (!email || !password || email.trim() === "" || password.trim() === "") {
+        setError("Email and password are required");
+        setLoading(false);
+        return;
+      }
+
+      // CRITICAL SECURITY: Verify Firebase auth is configured before attempting sign in
+      const { auth } = await import("@/lib/firebase/config");
+      if (!auth) {
+        setError("Authentication is not configured. Please contact support.");
+        setLoading(false);
+        return;
+      }
+
+      // CRITICAL SECURITY: Attempt explicit authentication
+      const userCredential = await signIn(email.trim(), password);
       const user = userCredential.user;
+      
+      // CRITICAL SECURITY: Verify we got a valid authenticated user
+      if (!user || !user.email || !user.uid || user.uid === "dev-user") {
+        setError("Authentication failed. Please try again.");
+        setLoading(false);
+        return;
+      }
       
       // Get company ID for audit logging
       try {
@@ -78,16 +104,16 @@ export default function LoginPage() {
         console.error("Failed to log login audit:", auditError);
       }
       
-      router.push("/dashboard");
+      // CRITICAL SECURITY: Only redirect after successful explicit authentication
+      router.replace("/dashboard");
     } catch (err: any) {
       // Convert Firebase errors to user-friendly messages
       setError(getAuthErrorMessage(err));
-    } finally {
       setLoading(false);
     }
   };
 
-  // Show loading while checking auth state
+  // Show loading while checking auth state (but only briefly)
   if (authLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
@@ -99,10 +125,10 @@ export default function LoginPage() {
     );
   }
 
-  // Don't show login form if already authenticated (will redirect)
-  if (user) {
-    return null;
-  }
+  // CRITICAL SECURITY: ALWAYS show the login form
+  // Never auto-redirect from login page - this prevents bypassing authentication
+  // Users must explicitly submit credentials through the form
+  // Even if there's a cached session, we show the form to ensure explicit authentication
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center px-4 py-12">

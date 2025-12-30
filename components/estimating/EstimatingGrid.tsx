@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Plus, Upload, Edit, Trash2, Copy, Check, X, Undo2, Redo2, Download, Layers, ChevronDown, ChevronUp } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -57,6 +57,30 @@ export interface EstimatingLine {
   elevation?: string; // Foundation, Exterior Ground Level, First Floor, Roof, High Roof, etc.
   category: string; // Columns, Beams, Misc Metals, Plates, etc.
   subCategory: string; // Base Plate, Gusset, Stiffener, Clip, etc.
+  
+  // Work Type Classification
+  workType?: "STRUCTURAL" | "MISC"; // Default: "STRUCTURAL"
+  miscMethod?: "DETAILED" | "ASSEMBLY"; // Only when workType = MISC, default: "ASSEMBLY"
+  miscSubtype?: string; // Expanded misc metals category - see lib/data/miscMetalsCategories.ts
+  
+  // Assembly Mode Fields (only when miscMethod = ASSEMBLY)
+  // Stairs
+  stairTreads?: number;
+  stairLandings?: number;
+  stairWidth?: number;
+  stairRailIncluded?: boolean;
+  
+  // Rails
+  railType?: "GRIP_RAIL" | "TWO_LINE" | "THREE_LINE" | "FOUR_LINE" | "FIVE_LINE" | "SIX_LINE" | "SEVEN_LINE" | "EIGHT_LINE" | "NINE_LINE" | "CABLE_RAIL" | "VERTICAL_PICKETS" | "HORIZONTAL_PICKETS" | "WIRE_MESH";
+  railMaterial?: "SCH40_1_5" | "SCH80_1_5" | "OTHER";
+  railLengthFt?: number;
+  railFinish?: string;
+  
+  // Assembly Cost Overrides
+  assemblyCostPerUnit?: number;
+  assemblyLaborHours?: number;
+  assemblyMaterialCost?: number;
+  assemblyTotalCost?: number;
   
   // Material Type
   materialType: "Material" | "Plate"; // Determines which fields to show
@@ -136,9 +160,10 @@ interface EstimatingGridProps {
   projectId: string;
   isManualMode?: boolean;
   highlightLineId?: string | null;
+  onAddLineRef?: (handler: (() => void) | null) => void;
 }
 
-export default function EstimatingGrid({ companyId, projectId, isManualMode = false, highlightLineId }: EstimatingGridProps) {
+export default function EstimatingGrid({ companyId, projectId, isManualMode = false, highlightLineId, onAddLineRef }: EstimatingGridProps) {
   // Undo/Redo state management
   const {
     state: lines,
@@ -157,21 +182,12 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
   const [sortBy, setSortBy] = useState<string>("lineId");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const highlightedLineRef = useRef<HTMLTableRowElement | null>(null);
-  const [showFloatingAdd, setShowFloatingAdd] = useState(false);
   
   // Track if we should add to history (skip for Firestore updates)
   const skipHistoryRef = useRef(false);
   
-  // Show floating button after scrolling down
-  useEffect(() => {
-    const handleScroll = () => {
-      const scrollY = window.scrollY || document.documentElement.scrollTop;
-      setShowFloatingAdd(scrollY > 200);
-    };
-
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+  // Guard to prevent multiple simultaneous line additions
+  const isAddingLineRef = useRef(false);
   
   // Handle highlighting and scrolling to line from URL parameter
   useEffect(() => {
@@ -301,13 +317,13 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
     allDisplayLines = [...allDisplayLines].reverse();
   }
   
-  // Rollup: Show last 10 entries by default, or all if expanded
+  // Rollup: Show last 5 entries by default, or all if expanded
   const displayLines = useMemo(() => {
-    if (showAllLines || allDisplayLines.length <= 10) {
+    if (showAllLines || allDisplayLines.length <= 5) {
       return allDisplayLines;
     }
-    // Show last 10 entries
-    return allDisplayLines.slice(-10);
+    // Show last 5 entries
+    return allDisplayLines.slice(-5);
   }, [allDisplayLines, showAllLines]);
   
   // Handle sort change
@@ -731,12 +747,16 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
       // Galvanizing: cost per pound × total weight
       // Paint/Powder: cost per gallon × surface area (SF)
       // Other coatings: cost per SF × surface area
-      const coatingSystem = calculated.coatingSystem || "None";
+      const coatingSystem = calculated.coatingSystem;
       const surfaceArea = calculated.materialType === "Material"
         ? (calculated.totalSurfaceArea || 0)
         : (calculated.plateSurfaceArea || 0);
       
-      if (coatingSystem === "Galvanizing" || coatingSystem === "Galv") {
+      // Only calculate coating cost if a coating system is actually selected
+      if (!coatingSystem || coatingSystem === "None" || coatingSystem === "") {
+        calculated.coatingCost = 0;
+        calculated.coatingRate = undefined;
+      } else if (coatingSystem === "Galvanizing" || coatingSystem === "Galv") {
         // Galvanizing is calculated per pound
         calculated.coatingCost = totalWeight * (calculated.coatingRate || 0);
       } else if (coatingSystem === "Paint" || coatingSystem === "Powder Coat" || coatingSystem === "Specialty Coating") {
@@ -747,7 +767,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
         // Primers: cost per SF × surface area
         calculated.coatingCost = surfaceArea * (calculated.coatingRate || 0);
       } else {
-        // None or unknown: no cost
+        // Unknown coating system: no cost
         calculated.coatingCost = 0;
       }
       
@@ -780,6 +800,14 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
       return;
     }
 
+    // Prevent multiple simultaneous additions
+    if (isAddingLineRef.current) {
+      console.warn("Already adding a line, please wait...");
+      return;
+    }
+
+    isAddingLineRef.current = true;
+
     const newLine: Omit<EstimatingLine, "id"> = {
       lineId: `L${lines.length + 1}`,
       drawingNumber: "",
@@ -787,6 +815,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
       itemDescription: "",
       category: "Structural",
       subCategory: "",
+      workType: "STRUCTURAL", // Default to STRUCTURAL
       materialType: "Material",
       qty: 1,
       status: "Active",
@@ -802,6 +831,11 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
         // Add to local state for immediate UI update
         const addedLine = { ...newLine, id: newId };
         setLines([...lines, addedLine], true); // Add to history
+        
+        // Reset the guard after a short delay to allow Firestore subscription to process
+        setTimeout(() => {
+          isAddingLineRef.current = false;
+        }, 1000);
         
         // In manual mode, automatically start editing the new line
         if (isManualMode && newId) {
@@ -862,12 +896,35 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
       }).catch((error: any) => {
         console.error("Failed to add line:", error);
         alert("Firebase is not configured. Please set up Firebase credentials to save data.");
+        isAddingLineRef.current = false; // Reset guard on error
       });
     } catch (error: any) {
       console.error("Failed to add line:", error);
       alert("Firebase is not configured. Please set up Firebase credentials to save data.");
+      isAddingLineRef.current = false; // Reset guard on error
     }
   };
+
+  // Store handleAddLine in a ref so we always expose the latest version without recreating the callback
+  const handleAddLineRef = useRef(handleAddLine);
+  handleAddLineRef.current = handleAddLine;
+
+  // Expose handleAddLine to parent via ref callback
+  // Use a stable wrapper function that calls the ref - this prevents infinite loops
+  const stableHandleAddLine = useCallback(() => {
+    handleAddLineRef.current();
+  }, []); // Empty deps - function never changes, always calls latest handleAddLine via ref
+
+  useEffect(() => {
+    if (onAddLineRef) {
+      onAddLineRef(stableHandleAddLine);
+    }
+    return () => {
+      if (onAddLineRef) {
+        onAddLineRef(null);
+      }
+    };
+  }, [onAddLineRef, stableHandleAddLine]);
 
   const handleEdit = (line: EstimatingLine) => {
     // In manual mode, editing is automatic when fields are clicked
@@ -1419,16 +1476,16 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
             </button>
           )}
           
-          {allDisplayLines.length > 10 && (
+          {allDisplayLines.length > 5 && (
             <button
               onClick={() => setShowAllLines(!showAllLines)}
               className="px-4 py-2 rounded-xl text-sm font-medium bg-gray-50/80 text-gray-700 border border-gray-200/60 hover:bg-white transition-all duration-200"
-              title={showAllLines ? "Show last 10 entries" : "Show all entries"}
+              title={showAllLines ? "Show last 5 entries" : "Show all entries"}
             >
               {showAllLines ? (
                 <>
                   <ChevronUp className="w-4 h-4 inline-block mr-1.5" />
-                  Last 10
+                  Last 5
                 </>
               ) : (
                 <>
@@ -1439,7 +1496,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
             </button>
           )}
 
-          {!showFloatingAdd && isManualMode && (
+          {isManualMode && (
             <button
               onClick={handleAddLine}
               className="px-5 py-2.5 rounded-xl text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 shadow-lg hover:shadow-xl transition-all duration-200 active:scale-95 flex items-center gap-2"
@@ -1496,47 +1553,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
         />
       </Card>
 
-      {/* Premium Floating Add Line Button */}
-      {isManualMode && showFloatingAdd && (
-        <div className="fixed bottom-8 right-8 z-50 animate-fade-in-up">
-          <div className="relative group">
-            {/* Subtle glow effect */}
-            <div className="absolute inset-0 bg-blue-500 rounded-full blur-xl opacity-30 group-hover:opacity-50 transition-opacity duration-300"></div>
-            
-            {/* Main button */}
-            <button
-              onClick={handleAddLine}
-              className="relative flex items-center gap-3 px-6 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-full shadow-2xl hover:shadow-blue-500/50 transition-all duration-300 hover:scale-110 active:scale-95 group"
-              title="Add New Line (Always accessible)"
-            >
-              {/* Icon with rotation animation */}
-              <div className="relative">
-                <Plus className="w-6 h-6 transition-transform duration-300 group-hover:rotate-90" />
-                {/* Ripple effect */}
-                <span className="absolute inset-0 rounded-full bg-white opacity-0 group-hover:opacity-20 animate-ping"></span>
-              </div>
-              
-              {/* Text with slide-in animation */}
-              <span className="font-semibold text-sm whitespace-nowrap hidden sm:block opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                Add Line
-              </span>
-              
-              {/* Line count badge - premium detail */}
-              {lines.length > 0 && (
-                <div className="absolute -top-2 -right-2 bg-white text-blue-600 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shadow-lg border-2 border-blue-600 animate-pulse">
-                  {lines.filter(l => l.status !== "Void").length}
-                </div>
-              )}
-            </button>
-            
-            {/* Tooltip on hover */}
-            <div className="absolute bottom-full right-0 mb-2 px-3 py-1.5 bg-slate-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap">
-              Add new estimating line
-              <div className="absolute top-full right-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-slate-900"></div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Floating button removed - now positioned in KPISummary component */}
     </div>
   );
 }

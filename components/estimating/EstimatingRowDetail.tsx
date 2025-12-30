@@ -12,9 +12,29 @@ import {
 import LaborInput from "./LaborInput";
 import CollapsibleLaborInput from "./CollapsibleLaborInput";
 import HardwareInput from "./HardwareInput";
-import { Info, ChevronDown, RotateCcw, Lock, Unlock, Wrench } from "lucide-react";
+import { Info, ChevronDown, RotateCcw, Lock, Unlock, Wrench, ChevronUp, X } from "lucide-react";
 import { getNumberFromField } from "@/lib/utils/fieldNumberMap";
 import { getMaterialGradeInfo, getPlateGradeInfo } from "@/lib/utils/steelGradeInfo";
+import { 
+  MISC_METALS_CATEGORIES, 
+  ALL_MISC_METALS_CATEGORIES,
+  getMiscMetalsCategoryLabel,
+  getMiscMetalsCategoryById
+} from "@/lib/data/miscMetalsCategories";
+import {
+  getDefaultTemplate,
+  getTemplatesForSubtype,
+  applyTemplate,
+  type AssemblyTemplate
+} from "@/lib/data/miscMetalsAssemblies";
+import {
+  loadCustomTemplatesForSubtype,
+  saveCustomTemplate,
+  deleteCustomTemplate
+} from "@/lib/utils/assemblyTemplates";
+import { useCompanyId } from "@/lib/hooks/useCompanyId";
+import { useAuth } from "@/lib/hooks/useAuth";
+import { Save, Trash2, BookOpen, Plus } from "lucide-react";
 
 interface EstimatingRowDetailProps {
   line: EstimatingLine;
@@ -31,6 +51,7 @@ interface EstimatingRowDetailProps {
   onSave: () => void;
   onCancel: () => void;
   onChange: (field: keyof EstimatingLine, value: any, line?: EstimatingLine) => void;
+  onCollapse?: () => void; // Function to collapse the expanded row
 }
 
 export default function EstimatingRowDetail({
@@ -48,6 +69,7 @@ export default function EstimatingRowDetail({
   onSave,
   onCancel,
   onChange,
+  onCollapse,
 }: EstimatingRowDetailProps) {
   const isEditing = editingId === line.id;
   // Merge editingLine with line to get complete data when editing
@@ -179,6 +201,13 @@ export default function EstimatingRowDetail({
   const [laborRateLocked, setLaborRateLocked] = useState<boolean>(!isLaborRateOverridden);
   const [coatingRateLocked, setCoatingRateLocked] = useState<boolean>(!isCoatingRateOverridden);
   
+  // Assembly template state
+  const [availableTemplates, setAvailableTemplates] = useState<AssemblyTemplate[]>([]);
+  const [showTemplateMenu, setShowTemplateMenu] = useState<boolean>(false);
+  const [savingTemplate, setSavingTemplate] = useState<boolean>(false);
+  const companyId = useCompanyId();
+  const { user } = useAuth();
+  
   // Determine rate source (company vs project)
   const materialRateSource = projectSettings?.materialRate !== undefined ? "Project" : "Company";
   const laborRateSource = projectSettings?.laborRate !== undefined ? "Project" : "Company";
@@ -277,13 +306,13 @@ export default function EstimatingRowDetail({
   const plateThicknesses = getAvailableThicknesses();
   const plateThicknessOptions = plateThicknesses.map((spec) => spec.thickness);
 
-  const renderField = (
+  function renderField(
     label: string,
     field: keyof EstimatingLine,
     type: "text" | "number" | "select" | "textarea" | "checkbox" = "text",
     options?: string[],
     isReadOnly = false
-  ) => {
+  ) {
     const value = currentLine[field];
     // In manual mode, all fields are editable by default (no need to click edit)
     // In voice mode, everything is read-only
@@ -345,7 +374,7 @@ export default function EstimatingRowDetail({
             <option value="">Select...</option>
             {options.map((opt) => (
               <option key={opt} value={opt}>
-                {opt}&quot;
+                {opt}"
               </option>
             ))}
           </select>
@@ -596,14 +625,28 @@ export default function EstimatingRowDetail({
           }
         }}
         step={type === "number" ? "any" : undefined}
-        className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${hasSeededValue ? "bg-blue-50 border-blue-300" : ""}`}
+        className={hasSeededValue ? "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-blue-50 border-blue-300" : "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"}
         readOnly={isReadOnly}
       />
     );
-  };
+  }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 relative">
+      {/* Top Collapse Button */}
+      {onCollapse && (
+        <div className="sticky top-0 z-20 -mt-6 -mx-6 mb-4 pb-2 bg-gradient-to-b from-white via-gray-50/80 to-transparent">
+          <button
+            onClick={onCollapse}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-b-xl shadow-lg hover:shadow-xl transition-all duration-200 font-semibold text-sm border-2 border-blue-500"
+            title="Click to collapse and roll up this detail view"
+          >
+            <ChevronUp className="w-5 h-5" />
+            <span>Roll Up Detail View</span>
+            <ChevronUp className="w-5 h-5" />
+          </button>
+        </div>
+      )}
       {/* Edit Mode Controls */}
       {isEditing && (
         <div className="flex items-center justify-between pb-4 border-b border-gray-300">
@@ -625,11 +668,11 @@ export default function EstimatingRowDetail({
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Identification Section */}
+      <div className="space-y-6">
+        {/* Identification Section - Full Width */}
         <div className="space-y-4">
           <h4 className="font-semibold text-gray-900 border-b border-gray-200 pb-2">Identification</h4>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
                 <span className="text-blue-600 font-bold">{getNumberFromField("drawingNumber")}.</span> Drawing #
@@ -642,11 +685,43 @@ export default function EstimatingRowDetail({
               </label>
               {renderField("Detail #", "detailNumber", "text")}
             </div>
-            <div className="col-span-2">
+            <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
                 <span className="text-blue-600 font-bold">{getNumberFromField("elevation")}.</span> Elevation
               </label>
               {renderField("Elevation", "elevation", "text")}
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                <span className="text-blue-600 font-bold">Work Type</span>
+              </label>
+              <select
+                value={(isEditing ? editingLine.workType : line.workType) || "STRUCTURAL"}
+                onChange={(e) => {
+                  if (!isEditing) {
+                    onEdit(line);
+                  }
+                  const newWorkType = e.target.value as "STRUCTURAL" | "MISC";
+                  onChange("workType", newWorkType, line);
+                  
+                  if (newWorkType === "MISC" && !editingLine.miscMethod) {
+                    onChange("miscMethod", "ASSEMBLY", line);
+                  }
+                  
+                  if (newWorkType === "STRUCTURAL") {
+                    onChange("miscMethod", undefined, line);
+                    onChange("miscSubtype", undefined, line);
+                  }
+                  
+                  if (isEditing) {
+                    onSave();
+                  }
+                }}
+                className="w-full px-3 py-2 rounded-lg border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              >
+                <option value="STRUCTURAL">Structural</option>
+                <option value="MISC">Misc Metals</option>
+              </select>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -677,19 +752,272 @@ export default function EstimatingRowDetail({
                     }
                   }, 100);
                 }}
-                className="w-full px-3 py-2 rounded-lg border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 rounded-lg border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
               >
                 <option value="Material">Material</option>
                 <option value="Plate">Plate</option>
               </select>
             </div>
           </div>
+
+          {/* Misc Metals Configuration - Shows when workType = MISC */}
+          {(isEditing ? editingLine.workType : line.workType) === "MISC" && (
+            <div className="mt-4 pt-4 border-t border-gray-200 bg-purple-50/30 rounded-lg p-4">
+              <h5 className="text-sm font-semibold text-gray-900 mb-3">Misc Metals Configuration</h5>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    <span className="text-blue-600 font-bold">Estimating Method</span>
+                  </label>
+                  <select
+                    value={(isEditing ? editingLine.miscMethod : line.miscMethod) || "ASSEMBLY"}
+                    onChange={(e) => {
+                      if (!isEditing) {
+                        onEdit(line);
+                      }
+                      onChange("miscMethod", e.target.value, line);
+                      if (isEditing) {
+                        onSave();
+                      }
+                    }}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  >
+                    <option value="DETAILED">Detailed (Member-based)</option>
+                    <option value="ASSEMBLY">Assembly (Rule-of-thumb)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    <span className="text-blue-600 font-bold">Misc Subtype</span>
+                    <span className="text-gray-500 text-xs ml-1">(Preset categories - always overrideable)</span>
+                  </label>
+                  <select
+                    value={(isEditing ? editingLine.miscSubtype : line.miscSubtype) || ""}
+                    onChange={(e) => {
+                      if (!isEditing) {
+                        onEdit(line);
+                      }
+                      const newSubtype = e.target.value || undefined;
+                      onChange("miscSubtype", newSubtype, line);
+                      
+                      // Auto-set method based on category if available
+                      if (newSubtype) {
+                        const category = getMiscMetalsCategoryById(newSubtype);
+                        if (category && !editingLine.miscMethod) {
+                          onChange("miscMethod", category.commonMethod, line);
+                        }
+                      }
+                      
+                      if (isEditing) {
+                        onSave();
+                      }
+                    }}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  >
+                    <option value="">Select subtype...</option>
+                    
+                    {/* Stairs & Access */}
+                    <optgroup label="🪜 Stairs & Access">
+                      {MISC_METALS_CATEGORIES.stairs.map(cat => (
+                        <option key={cat.id} value={cat.id}>{cat.label}</option>
+                      ))}
+                    </optgroup>
+                    
+                    {/* Handrails / Guardrails */}
+                    <optgroup label="🤚 Handrails / Guardrails">
+                      {MISC_METALS_CATEGORIES.handrails.map(cat => (
+                        <option key={cat.id} value={cat.id}>{cat.label}</option>
+                      ))}
+                    </optgroup>
+                    
+                    {/* Rail Posts */}
+                    <optgroup label="Rail Posts">
+                      {MISC_METALS_CATEGORIES.railPosts.map(cat => (
+                        <option key={cat.id} value={cat.id}>{cat.label}</option>
+                      ))}
+                    </optgroup>
+                    
+                    {/* Platforms & Walkways */}
+                    <optgroup label="🧱 Platforms & Walkways">
+                      {MISC_METALS_CATEGORIES.platforms.map(cat => (
+                        <option key={cat.id} value={cat.id}>{cat.label}</option>
+                      ))}
+                    </optgroup>
+                    
+                    {/* Screens, Guards & Panels */}
+                    <optgroup label="🪟 Screens, Guards & Panels">
+                      {MISC_METALS_CATEGORIES.screens.map(cat => (
+                        <option key={cat.id} value={cat.id}>{cat.label}</option>
+                      ))}
+                    </optgroup>
+                    
+                    {/* Gates, Doors & Barriers */}
+                    <optgroup label="🚪 Gates, Doors & Barriers">
+                      {MISC_METALS_CATEGORIES.gates.map(cat => (
+                        <option key={cat.id} value={cat.id}>{cat.label}</option>
+                      ))}
+                    </optgroup>
+                    
+                    {/* Ladders, Cages & Safety */}
+                    <optgroup label="🔩 Ladders, Cages & Safety">
+                      {MISC_METALS_CATEGORIES.ladders.map(cat => (
+                        <option key={cat.id} value={cat.id}>{cat.label}</option>
+                      ))}
+                    </optgroup>
+                    
+                    {/* Embeds, Angles & Light Framing */}
+                    <optgroup label="🔧 Embeds, Angles & Light Framing">
+                      {MISC_METALS_CATEGORIES.embeds.map(cat => (
+                        <option key={cat.id} value={cat.id}>{cat.label}</option>
+                      ))}
+                    </optgroup>
+                    
+                    {/* Finishes & Special Conditions */}
+                    <optgroup label="🎨 Finishes & Special Conditions (Adders)">
+                      {MISC_METALS_CATEGORIES.finishes.map(cat => (
+                        <option key={cat.id} value={cat.id}>{cat.label}</option>
+                      ))}
+                    </optgroup>
+                    
+                    {/* Other / Custom */}
+                    <optgroup label="Other">
+                      {MISC_METALS_CATEGORIES.other.map(cat => (
+                        <option key={cat.id} value={cat.id}>{cat.label}</option>
+                      ))}
+                      {/* Legacy options for backward compatibility */}
+                      <option value="STAIR">Stair (Legacy)</option>
+                      <option value="HANDRAIL">Handrail (Legacy)</option>
+                      <option value="GUARDRAIL">Guardrail (Legacy)</option>
+                      <option value="LADDER">Ladder (Legacy)</option>
+                      <option value="PLATFORM">Platform (Legacy)</option>
+                      <option value="GATE">Gate (Legacy)</option>
+                      <option value="OTHER">Other (Legacy)</option>
+                    </optgroup>
+                  </select>
+                  {(isEditing ? editingLine.miscSubtype : line.miscSubtype) && (
+                    <div className="mt-1 space-y-1">
+                      <p className="text-xs text-gray-500">
+                        {(() => {
+                          const subtype = (isEditing ? editingLine.miscSubtype : line.miscSubtype);
+                          const category = subtype ? getMiscMetalsCategoryById(subtype) : null;
+                          if (category) {
+                            return `Typical unit: ${category.unit} • Method: ${category.commonMethod}`;
+                          }
+                          return null;
+                        })()}
+                      </p>
+                      
+                      {/* Template Management */}
+                      {availableTemplates.length > 0 && (
+                        <div className="flex gap-2 mt-2">
+                          <select
+                            onChange={(e) => {
+                              const templateId = e.target.value;
+                              if (templateId) {
+                                const template = availableTemplates.find(t => t.id === templateId);
+                                if (template) {
+                                  const applied = applyTemplate(editingLine, template);
+                                  Object.entries(applied).forEach(([key, value]) => {
+                                    if (value !== undefined) {
+                                      onChange(key as keyof EstimatingLine, value, line);
+                                    }
+                                  });
+                                  if (isEditing) {
+                                    onSave();
+                                  }
+                                }
+                              }
+                              e.target.value = "";
+                            }}
+                            className="text-xs px-2 py-1 border border-gray-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            defaultValue=""
+                          >
+                            <option value="">Load template...</option>
+                            {availableTemplates.map(template => (
+                              <option key={template.id} value={template.id}>
+                                {template.isDefault ? "📋 " : "⭐ "}{template.name}
+                              </option>
+                            ))}
+                          </select>
+                          
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!companyId || !user) {
+                                alert("You must be logged in to save custom assemblies");
+                                return;
+                              }
+                              
+                              const templateName = prompt("Enter a name for this custom assembly:");
+                              if (!templateName) return;
+                              
+                              setSavingTemplate(true);
+                              try {
+                                const subtype = (isEditing ? editingLine.miscSubtype : line.miscSubtype);
+                                if (!subtype) {
+                                  alert("Please select a misc subtype first");
+                                  return;
+                                }
+                                
+                                await saveCustomTemplate(
+                                  companyId,
+                                  {
+                                    name: templateName,
+                                    miscSubtype: subtype,
+                                    description: `Custom assembly for ${getMiscMetalsCategoryLabel(subtype)}`,
+                                    isDefault: false,
+                                    isCustom: true,
+                                    companyId,
+                                    createdBy: user.uid,
+                                    template: {
+                                      ...currentLine,
+                                      // Remove fields that shouldn't be in template
+                                      id: undefined,
+                                      lineId: undefined,
+                                    },
+                                  },
+                                  user.uid
+                                );
+                                
+                                // Reload templates
+                                const templates = await getTemplatesForSubtype(subtype, companyId);
+                                setAvailableTemplates(templates);
+                                alert("Custom assembly saved!");
+                              } catch (error: any) {
+                                console.error("Error saving template:", error);
+                                alert(`Error saving template: ${error.message}`);
+                              } finally {
+                                setSavingTemplate(false);
+                              }
+                            }}
+                            className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors flex items-center gap-1 disabled:opacity-50"
+                            disabled={savingTemplate || !companyId || !user}
+                            title="Save current line as custom assembly"
+                          >
+                            <Save className="w-3 h-3" />
+                            Save as Template
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Material Section - Structural Members */}
-        {materialType === "Material" && (
-          <div className="space-y-4">
-            <h4 className="font-semibold text-gray-900 border-b border-gray-200 pb-2">Material</h4>
+        {/* Material Section - Conditional based on workType and miscMethod */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Material Section - Only show for STRUCTURAL or DETAILED MISC */}
+          {materialType === "Material" && 
+           ((isEditing ? editingLine.workType : line.workType) !== "MISC" ||
+            (isEditing ? editingLine.miscMethod : line.miscMethod) === "DETAILED") && (
+
+            <div className="space-y-4">
+              <h4 className="font-semibold text-gray-900 border-b border-gray-200 pb-2">
+                Material {((isEditing ? editingLine.workType : line.workType) === "MISC") && "(Detailed Mode)"}
+              </h4>
             <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -1004,8 +1332,154 @@ export default function EstimatingRowDetail({
                     </div>
                   )}
                 </div>
-          </div>
-        )}
+            </div>
+          )}
+
+          {/* Assembly Mode - Stairs */}
+          {(isEditing ? editingLine.workType : line.workType) === "MISC" &&
+           (isEditing ? editingLine.miscMethod : line.miscMethod) === "ASSEMBLY" &&
+           (isEditing ? editingLine.miscSubtype : line.miscSubtype) === "STAIR" && (
+            <div className="space-y-4 bg-purple-50/30 rounded-lg p-4 border border-purple-200">
+              <h4 className="font-semibold text-gray-900 border-b border-gray-200 pb-2">Stair Assembly</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Number of Treads</label>
+                  {renderField("Treads", "stairTreads", "number")}
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Number of Landings</label>
+                  {renderField("Landings", "stairLandings", "number")}
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Stair Width (ft) <span className="text-gray-500 text-xs">(optional)</span>
+                  </label>
+                  {renderField("Stair Width", "stairWidth", "number")}
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Rail Included?</label>
+                  {renderField("Rail Included", "stairRailIncluded", "checkbox")}
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Cost per Tread ($)</label>
+                  {renderField("Cost per Tread", "assemblyCostPerUnit", "number")}
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Total Labor Hours <span className="text-gray-500 text-xs">(manual override)</span>
+                  </label>
+                  {renderField("Assembly Labor Hours", "assemblyLaborHours", "number")}
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Lump Sum Total ($) <span className="text-gray-500 text-xs">(overrides calculations)</span>
+                  </label>
+                  {renderField("Assembly Total Cost", "assemblyTotalCost", "number")}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Assembly Mode - Rails */}
+          {(isEditing ? editingLine.workType : line.workType) === "MISC" &&
+           (isEditing ? editingLine.miscMethod : line.miscMethod) === "ASSEMBLY" &&
+           ((isEditing ? editingLine.miscSubtype : line.miscSubtype) === "HANDRAIL" ||
+            (isEditing ? editingLine.miscSubtype : line.miscSubtype) === "GUARDRAIL") && (
+            <div className="space-y-4 bg-purple-50/30 rounded-lg p-4 border border-purple-200">
+              <h4 className="font-semibold text-gray-900 border-b border-gray-200 pb-2">Rail Assembly</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Rail Type</label>
+                  <select
+                    value={(isEditing ? editingLine.railType : line.railType) || ""}
+                    onChange={(e) => {
+                      if (!isEditing) {
+                        onEdit(line);
+                      }
+                      onChange("railType", e.target.value || undefined, line);
+                      if (isEditing) {
+                        onSave();
+                      }
+                    }}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  >
+                    <option value="">Select rail type...</option>
+                    <option value="GRIP_RAIL">Grip Rail</option>
+                    <option value="TWO_LINE">2-Line</option>
+                    <option value="THREE_LINE">3-Line</option>
+                    <option value="FOUR_LINE">4-Line</option>
+                    <option value="FIVE_LINE">5-Line</option>
+                    <option value="SIX_LINE">6-Line</option>
+                    <option value="SEVEN_LINE">7-Line</option>
+                    <option value="EIGHT_LINE">8-Line</option>
+                    <option value="NINE_LINE">9-Line</option>
+                    <option value="CABLE_RAIL">Cable Rail</option>
+                    <option value="VERTICAL_PICKETS">Vertical Pickets</option>
+                    <option value="HORIZONTAL_PICKETS">Horizontal Pickets</option>
+                    <option value="WIRE_MESH">Wire Mesh Infill</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Material</label>
+                  <select
+                    value={(isEditing ? editingLine.railMaterial : line.railMaterial) || ""}
+                    onChange={(e) => {
+                      if (!isEditing) {
+                        onEdit(line);
+                      }
+                      onChange("railMaterial", e.target.value || undefined, line);
+                      if (isEditing) {
+                        onSave();
+                      }
+                    }}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  >
+                    <option value="">Select material...</option>
+                    <option value="SCH40_1_5">1-1/2" Sch 40 Pipe</option>
+                    <option value="SCH80_1_5">1-1/2" Sch 80 Pipe</option>
+                    <option value="OTHER">Other (Manual)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Total Linear Feet (LF)</label>
+                  {renderField("Rail Length", "railLengthFt", "number")}
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Finish <span className="text-gray-500 text-xs">(optional)</span>
+                  </label>
+                  {renderField("Rail Finish", "railFinish", "text")}
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Cost per LF ($)</label>
+                  {renderField("Cost per LF", "assemblyCostPerUnit", "number")}
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Total Labor Hours <span className="text-gray-500 text-xs">(manual override)</span>
+                  </label>
+                  {renderField("Assembly Labor Hours", "assemblyLaborHours", "number")}
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Lump Sum Total ($) <span className="text-gray-500 text-xs">(overrides calculations)</span>
+                  </label>
+                  {renderField("Assembly Total Cost", "assemblyTotalCost", "number")}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Assembly Mode Warning */}
+          {(isEditing ? editingLine.workType : line.workType) === "MISC" &&
+           (isEditing ? editingLine.miscMethod : line.miscMethod) === "ASSEMBLY" && (
+            <div className="lg:col-span-2 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+              <p className="text-sm text-yellow-800">
+                <strong>Assembly Mode:</strong> Weight-per-foot calculations are disabled. 
+                Use assembly-specific inputs above to estimate cost.
+              </p>
+            </div>
+          )}
 
         {/* Material Section - Plate */}
         {materialType === "Plate" && (
@@ -1904,6 +2378,7 @@ export default function EstimatingRowDetail({
             </div>
           </div>
         </div>
+        </div>
 
         {/* Admin Section */}
         <div className="space-y-4">
@@ -2012,6 +2487,21 @@ export default function EstimatingRowDetail({
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
           >
             Edit Line
+          </button>
+        </div>
+      )}
+
+      {/* Bottom Collapse Button */}
+      {onCollapse && (
+        <div className="sticky bottom-0 z-20 -mb-6 -mx-6 mt-4 pt-2 bg-gradient-to-t from-white via-gray-50/80 to-transparent">
+          <button
+            onClick={onCollapse}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-t-xl shadow-lg hover:shadow-xl transition-all duration-200 font-semibold text-sm border-2 border-blue-500"
+            title="Click to collapse and roll up this detail view"
+          >
+            <ChevronDown className="w-5 h-5" />
+            <span>Roll Up Detail View</span>
+            <ChevronDown className="w-5 h-5" />
           </button>
         </div>
       )}

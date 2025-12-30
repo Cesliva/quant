@@ -14,7 +14,7 @@ const actions = [
     title: "New Project",
     description: "Kick off a fresh estimate or pursuit.",
     icon: <PenSquare className="w-4 h-4" />,
-    href: "/projects/new/details",
+    href: "/projects/new",
   },
   {
     title: "Import Estimate",

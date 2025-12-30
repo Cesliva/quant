@@ -103,7 +103,7 @@ function GradeInfoTooltip({ materialType }: { materialType: "Material" | "Plate"
         <div
           ref={infoRef}
           className="absolute right-0 top-6 z-50 w-80 bg-white border border-gray-300 rounded-lg shadow-xl p-4 text-xs"
-          style={{ maxHeight: "400px", overflowY: "auto" }}
+          style={{ maxHeight: "300px", overflowY: "auto" }}
         >
           <div className="font-semibold text-sm text-gray-900 mb-3 pb-2 border-b">
             Steel Grade Reference
@@ -196,9 +196,20 @@ export default function EstimatingGridCompact({
     }
   }, [sizeDropdownOpen]);
 
+  const handleCollapse = (lineId: string) => {
+    onExpandedRowChange(null);
+    // Scroll the row into view when collapsing - ensures consistent view whether collapsing from top or bottom
+    setTimeout(() => {
+      const rowElement = document.getElementById(`line-${lineId}`);
+      if (rowElement) {
+        rowElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 100);
+  };
+
   const toggleRow = (lineId: string) => {
     if (expandedRowId === lineId) {
-      onExpandedRowChange(null);
+      handleCollapse(lineId);
     } else {
       onExpandedRowChange(lineId);
     }
@@ -448,13 +459,13 @@ export default function EstimatingGridCompact({
                     </td>
 
                     {/* Type */}
-                    <td className="px-5 py-3 text-gray-700">
+                    <td className="px-5 py-3 text-gray-700 min-w-[140px]">
                       {isEditing ? (
-                        <div className="flex gap-1 items-center">
+                        <div className="flex gap-1.5 items-center">
                           <select
                             value={displayLine.materialType || "Material"}
                             onChange={(e) => onChange("materialType", e.target.value, line)}
-                            className="w-20 px-1 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-24 px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                           >
                             <option value="Material">Material</option>
                             <option value="Plate">Plate</option>
@@ -462,8 +473,16 @@ export default function EstimatingGridCompact({
                           {displayLine.materialType === "Material" && (
                             <select
                               value={displayLine.shapeType || ""}
-                              onChange={(e) => onChange("shapeType", e.target.value, line)}
-                              className="flex-1 px-1 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              onChange={(e) => {
+                                onChange("shapeType", e.target.value, line);
+                                // Clear size designation when shape type changes
+                                onChange("sizeDesignation", "", line);
+                                // Close and clear any open dropdowns for this line
+                                const lineId = line.id || "";
+                                setSizeDropdownOpen((prev) => ({ ...prev, [lineId]: false }));
+                                setSizeFilters((prev) => ({ ...prev, [lineId]: "" }));
+                              }}
+                              className="flex-1 min-w-[100px] px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                             >
                               <option value="">Select type...</option>
                               {SHAPE_TYPES.map((type) => (
@@ -484,18 +503,132 @@ export default function EstimatingGridCompact({
                     </td>
 
                     {/* Spec */}
-                    <td className="px-5 py-3 text-gray-700">
+                    <td className="px-5 py-3 text-gray-700 min-w-[180px]">
                       {isEditing ? (
                         displayLine.materialType === "Material" ? (
-                          <input
-                            type="text"
-                            value={displayLine.sizeDesignation || ""}
-                            onChange={(e) => onChange("sizeDesignation", e.target.value, line)}
-                            className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            placeholder="Size (e.g., W12x26)"
-                          />
+                          (() => {
+                            const lineId = line.id || "";
+                            const availableSizes = displayLine.shapeType
+                              ? getShapesByType(displayLine.shapeType).map((shape) => shape["Member Size"])
+                              : [];
+                            const currentValue = displayLine.sizeDesignation || "";
+                            const filterKey = lineId;
+                            const sizeFilter = sizeFilters[filterKey] || "";
+                            const isDropdownOpen = sizeDropdownOpen[filterKey] || false;
+                            const displayValue = isDropdownOpen ? sizeFilter : currentValue;
+                            
+                            // Filter sizes based on input - intelligent search
+                            const filteredSizes = sizeFilter
+                              ? availableSizes.filter((size) =>
+                                  size.toLowerCase().includes(sizeFilter.toLowerCase()) ||
+                                  size.replace(/[^0-9]/g, "").includes(sizeFilter.replace(/[^0-9]/g, "")) ||
+                                  sizeFilter.toLowerCase().split(/\s+/).every(term => 
+                                    size.toLowerCase().includes(term)
+                                  )
+                                )
+                              : availableSizes;
+
+                            return (
+                              <div 
+                                className="relative w-full" 
+                                ref={(el) => {
+                                  if (el) {
+                                    sizeDropdownRefs.current[filterKey] = el;
+                                  }
+                                }}
+                              >
+                                <div className="relative">
+                                  <input
+                                    type="text"
+                                    value={displayValue}
+                                    onChange={(e) => {
+                                      const newFilter = e.target.value;
+                                      setSizeFilters((prev) => ({ ...prev, [filterKey]: newFilter }));
+                                      
+                                      // Always keep dropdown open when typing
+                                      if (!isDropdownOpen) {
+                                        setSizeDropdownOpen((prev) => ({ ...prev, [filterKey]: true }));
+                                      }
+                                      
+                                      // If exact match found, select it automatically
+                                      const exactMatch = availableSizes.find(
+                                        (opt) => opt.toLowerCase() === newFilter.toLowerCase()
+                                      );
+                                      if (exactMatch) {
+                                        onChange("sizeDesignation", exactMatch, line);
+                                        setSizeFilters((prev) => ({ ...prev, [filterKey]: "" }));
+                                        setSizeDropdownOpen((prev) => ({ ...prev, [filterKey]: false }));
+                                      } else {
+                                        // Update the value as user types for manual entry
+                                        onChange("sizeDesignation", newFilter, line);
+                                      }
+                                    }}
+                                    onFocus={(e) => {
+                                      setSizeDropdownOpen((prev) => ({ ...prev, [filterKey]: true }));
+                                      // Clear the filter so input shows current value
+                                      setSizeFilters((prev) => ({ ...prev, [filterKey]: "" }));
+                                      // Select all text if there's a current value, so typing replaces it
+                                      if (currentValue) {
+                                        e.currentTarget.select();
+                                      }
+                                    }}
+                                    onBlur={(e) => {
+                                      // Delay closing to allow click on dropdown option to register
+                                      setTimeout(() => {
+                                        const activeElement = document.activeElement;
+                                        if (!sizeDropdownRefs.current[filterKey]?.contains(activeElement)) {
+                                          setSizeFilters((prev) => ({ ...prev, [filterKey]: "" }));
+                                          setSizeDropdownOpen((prev) => ({ ...prev, [filterKey]: false }));
+                                        }
+                                      }, 200);
+                                    }}
+                                    placeholder={currentValue || "Type to search sizes..."}
+                                    className="w-full min-w-[120px] px-2 py-1.5 pr-8 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  />
+                                  <ChevronDown 
+                                    className={`absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`}
+                                  />
+                                </div>
+                                {isDropdownOpen && availableSizes.length > 0 && (
+                                  <>
+                                    {filteredSizes.length > 0 ? (
+                                      <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                                        {filteredSizes.slice(0, 50).map((size) => (
+                                          <button
+                                            key={size}
+                                            type="button"
+                                            onMouseDown={(e) => {
+                                              // Use onMouseDown to prevent blur from firing first
+                                              e.preventDefault();
+                                              onChange("sizeDesignation", size, line);
+                                              setSizeFilters((prev) => ({ ...prev, [filterKey]: "" }));
+                                              setSizeDropdownOpen((prev) => ({ ...prev, [filterKey]: false }));
+                                            }}
+                                            className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors ${
+                                              currentValue === size ? "bg-blue-100 font-semibold" : ""
+                                            }`}
+                                          >
+                                            {size}
+                                          </button>
+                                        ))}
+                                        {filteredSizes.length > 50 && (
+                                          <div className="px-3 py-2 text-xs text-gray-500 border-t border-gray-200">
+                                            Showing first 50 of {filteredSizes.length} results. Continue typing to narrow down.
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : sizeFilter ? (
+                                      <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg p-3 text-sm text-gray-500">
+                                        No sizes found matching "{sizeFilter}"
+                                      </div>
+                                    ) : null}
+                                  </>
+                                )}
+                              </div>
+                            );
+                          })()
                         ) : (
-                          <div className="flex gap-1 text-xs">
+                          <div className="flex gap-1.5 text-sm">
                             <input
                               type="text"
                               value={displayLine.thickness ? getThicknessLabelFromInches(displayLine.thickness) || displayLine.thickness : ""}
@@ -503,14 +636,14 @@ export default function EstimatingGridCompact({
                                 const inches = convertThicknessInputToInches(e.target.value);
                                 onChange("thickness", inches, line);
                               }}
-                              className="w-16 px-1 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              className="w-20 px-2 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                               placeholder="Thick"
                             />
                             <input
                               type="number"
                               value={displayLine.width || ""}
                               onChange={(e) => onChange("width", parseFloat(e.target.value) || 0, line)}
-                              className="w-16 px-1 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              className="w-20 px-2 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                               placeholder="Width"
                               step="0.01"
                             />
@@ -518,7 +651,7 @@ export default function EstimatingGridCompact({
                               type="number"
                               value={displayLine.plateLength || ""}
                               onChange={(e) => onChange("plateLength", parseFloat(e.target.value) || 0, line)}
-                              className="w-16 px-1 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              className="w-20 px-2 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                               placeholder="Length"
                               step="0.01"
                             />
@@ -530,7 +663,7 @@ export default function EstimatingGridCompact({
                     </td>
 
                     {/* Grade */}
-                    <td className="px-5 py-3 text-gray-700">
+                    <td className="px-5 py-3 text-gray-700 min-w-[100px]">
                       {isEditing ? (
                         <select
                           value={displayLine.materialType === "Material" ? (displayLine.grade || "") : (displayLine.plateGrade || "")}
@@ -557,7 +690,7 @@ export default function EstimatingGridCompact({
                     </td>
 
                     {/* Quantity */}
-                    <td className="px-5 py-3 text-gray-700">
+                    <td className="px-5 py-3 text-gray-700 min-w-[80px]">
                       {isEditing ? (
                         <input
                           type="number"
@@ -570,7 +703,7 @@ export default function EstimatingGridCompact({
                               onChange("plateQty", val, line);
                             }
                           }}
-                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full min-w-[60px] px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                           placeholder="0"
                           min="0"
                           step="1"
@@ -581,30 +714,30 @@ export default function EstimatingGridCompact({
                     </td>
 
                     {/* Length */}
-                    <td className="px-5 py-3 text-gray-700">
+                    <td className="px-5 py-3 text-gray-700 min-w-[140px]">
                       {isEditing && displayLine.materialType === "Material" ? (
-                        <div className="flex gap-1 items-center text-xs">
+                        <div className="flex gap-1 items-center text-sm">
                           <input
                             type="number"
                             value={displayLine.lengthFt || ""}
                             onChange={(e) => onChange("lengthFt", parseFloat(e.target.value) || 0, line)}
-                            className="w-12 px-1 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-16 px-2 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                             placeholder="ft"
                             min="0"
                             step="1"
                           />
-                          <span className="text-gray-500">'</span>
+                          <span className="text-gray-500 font-medium">'</span>
                           <input
                             type="number"
                             value={displayLine.lengthIn || ""}
                             onChange={(e) => onChange("lengthIn", parseFloat(e.target.value) || 0, line)}
-                            className="w-12 px-1 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-16 px-2 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                             placeholder="in"
                             min="0"
                             max="11"
                             step="0.125"
                           />
-                          <span className="text-gray-500">"</span>
+                          <span className="text-gray-500 font-medium">"</span>
                         </div>
                       ) : (
                         lengthDisplay
@@ -714,6 +847,7 @@ export default function EstimatingGridCompact({
                           onSave={onSave}
                           onCancel={onCancel}
                           onChange={onChange}
+                          onCollapse={() => handleCollapse(line.id || "")}
                         />
                       </td>
                     </tr>

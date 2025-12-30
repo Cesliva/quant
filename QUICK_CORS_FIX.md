@@ -81,3 +81,8 @@ After applying CORS, you can verify it's working by:
 
 If you still see CORS errors after following these steps, the bucket name might be different. Check your `.env.local` file for `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` to get the exact bucket name.
 
+
+
+
+
+

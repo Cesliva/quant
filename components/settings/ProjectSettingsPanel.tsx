@@ -1092,7 +1092,11 @@ export default function ProjectSettingsPanel({ companyId, projectId, compact = f
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Coating Rate ($/SF)
+                  Coating Rate {companySettings?.coatingTypes?.[0] ? 
+                    (companySettings.coatingTypes[0].costPerPound !== undefined 
+                      ? "($/lb)" 
+                      : "($/SF)")
+                    : "($/SF or $/lb)"}
                 </label>
                 <Input
                   type="text"
@@ -1253,6 +1257,19 @@ export default function ProjectSettingsPanel({ companyId, projectId, compact = f
             <Button variant="primary" size="sm" onClick={handleSave} disabled={isSaving}>
               <Save className="w-4 h-4 mr-2" />
               {isSaving ? "Saving..." : "Save All Settings"}
+            </Button>
+          </div>
+
+          {/* Bottom Collapse Button */}
+          <div className="flex justify-end pt-4 border-t border-gray-200 mt-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsExpanded(false)}
+              className="p-2"
+              title="Collapse Settings"
+            >
+              <ChevronUp className="w-4 h-4" />
             </Button>
           </div>
         </CardContent>

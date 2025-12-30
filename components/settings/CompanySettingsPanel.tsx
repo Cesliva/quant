@@ -33,6 +33,7 @@ export default function CompanySettingsPanel({ companyId, compact = false }: Com
 
   const [laborRates, setLaborRates] = useState<Array<{ id: string; trade: string; rate: number }>>([]);
   const [materialGrades, setMaterialGrades] = useState<Array<{ id: string; grade: string; costPerPound: number }>>([]);
+  const [coatingTypes, setCoatingTypes] = useState<Array<{ id: string; type: string; costPerSF?: number; costPerPound?: number }>>([]);
   const [markupSettings, setMarkupSettings] = useState({
     overheadPercentage: 15,
     profitPercentage: 10,
@@ -73,6 +74,13 @@ export default function CompanySettingsPanel({ companyId, compact = false }: Com
         }))
       );
 
+      setCoatingTypes(
+        settings.coatingTypes.map((coating, index) => ({
+          id: index.toString(),
+          ...coating,
+        }))
+      );
+
       setMarkupSettings({
         overheadPercentage: settings.markupSettings.overheadPercentage,
         profitPercentage: settings.markupSettings.profitPercentage,
@@ -101,7 +109,7 @@ export default function CompanySettingsPanel({ companyId, compact = false }: Com
         },
         materialGrades: materialGrades.map(({ id, ...rest }) => rest),
         laborRates: laborRates.map(({ id, ...rest }) => rest),
-        coatingTypes: [],
+        coatingTypes: coatingTypes.map(({ id, ...rest }) => rest),
         markupSettings: {
           ...markupSettings,
           materialWasteFactor: 5,
@@ -230,6 +238,25 @@ export default function CompanySettingsPanel({ companyId, compact = false }: Com
                   <span className="font-medium text-gray-900">${grade.costPerPound}/lb</span>
                 </div>
               ))}
+            </div>
+          </div>
+
+          {/* Coating Types Summary */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Coating Types</h3>
+            <div className="space-y-2">
+              {coatingTypes.slice(0, compact ? 3 : coatingTypes.length).map((coating) => {
+                const isGalvanizing = coating.type.toLowerCase().includes("galvanizing") || coating.type.toLowerCase().includes("galv");
+                const costDisplay = isGalvanizing 
+                  ? (coating.costPerPound !== undefined ? `$${coating.costPerPound}/lb` : "-")
+                  : (coating.costPerSF !== undefined ? `$${coating.costPerSF}/SF` : "-");
+                return (
+                  <div key={coating.id} className="flex items-center justify-between text-sm">
+                    <span className="text-gray-700">{coating.type}</span>
+                    <span className="font-medium text-gray-900">{costDisplay}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
 

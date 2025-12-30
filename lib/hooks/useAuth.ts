@@ -13,7 +13,11 @@ export function useAuth() {
   const [loading, setLoading] = useState(true);
 
   // Development bypass: Set NEXT_PUBLIC_BYPASS_AUTH=true in .env.local to bypass authentication
-  const bypassAuth = process.env.NEXT_PUBLIC_BYPASS_AUTH === "true" && process.env.NODE_ENV === "development";
+  // ONLY works in development mode - NEVER in production
+  const bypassAuth = 
+    process.env.NEXT_PUBLIC_BYPASS_AUTH === "true" && 
+    process.env.NODE_ENV === "development" &&
+    typeof window !== "undefined"; // Additional safety check - only in browser
 
   useEffect(() => {
     if (bypassAuth) {
@@ -29,12 +33,24 @@ export function useAuth() {
     }
 
     if (!auth) {
+      // CRITICAL SECURITY: If Firebase auth is not configured, ensure no user is set
+      // This prevents unauthorized access when Firebase is not set up
+      setUser(null);
       setLoading(false);
+      if (typeof window !== "undefined") {
+        console.warn("Firebase Auth is not configured. Authentication is required.");
+      }
       return;
     }
 
     const unsubscribe = onAuthStateChanged(auth, (user) => {
+      // Only set user if auth is properly configured
       setUser(user);
+      setLoading(false);
+    }, (error) => {
+      // On auth error, ensure no user is set
+      console.error("Auth state error:", error);
+      setUser(null);
       setLoading(false);
     });
 

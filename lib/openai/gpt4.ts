@@ -63,7 +63,8 @@ export interface SpecReviewResult {
 }
 
 export interface ProposalResult {
-  proposal: string;
+  proposal: string; // Legacy plain text format
+  structuredProposal?: any; // New structured format
   tokens: number;
   cost: number;
 }
