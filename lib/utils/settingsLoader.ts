@@ -68,6 +68,14 @@ export interface CompanySettings {
   };
   // Sample Data Settings
   showSampleData?: boolean; // Toggle to show/hide sample data projects
+  // Project Numbering Settings
+  projectNumbering?: {
+    prefix?: string; // Default "Q"
+    yearFormat?: "YY" | "YYYY"; // Default "YYYY"
+    sequencePadding?: number; // 3 or 4, default 3
+    resetEachYear?: boolean; // Default true
+    nextSequence?: number; // Current sequence number
+  };
 }
 
 export interface ProjectSettings {

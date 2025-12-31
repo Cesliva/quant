@@ -332,25 +332,45 @@ function SettingsPageContent() {
   const handleLogoUpload = async () => {
     if (!logoFile || !companyId) return;
     
+    // Validate file type
+    const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'];
+    if (!validTypes.includes(logoFile.type)) {
+      alert("Invalid file type. Please upload a PNG, JPG, GIF, or WebP image.");
+      return;
+    }
+
+    // Validate file size (5MB max for logos)
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    if (logoFile.size > maxSize) {
+      alert(`File size exceeds 5MB limit. Please use a smaller image.`);
+      return;
+    }
+    
     setIsUploadingLogo(true);
     try {
-      // Delete old logo if exists
+      // Delete old logo if exists (non-blocking)
       if (companySettings.logoUrl) {
         try {
           const oldPath = companySettings.logoUrl.split('/o/')[1]?.split('?')[0];
           if (oldPath) {
-            await deleteFileFromStorage(decodeURIComponent(oldPath));
+            // Don't await - delete in background
+            deleteFileFromStorage(decodeURIComponent(oldPath)).catch((error) => {
+              console.warn("Failed to delete old logo:", error);
+            });
           }
         } catch (error) {
-          console.warn("Failed to delete old logo:", error);
+          console.warn("Failed to parse old logo path:", error);
         }
       }
       
-      // Upload new logo
+      // Upload new logo with 60 second timeout
       const timestamp = Date.now();
-      const fileExtension = logoFile.name.split('.').pop();
+      const fileExtension = logoFile.name.split('.').pop() || 'png';
       const logoPath = `companies/${companyId}/logo/company-logo-${timestamp}.${fileExtension}`;
-      const downloadURL = await uploadFileToStorage(logoFile, logoPath);
+      
+      console.log("[Logo Upload] Starting upload...");
+      const downloadURL = await uploadFileToStorage(logoFile, logoPath, 60000); // 60 second timeout
+      console.log("[Logo Upload] Upload successful:", downloadURL);
       
       // Update settings with new logo URL
       setCompanySettings({ ...companySettings, logoUrl: downloadURL });
@@ -387,8 +407,26 @@ function SettingsPageContent() {
       
       alert("Logo uploaded successfully!");
     } catch (error: any) {
-      console.error("Failed to upload logo:", error);
-      alert(`Failed to upload logo: ${error.message || "Please try again."}`);
+      console.error("[Logo Upload] Failed to upload logo:", error);
+      const errorMessage = error.message || "Please try again.";
+      
+      // Check if it's a CORS error
+      const isCorsError = errorMessage.toLowerCase().includes('cors') || 
+                         errorMessage.toLowerCase().includes('cross-origin') ||
+                         errorMessage.toLowerCase().includes('blocked by cors policy');
+      
+      if (isCorsError) {
+        const corsFixMessage = `CORS Error: Firebase Storage is blocking the upload.\n\n` +
+          `To fix this:\n` +
+          `1. Go to: https://console.cloud.google.com/storage/browser/quant-80cff.firebasestorage.app?project=quant-80cff\n` +
+          `2. Click "Configuration" tab\n` +
+          `3. Edit CORS configuration\n` +
+          `4. See CORS_FIX_STEPS.md for detailed instructions\n\n` +
+          `This is a one-time setup required for Firebase Storage.`;
+        alert(corsFixMessage);
+      } else {
+        alert(`Failed to upload logo: ${errorMessage}`);
+      }
     } finally {
       setIsUploadingLogo(false);
     }

@@ -15,9 +15,13 @@ import { loadCompanySettings } from "@/lib/utils/settingsLoader";
 import BacklogAtAGlance from "@/components/dashboard/BacklogAtAGlance";
 import CostTrendAnalysis from "@/components/dashboard/CostTrendAnalysis";
 import EstimatorWorkload from "@/components/dashboard/EstimatorWorkload";
+import BidForecastModal from "@/components/dashboard/BidForecastModal";
 import Input from "@/components/ui/Input";
 import { Search, Lightbulb, TrendingUp, AlertCircle } from "lucide-react";
 import { PRODUCT_SYSTEM_NAME } from "@/lib/branding";
+import { Bid } from "@/lib/bids/types";
+import { calculateBidForecast } from "@/lib/bids/forecast";
+import { SEEDED_BIDS } from "@/lib/bids/seed";
 
 interface Project {
   id: string;
@@ -94,6 +98,8 @@ export default function DashboardPage() {
   });
   const [projectFilter, setProjectFilter] = useState<"all" | "mine">("all");
   const [projectSearchQuery, setProjectSearchQuery] = useState("");
+  const [bids, setBids] = useState<Bid[]>([]);
+  const [showBidForecastModal, setShowBidForecastModal] = useState(false);
   
   // Debug: Log filter changes
   useEffect(() => {
@@ -216,6 +222,35 @@ export default function DashboardPage() {
       }
     };
     loadSetting();
+  }, [companyId]);
+
+  // Load bids from Firestore (or use seed data for dev/demo)
+  useEffect(() => {
+    if (!isFirebaseConfigured() || !companyId) {
+      // Use seed data if Firebase not configured
+      setBids(SEEDED_BIDS);
+      return;
+    }
+
+    const bidsPath = `companies/${companyId}/bids`;
+    const unsubscribe = subscribeToCollection<Bid>(
+      bidsPath,
+      (loadedBids) => {
+        if (loadedBids.length > 0) {
+          setBids(loadedBids);
+        } else {
+          // Use seed data if no bids in Firebase (dev/demo mode)
+          setBids(SEEDED_BIDS);
+        }
+      },
+      (error) => {
+        console.error("Error loading bids:", error);
+        // Fallback to seed data on error
+        setBids(SEEDED_BIDS);
+      }
+    );
+
+    return () => unsubscribe();
   }, [companyId]);
 
   // Load projects from Firestore
@@ -456,21 +491,12 @@ export default function DashboardPage() {
 
   const awardedThisMonth = totalBids > 0 ? Math.round((winRate / 100) * totalBids) : 0;
 
-  const weightedPipeline = allProjects
-    .filter((p) => p.status === "active" && !p.archived)
-    .reduce((sum, project) => {
-      const value =
-        typeof project.estimatedValue === "string"
-          ? parseFloat(project.estimatedValue) || 0
-          : project.estimatedValue || 0;
-      // winProbability could be stored as percentage (50) or decimal (0.5)
-      let probability = project.winProbability ?? 50;
-      // If stored as percentage (> 1), convert to decimal
-      if (probability > 1) {
-        probability = probability / 100;
-      }
-      return sum + value * probability;
-    }, 0);
+  // Calculate Bid Forecast (replaces Weighted Pipeline)
+  const bidForecast = useMemo(() => {
+    return calculateBidForecast(bids, undefined, {
+      activeOnly: true,
+    });
+  }, [bids]);
   
   const filteredProjects = useMemo(() => {
     let projects = [...activeProjectsList];
@@ -613,15 +639,17 @@ export default function DashboardPage() {
       href: "/projects?status=submitted",
     },
     {
-      label: "Weighted Pipeline",
-      value: weightedPipeline.toLocaleString("en-US", {
+      label: "Bid Forecast",
+      value: bidForecast.total.toLocaleString("en-US", {
         style: "currency",
         currency: "USD",
         maximumFractionDigits: 0,
       }),
-      sublabel: "Based on win probability",
+      sublabel: "Expected awarded value from active bids",
+      breakdown: `Public: ${bidForecast.publicTotal.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 })} • Private: ${bidForecast.privateTotal.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 })}`,
       className: "bg-indigo-500",
-      href: "/reports",
+      href: undefined, // Will be handled by onClick
+      onClick: () => setShowBidForecastModal(true),
     },
   ];
 
@@ -678,19 +706,41 @@ export default function DashboardPage() {
 
         {/* Top Row */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-4 md:mb-6">
-        {primaryCards.map((card) => (
-          <Link
-            key={card.label}
-            href={card.href}
-            className={`rounded-3xl p-4 md:p-6 text-white border border-white/10 shadow-[0_4px_6px_-1px_rgb(0,0,0,0.2),0_2px_4px_-2px_rgb(0,0,0,0.2),0_12px_24px_0_rgb(0,0,0,0.15)] hover:shadow-[0_8px_12px_-2px_rgb(0,0,0,0.25),0_4px_6px_-3px_rgb(0,0,0,0.25),0_16px_32px_0_rgb(0,0,0,0.2)] transition-all duration-300 hover:-translate-y-1 focus:outline-none focus-visible:ring-4 focus-visible:ring-white/50 ${card.className}`}
-          >
-            <p className="uppercase text-xs tracking-[0.18em] opacity-80 mb-2">{card.label}</p>
-            <p className={`leading-none mb-2 ${card.label === "Weighted Pipeline" ? "text-3xl md:text-4xl" : "text-4xl md:text-5xl"} font-semibold`}>
-              {card.value}
-            </p>
-            <p className="text-sm opacity-85">{card.sublabel}</p>
-          </Link>
-        ))}
+        {primaryCards.map((card) => {
+          const CardWrapper = card.href ? Link : "div";
+              const cardProps: any = card.href 
+            ? { href: card.href }
+            : { 
+                onClick: (card as any).onClick,
+                className: "cursor-pointer",
+                role: "button",
+                tabIndex: 0,
+                onKeyDown: (e: React.KeyboardEvent) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    (card as any).onClick?.();
+                  }
+                }
+              };
+
+          return (
+            <CardWrapper
+              key={card.label}
+              {...cardProps}
+              className={`rounded-3xl p-4 md:p-6 text-white border border-white/10 shadow-[0_4px_6px_-1px_rgb(0,0,0,0.2),0_2px_4px_-2px_rgb(0,0,0,0.2),0_12px_24px_0_rgb(0,0,0,0.15)] hover:shadow-[0_8px_12px_-2px_rgb(0,0,0,0.25),0_4px_6px_-3px_rgb(0,0,0,0.25),0_16px_32px_0_rgb(0,0,0,0.2)] transition-all duration-300 hover:-translate-y-1 focus:outline-none focus-visible:ring-4 focus-visible:ring-white/50 ${card.className} ${cardProps.className || ""}`}
+              title={card.label === "Bid Forecast" ? "Bid Forecast = Σ (Bid Amount × Probability). Public bids use historical win rate; private bids use stage-based probabilities." : undefined}
+            >
+              <p className="uppercase text-xs tracking-[0.18em] opacity-80 mb-2">{card.label}</p>
+              <p className={`leading-none mb-2 ${card.label === "Bid Forecast" ? "text-3xl md:text-4xl" : "text-4xl md:text-5xl"} font-semibold`}>
+                {card.value}
+              </p>
+              <p className="text-sm opacity-85">{card.sublabel}</p>
+              {card.breakdown && (
+                <p className="text-xs opacity-75 mt-1">{card.breakdown}</p>
+              )}
+            </CardWrapper>
+          );
+        })}
       </div>
 
         {/* Graph Row */}
@@ -1199,6 +1249,13 @@ export default function DashboardPage() {
       )}
 
       </div>
+
+      {/* Bid Forecast Modal */}
+      <BidForecastModal
+        bids={bids}
+        isOpen={showBidForecastModal}
+        onClose={() => setShowBidForecastModal(false)}
+      />
     </div>
   );
 }

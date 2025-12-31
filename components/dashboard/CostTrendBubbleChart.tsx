@@ -400,26 +400,33 @@ export default function CostTrendBubbleChart({
       .attr("transform", (d: any) => `translate(${d.x},${d.y})`)
       .style("cursor", "pointer");
     
-    // Add circles with transition
+    // Add circles with physics-based spring animation
     const circles = nodes.append("circle")
       .attr("r", 0)
       .attr("fill", (d: any) => d.data.color || "#94a3b8")
       .attr("stroke", "white")
       .attr("stroke-width", 2)
-      .attr("opacity", 0.85)
+      .attr("opacity", 0)
       .style("filter", "drop-shadow(0 2px 4px rgba(0,0,0,0.1))");
     
-    circles.transition()
-      .duration(800)
-      .ease(d3.easeCubicOut)
-      .attr("r", (d: any) => d.r);
+    // Staggered spring animation for bubbles
+    circles.each(function(d: any, i: number) {
+      d3.select(this)
+        .transition()
+        .delay(i * 50) // Stagger each bubble
+        .duration(1200)
+        .ease(d3.easeElasticOut.period(0.4))
+        .attr("r", (d: any) => d.r)
+        .attr("opacity", 0.85);
+    });
     
-    // Add text labels
+    // Add text labels with fade-in animation
     const labels = nodes.append("text")
       .attr("text-anchor", "middle")
       .attr("dominant-baseline", "middle")
       .attr("fill", "white")
       .attr("font-weight", "600")
+      .attr("opacity", 0)
       .style("font-size", (d: any) => {
         // Scale font size based on circle radius
         const fontSize = Math.max(10, Math.min(16, d.r * 0.25));
@@ -428,6 +435,16 @@ export default function CostTrendBubbleChart({
       .style("pointer-events", "none")
       .text((d: any) => d.data.label);
     
+    // Animate labels with delay after circles
+    labels.each(function(d: any, i: number) {
+      d3.select(this)
+        .transition()
+        .delay(i * 50 + 400) // Start after circles begin animating
+        .duration(600)
+        .ease(d3.easeCubicOut)
+        .attr("opacity", 1);
+    });
+    
     // Add value text below label
     const values = nodes.append("text")
       .attr("text-anchor", "middle")
@@ -435,12 +452,13 @@ export default function CostTrendBubbleChart({
       .attr("fill", "white")
       .attr("font-weight", "500")
       .attr("dy", (d: any) => d.r * 0.3)
+      .attr("opacity", 0)
       .style("font-size", (d: any) => {
         const fontSize = Math.max(8, Math.min(12, d.r * 0.2));
         return `${fontSize}px`;
       })
       .style("pointer-events", "none")
-              .text((d: any) => {
+      .text((d: any) => {
         if (selectedMetric === "laborHoursPerTon") {
           return `${d.data.value.toFixed(1)} MH/T`;
         } else {
@@ -453,20 +471,56 @@ export default function CostTrendBubbleChart({
         }
       });
     
-    // Add hover effects and tooltips
+    // Animate values
+    values.each(function(d: any, i: number) {
+      d3.select(this)
+        .transition()
+        .delay(i * 50 + 600) // Start after labels
+        .duration(600)
+        .ease(d3.easeCubicOut)
+        .attr("opacity", 1);
+    });
+    
+    // Add physics-based hover effects and tooltips
     nodes
       .on("mouseenter", function(event, d: any) {
-        d3.select(this).select("circle")
-          .transition()
-          .duration(200)
-          .attr("opacity", 1)
-          .attr("stroke-width", 3);
+        const node = d3.select(this);
+        const circle = node.select("circle");
+        const currentR = (d as any).r;
         
-        // Show tooltip
+        // Physics-based hover: bubble expands with spring effect
+        circle
+          .transition()
+          .duration(300)
+          .ease(d3.easeElasticOut.period(0.3))
+          .attr("r", currentR * 1.15) // Grow 15%
+          .attr("opacity", 1)
+          .attr("stroke-width", 4)
+          .style("filter", "drop-shadow(0 4px 12px rgba(0,0,0,0.25))");
+        
+        // Lift the entire node group slightly
+        node
+          .transition()
+          .duration(300)
+          .ease(d3.easeCubicOut)
+          .attr("transform", (d: any) => `translate(${d.x},${d.y - 5})`);
+        
+        // Scale text slightly
+        node.selectAll("text")
+          .transition()
+          .duration(300)
+          .ease(d3.easeCubicOut)
+          .style("font-size", (d: any) => {
+            const fontSize = Math.max(10, Math.min(18, currentR * 0.3));
+            return `${fontSize}px`;
+          });
+        
+        // Show tooltip with fade-in
         if (tooltipRef.current) {
           const tooltip = tooltipRef.current;
           const data = d.data;
           tooltip.style.display = "block";
+          tooltip.style.opacity = "0";
           const value = data.value;
           const valueDisplay = selectedMetric === "laborHoursPerTon" 
             ? `${value.toFixed(2)} MH/T`
@@ -491,6 +545,12 @@ export default function CostTrendBubbleChart({
             tooltip.style.left = `${rect.left + x + 20}px`;
             tooltip.style.top = `${rect.top + y - 10}px`;
           }
+          
+          // Fade in tooltip
+          d3.select(tooltip)
+            .transition()
+            .duration(200)
+            .style("opacity", "1");
         }
       })
       .on("mousemove", function(event) {
@@ -503,15 +563,49 @@ export default function CostTrendBubbleChart({
           }
         }
       })
-      .on("mouseleave", function() {
-        d3.select(this).select("circle")
-          .transition()
-          .duration(200)
-          .attr("opacity", 0.85)
-          .attr("stroke-width", 2);
+      .on("mouseleave", function(event, d: any) {
+        const node = d3.select(this);
+        const circle = node.select("circle");
+        const currentR = (d as any).r;
         
+        // Spring back to original size
+        circle
+          .transition()
+          .duration(400)
+          .ease(d3.easeElasticOut.period(0.4))
+          .attr("r", currentR)
+          .attr("opacity", 0.85)
+          .attr("stroke-width", 2)
+          .style("filter", "drop-shadow(0 2px 4px rgba(0,0,0,0.1))");
+        
+        // Return node to original position
+        node
+          .transition()
+          .duration(400)
+          .ease(d3.easeCubicOut)
+          .attr("transform", (d: any) => `translate(${d.x},${d.y})`);
+        
+        // Return text to original size
+        node.selectAll("text")
+          .transition()
+          .duration(400)
+          .ease(d3.easeCubicOut)
+          .style("font-size", (d: any) => {
+            const fontSize = Math.max(10, Math.min(16, currentR * 0.25));
+            return `${fontSize}px`;
+          });
+        
+        // Fade out tooltip
         if (tooltipRef.current) {
-          tooltipRef.current.style.display = "none";
+          d3.select(tooltipRef.current)
+            .transition()
+            .duration(200)
+            .style("opacity", "0")
+            .on("end", function() {
+              if (tooltipRef.current) {
+                tooltipRef.current.style.display = "none";
+              }
+            });
         }
       });
     
@@ -569,10 +663,15 @@ export default function CostTrendBubbleChart({
           .attr("data-avg-value", avgValue)
           .attr("data-percent-diff", percentDiff);
         
+        // Physics-based spring animation for overlay circles
         overlayCircle.transition()
-          .duration(600)
-          .ease(d3.easeCubicOut)
-          .attr("r", clampedRadius);
+          .duration(800)
+          .ease(d3.easeElasticOut.period(0.5))
+          .attr("r", clampedRadius)
+          .attr("opacity", 0)
+          .transition()
+          .duration(300)
+          .attr("opacity", 0.9);
         
         // Add percentage deviation label if significant
         if (Math.abs(percentDiff) > 5) {
@@ -611,17 +710,26 @@ export default function CostTrendBubbleChart({
             .attr("opacity", 1);
         }
         
-        // Add hover tooltip for overlay bubbles
+        // Add physics-based hover tooltip for overlay bubbles
         overlayCircle
           .on("mouseenter", function(event) {
-            d3.select(this)
+            const circle = d3.select(this);
+            const currentR = parseFloat(circle.attr("r") || "0");
+            
+            // Physics-based expansion
+            circle
               .transition()
-              .duration(200)
-              .attr("stroke-width", 4)
-              .attr("opacity", 1);
+              .duration(300)
+              .ease(d3.easeElasticOut.period(0.3))
+              .attr("r", currentR * 1.2)
+              .attr("stroke-width", 5)
+              .attr("opacity", 1)
+              .style("filter", `drop-shadow(0 0 8px ${strokeColor}CC)`);
             
             if (tooltipRef.current) {
               const tooltip = tooltipRef.current;
+              tooltip.style.display = "block";
+              tooltip.style.opacity = "0";
               const valueDisplay = selectedMetric === "laborHoursPerTon" 
                 ? `${projectValue.toFixed(2)} MH/T`
                 : projectValue >= 1000 
@@ -634,7 +742,6 @@ export default function CostTrendBubbleChart({
                   ? `$${(avgValue / 1000).toFixed(2)}K/T`
                   : `$${avgValue.toFixed(2)}/T`;
               
-              tooltip.style.display = "block";
               tooltip.innerHTML = `
                 <div class="font-semibold text-sm mb-1">${projectItem.label}</div>
                 <div class="text-xs text-gray-200 mb-1">
@@ -652,6 +759,12 @@ export default function CostTrendBubbleChart({
                 tooltip.style.left = `${rect.left + x + 20}px`;
                 tooltip.style.top = `${rect.top + y - 10}px`;
               }
+              
+              // Fade in tooltip
+              d3.select(tooltip)
+                .transition()
+                .duration(200)
+                .style("opacity", "1");
             }
           })
           .on("mousemove", function(event) {
@@ -665,14 +778,30 @@ export default function CostTrendBubbleChart({
             }
           })
           .on("mouseleave", function() {
-            d3.select(this)
-              .transition()
-              .duration(200)
-              .attr("stroke-width", 3)
-              .attr("opacity", 0.9);
+            const circle = d3.select(this);
+            const currentR = parseFloat(circle.attr("r") || "0") / 1.2; // Get original radius
             
+            // Spring back
+            circle
+              .transition()
+              .duration(400)
+              .ease(d3.easeElasticOut.period(0.4))
+              .attr("r", currentR)
+              .attr("stroke-width", 3)
+              .attr("opacity", 0.9)
+              .style("filter", `drop-shadow(0 0 4px ${strokeColor}80)`);
+            
+            // Fade out tooltip
             if (tooltipRef.current) {
-              tooltipRef.current.style.display = "none";
+              d3.select(tooltipRef.current)
+                .transition()
+                .duration(200)
+                .style("opacity", "0")
+                .on("end", function() {
+                  if (tooltipRef.current) {
+                    tooltipRef.current.style.display = "none";
+                  }
+                });
             }
           });
       });
@@ -718,7 +847,7 @@ export default function CostTrendBubbleChart({
   const totalValue = bubbleData.reduce((sum, d) => sum + d.mhPerTon, 0);
   
   return (
-    <Card className="p-4 md:p-6 rounded-2xl border border-slate-200/60 bg-white shadow-sm hover:shadow-md transition-shadow">
+    <Card className="p-4 md:p-6 rounded-2xl border border-slate-200/60 bg-white shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
       <CardHeader className="pb-4">
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between flex-wrap gap-3">
