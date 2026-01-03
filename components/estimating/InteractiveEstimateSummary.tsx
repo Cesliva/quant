@@ -171,6 +171,7 @@ export default function InteractiveEstimateSummary({
       
       // Apply efficiency multipliers to labor breakdown if available
       let adjustedLaborHours = 0;
+      let hasBreakdown = false;
       const laborFields = [
         { field: 'laborUnload', multiplier: parameters.laborEfficiency.unload },
         { field: 'laborCut', multiplier: parameters.laborEfficiency.cut },
@@ -187,8 +188,15 @@ export default function InteractiveEstimateSummary({
       
       laborFields.forEach(({ field, multiplier }) => {
         const hours = (line as any)[field] || 0;
+        if (hours > 0) hasBreakdown = true;
         adjustedLaborHours += hours * multiplier;
       });
+
+      // If no breakdown available, use totalLabor with average efficiency
+      if (!hasBreakdown && baseLaborHours > 0) {
+        const avgEfficiency = Object.values(parameters.laborEfficiency).reduce((a, b) => a + b, 0) / Object.values(parameters.laborEfficiency).length;
+        adjustedLaborHours = baseLaborHours * avgEfficiency;
+      }
 
       laborHours += Math.max(0, adjustedLaborHours); // Prevent negative hours
 
