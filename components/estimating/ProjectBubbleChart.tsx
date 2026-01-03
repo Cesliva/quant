@@ -5,7 +5,7 @@ import * as d3 from "d3";
 import { EstimatingLine } from "./EstimatingGrid";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
-import { BarChart3, Info } from "lucide-react";
+import { BarChart3, Info, X, TrendingUp, TrendingDown } from "lucide-react";
 import { loadCompanySettings, type CompanySettings } from "@/lib/utils/settingsLoader";
 import { subscribeToCollection, getProjectPath } from "@/lib/firebase/firestore";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
@@ -94,6 +94,7 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
   };
   const [allProjects, setAllProjects] = useState<Array<{ id: string; projectName?: string; status?: string; archived?: boolean }>>([]);
   const [allProjectLines, setAllProjectLines] = useState<ProjectData[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
@@ -347,35 +348,27 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
 
   // Calculate won/lost project averages
   const wonLostAverageData = useMemo(() => {
-    // Get project statuses and approvedBudget flags
+    // Get project statuses (matching CategoryComparisonChart logic)
     const projectStatusMap = new Map<string, string>();
-    const projectApprovedBudgetMap = new Map<string, boolean>();
     allProjects.forEach((p: any) => {
-      if (p.id) {
-        if (p.status) {
-          projectStatusMap.set(p.id, p.status);
-        }
-        // Projects with approvedBudget are considered "won" for calculation purposes
-        if (p.approvedBudget) {
-          projectApprovedBudgetMap.set(p.id, true);
-        }
+      if (p.id && p.status) {
+        projectStatusMap.set(p.id, p.status);
       }
     });
 
     // Separate won and lost projects (excluding current project)
-    // Won projects: status === "won" OR has approvedBudget (locked estimate = won project)
+    // Won projects: status === "won" only (matching CategoryComparisonChart)
     const wonProjects = allProjectLines.filter(
       (p) => {
         if (currentProjectId && p.projectId === currentProjectId) {
           return false; // Always exclude current project
         }
         const status = projectStatusMap.get(p.projectId);
-        const hasApprovedBudget = projectApprovedBudgetMap.get(p.projectId);
-        return status === "won" || hasApprovedBudget === true;
+        return status === "won";
       }
     );
     
-    // Lost projects: status === "lost" only (lost projects wouldn't have approvedBudget)
+    // Lost projects: status === "lost" only (matching CategoryComparisonChart)
     const lostProjects = allProjectLines.filter(
       (p) => {
         if (currentProjectId && p.projectId === currentProjectId) {
@@ -585,6 +578,7 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
             <div class="font-semibold">${d.label}</div>
             <div>${d.mhPerTon.toFixed(2)} ${selectedMetric === "laborHoursPerTon" ? "MH/T" : "$/T"}</div>
             <div class="text-xs text-gray-600">${d.percentage.toFixed(1)}% of total</div>
+            <div class="text-xs text-blue-400 mt-1">Click for detailed comparison</div>
           `;
         }
       })
@@ -600,6 +594,10 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
         if (tooltipRef.current) {
           tooltipRef.current.style.display = "none";
         }
+      })
+      .on("click", function(event, d: any) {
+        event.stopPropagation();
+        setSelectedCategory(d.category);
       });
 
     // Now apply the transition
@@ -768,6 +766,45 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
   const maxValue = bubbleData.length > 0 ? Math.max(...bubbleData.map(d => d.mhPerTon)) : 0;
   const nonZeroData = bubbleData.filter(d => d.mhPerTon > 0);
 
+  // Calculate comparison data for selected category
+  const categoryComparison = useMemo(() => {
+    if (!selectedCategory) return null;
+
+    const currentValue = bubbleData.find(d => d.category === selectedCategory)?.mhPerTon || 0;
+    const allAvg = averageData.get(selectedCategory) || 0;
+    const wonAvg = wonLostAverageData.won.get(selectedCategory) || 0;
+    const lostAvg = wonLostAverageData.lost.get(selectedCategory) || 0;
+
+    // Count projects for each category
+    const allProjectsCount = allProjectLines.filter(p => !currentProjectId || p.projectId !== currentProjectId).length;
+    const projectStatusMap = new Map<string, string>();
+    allProjects.forEach((p: any) => {
+      if (p.id && p.status) {
+        projectStatusMap.set(p.id, p.status);
+      }
+    });
+    const wonProjects = allProjectLines.filter(p => {
+      if (currentProjectId && p.projectId === currentProjectId) return false;
+      return projectStatusMap.get(p.projectId) === "won";
+    });
+    const lostProjects = allProjectLines.filter(p => {
+      if (currentProjectId && p.projectId === currentProjectId) return false;
+      return projectStatusMap.get(p.projectId) === "lost";
+    });
+
+    return {
+      category: selectedCategory,
+      label: LABOR_CATEGORIES.find(c => c.key === selectedCategory)?.label || selectedCategory,
+      current: currentValue,
+      allAverage: allAvg,
+      wonAverage: wonAvg,
+      lostAverage: lostAvg,
+      allCount: allProjectsCount,
+      wonCount: wonProjects.length,
+      lostCount: lostProjects.length,
+    };
+  }, [selectedCategory, bubbleData, averageData, wonLostAverageData, allProjectLines, allProjects, currentProjectId]);
+
   return (
     <>
       {/* Tooltip */}
@@ -776,6 +813,156 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
         className="fixed bg-gray-900 text-white px-3 py-2 rounded-lg shadow-lg text-sm pointer-events-none z-50"
         style={{ display: "none" }}
       />
+
+      {/* Comparison Panel Modal */}
+      {selectedCategory && categoryComparison && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedCategory(null)}>
+          <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-2xl font-semibold text-slate-900">{categoryComparison.label}</h3>
+                  <p className="text-sm text-slate-500 mt-1">
+                    Live comparison across all projects
+                  </p>
+                </div>
+                <button
+                  onClick={() => setSelectedCategory(null)}
+                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-slate-500" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {/* Current Project */}
+                <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-5">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-blue-600"></div>
+                      <span className="font-semibold text-slate-900">Current Project</span>
+                    </div>
+                    <span className="text-2xl font-bold text-blue-900 tabular-nums">
+                      {categoryComparison.current.toFixed(2)} {selectedMetric === "laborHoursPerTon" ? "MH/T" : "$/T"}
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-600">{projectName || "Current Estimate"}</p>
+                </div>
+
+                {/* Won Projects Average */}
+                {categoryComparison.wonCount > 0 && (
+                  <div className="bg-emerald-50 border-2 border-emerald-200 rounded-xl p-5">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full bg-emerald-600"></div>
+                        <span className="font-semibold text-slate-900">Won Projects Average</span>
+                        <span className="text-xs text-slate-500">({categoryComparison.wonCount} project{categoryComparison.wonCount !== 1 ? 's' : ''})</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {categoryComparison.current > categoryComparison.wonAverage ? (
+                          <TrendingUp className="w-5 h-5 text-amber-600" />
+                        ) : (
+                          <TrendingDown className="w-5 h-5 text-emerald-600" />
+                        )}
+                        <span className="text-2xl font-bold text-emerald-900 tabular-nums">
+                          {categoryComparison.wonAverage.toFixed(2)} {selectedMetric === "laborHoursPerTon" ? "MH/T" : "$/T"}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-sm text-slate-600">
+                      {categoryComparison.current > categoryComparison.wonAverage ? (
+                        <span className="text-amber-700 font-medium">
+                          Current is {((categoryComparison.current / categoryComparison.wonAverage - 1) * 100).toFixed(1)}% higher
+                        </span>
+                      ) : (
+                        <span className="text-emerald-700 font-medium">
+                          Current is {((1 - categoryComparison.current / categoryComparison.wonAverage) * 100).toFixed(1)}% lower
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Lost Projects Average */}
+                {categoryComparison.lostCount > 0 && (
+                  <div className="bg-rose-50 border-2 border-rose-200 rounded-xl p-5">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full bg-rose-600"></div>
+                        <span className="font-semibold text-slate-900">Lost Projects Average</span>
+                        <span className="text-xs text-slate-500">({categoryComparison.lostCount} project{categoryComparison.lostCount !== 1 ? 's' : ''})</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {categoryComparison.current > categoryComparison.lostAverage ? (
+                          <TrendingUp className="w-5 h-5 text-rose-600" />
+                        ) : (
+                          <TrendingDown className="w-5 h-5 text-emerald-600" />
+                        )}
+                        <span className="text-2xl font-bold text-rose-900 tabular-nums">
+                          {categoryComparison.lostAverage.toFixed(2)} {selectedMetric === "laborHoursPerTon" ? "MH/T" : "$/T"}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-sm text-slate-600">
+                      {categoryComparison.current > categoryComparison.lostAverage ? (
+                        <span className="text-rose-700 font-medium">
+                          Current is {((categoryComparison.current / categoryComparison.lostAverage - 1) * 100).toFixed(1)}% higher
+                        </span>
+                      ) : (
+                        <span className="text-emerald-700 font-medium">
+                          Current is {((1 - categoryComparison.current / categoryComparison.lostAverage) * 100).toFixed(1)}% lower
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* All Projects Average */}
+                {categoryComparison.allCount > 0 && (
+                  <div className="bg-slate-50 border-2 border-slate-200 rounded-xl p-5">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full bg-slate-600"></div>
+                        <span className="font-semibold text-slate-900">All Projects Average</span>
+                        <span className="text-xs text-slate-500">({categoryComparison.allCount} project{categoryComparison.allCount !== 1 ? 's' : ''})</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {categoryComparison.current > categoryComparison.allAverage ? (
+                          <TrendingUp className="w-5 h-5 text-amber-600" />
+                        ) : (
+                          <TrendingDown className="w-5 h-5 text-emerald-600" />
+                        )}
+                        <span className="text-2xl font-bold text-slate-900 tabular-nums">
+                          {categoryComparison.allAverage.toFixed(2)} {selectedMetric === "laborHoursPerTon" ? "MH/T" : "$/T"}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-sm text-slate-600">
+                      {categoryComparison.current > categoryComparison.allAverage ? (
+                        <span className="text-amber-700 font-medium">
+                          Current is {((categoryComparison.current / categoryComparison.allAverage - 1) * 100).toFixed(1)}% above average
+                        </span>
+                      ) : (
+                        <span className="text-emerald-700 font-medium">
+                          Current is {((1 - categoryComparison.current / categoryComparison.allAverage) * 100).toFixed(1)}% below average
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Insight */}
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 mt-6">
+                  <p className="text-sm text-slate-700">
+                    <strong className="text-slate-900">Live Control Panel:</strong> This comparison updates in real-time as projects are estimated. 
+                    Use won/lost averages to identify competitive positioning and adjust estimates accordingly.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
       
       <Card className="p-4">
         <CardHeader className="mb-2">
