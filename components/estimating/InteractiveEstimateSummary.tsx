@@ -170,24 +170,32 @@ export default function InteractiveEstimateSummary({
       const baseLaborHours = line.totalLabor || 0;
       
       // Apply efficiency multipliers to labor breakdown if available
-      let adjustedLaborHours = baseLaborHours;
-      if (line.weldHours) adjustedLaborHours += (line.weldHours * (parameters.laborEfficiency.weld - 1.0));
-      if (line.fitHours) adjustedLaborHours += (line.fitHours * (parameters.laborEfficiency.fit - 1.0));
-      if (line.cutHours) adjustedLaborHours += (line.cutHours * (parameters.laborEfficiency.cut - 1.0));
-      if (line.drillPunchHours) adjustedLaborHours += (line.drillPunchHours * (parameters.laborEfficiency.drillPunch - 1.0));
-      if (line.copeHours) adjustedLaborHours += (line.copeHours * (parameters.laborEfficiency.cope - 1.0));
-      if (line.paintHours) adjustedLaborHours += (line.paintHours * (parameters.laborEfficiency.paint - 1.0));
-      if (line.handleMoveHours) adjustedLaborHours += (line.handleMoveHours * (parameters.laborEfficiency.handleMove - 1.0));
-      if (line.prepCleanHours) adjustedLaborHours += (line.prepCleanHours * (parameters.laborEfficiency.prepClean - 1.0));
-      if (line.unloadHours) adjustedLaborHours += (line.unloadHours * (parameters.laborEfficiency.unload - 1.0));
-      if (line.loadShipHours) adjustedLaborHours += (line.loadShipHours * (parameters.laborEfficiency.loadShip - 1.0));
-      if (line.processPlateHours) adjustedLaborHours += (line.processPlateHours * (parameters.laborEfficiency.processPlate - 1.0));
+      let adjustedLaborHours = 0;
+      const laborFields = [
+        { field: 'laborUnload', multiplier: parameters.laborEfficiency.unload },
+        { field: 'laborCut', multiplier: parameters.laborEfficiency.cut },
+        { field: 'laborCope', multiplier: parameters.laborEfficiency.cope },
+        { field: 'laborProcessPlate', multiplier: parameters.laborEfficiency.processPlate },
+        { field: 'laborDrillPunch', multiplier: parameters.laborEfficiency.drillPunch },
+        { field: 'laborFit', multiplier: parameters.laborEfficiency.fit },
+        { field: 'laborWeld', multiplier: parameters.laborEfficiency.weld },
+        { field: 'laborPrepClean', multiplier: parameters.laborEfficiency.prepClean },
+        { field: 'laborPaint', multiplier: parameters.laborEfficiency.paint },
+        { field: 'laborHandleMove', multiplier: parameters.laborEfficiency.handleMove },
+        { field: 'laborLoadShip', multiplier: parameters.laborEfficiency.loadShip },
+      ];
+      
+      laborFields.forEach(({ field, multiplier }) => {
+        const hours = (line as any)[field] || 0;
+        adjustedLaborHours += hours * multiplier;
+      });
 
       laborHours += Math.max(0, adjustedLaborHours); // Prevent negative hours
 
       // Labor Cost (with rate multiplier)
-      const baseLaborCost = line.laborCost || 0;
-      laborCost += baseLaborCost * parameters.laborRateMultiplier * (adjustedLaborHours / Math.max(baseLaborHours, 0.001));
+      // Calculate cost based on adjusted hours and rate multiplier
+      const laborRate = line.laborRate || 0;
+      laborCost += adjustedLaborHours * laborRate * parameters.laborRateMultiplier;
     });
 
     // Direct cost
