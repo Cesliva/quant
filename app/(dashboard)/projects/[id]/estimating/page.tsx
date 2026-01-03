@@ -24,8 +24,6 @@ import {
 import { useCompanyId } from "@/lib/hooks/useCompanyId";
 import { UserPresence } from "@/components/collaboration/UserPresence";
 import { logActivity } from "@/lib/utils/activityLogger";
-import ProjectBubbleChart from "@/components/estimating/ProjectBubbleChart";
-import CategoryComparisonChart from "@/components/estimating/CategoryComparisonChart";
 import ProposalSeedsCard from "@/components/estimating/ProposalSeedsCard";
 
 export default function EstimatingPage() {
@@ -39,7 +37,6 @@ export default function EstimatingPage() {
   const [projectName, setProjectName] = useState<string>("");
   const [projectNumber, setProjectNumber] = useState<string>("");
   const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
-  const [selectedMetric, setSelectedMetric] = useState<"laborHoursPerTon" | "costPerTon">("laborHoursPerTon");
   const [selectedLineId, setSelectedLineId] = useState<string | null>(lineIdFromUrl || null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [addLineHandler, setAddLineHandler] = useState<(() => void) | null>(null);
@@ -278,24 +275,6 @@ export default function EstimatingPage() {
         selectedLineId={selectedLineId}
         lines={lines}
       />
-
-      {/* Charts Side by Side */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ProjectBubbleChart 
-          lines={lines} 
-          companyId={companyId}
-          projectName={projectName}
-          currentProjectId={projectId}
-          selectedMetric={selectedMetric}
-          onMetricChange={setSelectedMetric}
-        />
-        <CategoryComparisonChart
-          lines={lines}
-          companyId={companyId}
-          currentProjectId={projectId}
-          selectedMetric={selectedMetric}
-        />
-      </div>
       </div>
     </div>
   );

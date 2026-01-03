@@ -52,7 +52,9 @@ import { syncProjectToWinLoss } from "@/lib/utils/syncWinLossRecord";
 import { uploadFileToStorage, deleteFileFromStorage } from "@/lib/firebase/storage";
 import { logActivity } from "@/lib/utils/activityLogger";
 import Input from "@/components/ui/Input";
-import { CommentsPanel } from "@/components/collaboration/CommentsPanel";
+import EstimatorHealthPanel from "@/components/dashboard/EstimatorHealthPanel";
+import ProjectBubbleChart from "@/components/estimating/ProjectBubbleChart";
+import CategoryComparisonChart from "@/components/estimating/CategoryComparisonChart";
 
 interface SpecDivision {
   id: string;
@@ -154,6 +156,9 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
   const [selectedGCContact, setSelectedGCContact] = useState<string>("");
   const [originalProjectNumber, setOriginalProjectNumber] = useState<string>("");
   const [showProjectFiles, setShowProjectFiles] = useState(false);
+  const [showProjectSettings, setShowProjectSettings] = useState(false);
+  const [estimatingLines, setEstimatingLines] = useState<EstimatingLine[]>([]);
+  const [selectedMetric, setSelectedMetric] = useState<"laborHoursPerTon" | "costPerTon">("laborHoursPerTon");
 
   // Track when companyId becomes valid (not "default")
   useEffect(() => {
@@ -272,13 +277,14 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
 
       const linesPath = getProjectPath(validCompanyId, projectId, "lines");
       const unsubscribe = subscribeToCollection<EstimatingLine>(linesPath, (lines) => {
+        setEstimatingLines(lines);
         const activeLines = lines.filter((line) => line.status !== "Void");
         const stats = {
           totalLines: activeLines.length,
           totalWeight: activeLines.reduce(
             (sum, line) =>
               sum +
-              (line.materialType === "Rolled"
+              (line.materialType === "Material"
                 ? line.totalWeight || 0
                 : line.plateTotalWeight || 0),
             0
@@ -817,11 +823,11 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
             ) : (
               <>
                 <Button
-                  onClick={() => setIsEditMode(true)}
-                  className="px-5 py-2.5 rounded-2xl border border-blue-200/80 bg-white text-blue-700 text-sm font-medium shadow-[0_1px_2px_0_rgb(0,0,0,0.05),0_2px_4px_0_rgb(0,0,0,0.03)] hover:shadow-[0_2px_4px_0_rgb(0,0,0,0.08),0_4px_8px_0_rgb(0,0,0,0.05)] hover:bg-blue-50 hover:border-blue-300 transition-all duration-200"
+                  onClick={() => setShowProjectSettings(true)}
+                  className="px-5 py-2.5 rounded-2xl border border-slate-200/80 bg-white text-slate-700 text-sm font-medium shadow-[0_1px_2px_0_rgb(0,0,0,0.05),0_2px_4px_0_rgb(0,0,0,0.03)] hover:shadow-[0_2px_4px_0_rgb(0,0,0,0.08),0_4px_8px_0_rgb(0,0,0,0.05)] hover:bg-slate-50 hover:border-slate-300 transition-all duration-200"
                 >
-                  <Edit className="w-4 h-4 mr-2" />
-                  Edit Project
+                  <Settings className="w-4 h-4 mr-2" />
+                  Project Settings
                 </Button>
                 {project.archived ? (
                   <Button
@@ -903,9 +909,27 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
           </div>
         </div>
 
-        <div className="mb-4 md:mb-6">
-          <ProjectSettingsPanel companyId={validCompanyId || companyId} projectId={projectId} compact />
-        </div>
+        {/* Project Settings Modal */}
+        {showProjectSettings && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" onClick={() => setShowProjectSettings(false)}>
+            <div className="bg-white rounded-2xl shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+              <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-slate-900">Project Settings</h2>
+                <Button
+                  onClick={() => setShowProjectSettings(false)}
+                  variant="ghost"
+                  size="sm"
+                  className="text-slate-500 hover:text-slate-700"
+                >
+                  <XCircle className="w-5 h-5" />
+                </Button>
+              </div>
+              <div className="p-6">
+                <ProjectSettingsPanel companyId={validCompanyId || companyId} projectId={projectId} compact={false} />
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Edit Mode Form Sections */}
         {isEditMode && project && (
@@ -1746,8 +1770,34 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
           </Card>
         )}
 
-        {/* Comments Panel - Always Visible */}
-        <CommentsPanel projectId={projectId} section="dashboard" />
+        {/* Estimator Health Panel */}
+        <EstimatorHealthPanel
+          project={project}
+          estimatingStats={estimatingStats}
+          estimatingLines={estimatingLines}
+          companyId={validCompanyId || companyId}
+          projectId={projectId}
+        />
+
+        {/* Historical Comparison Charts */}
+        {estimatingLines.length > 0 && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <ProjectBubbleChart 
+              lines={estimatingLines} 
+              companyId={validCompanyId || companyId}
+              projectName={project?.projectName || ""}
+              currentProjectId={projectId}
+              selectedMetric={selectedMetric}
+              onMetricChange={setSelectedMetric}
+            />
+            <CategoryComparisonChart
+              lines={estimatingLines}
+              companyId={validCompanyId || companyId}
+              currentProjectId={projectId}
+              selectedMetric={selectedMetric}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
