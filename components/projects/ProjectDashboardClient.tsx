@@ -707,6 +707,13 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
       description: "Build your estimate",
       color: "bg-blue-500 hover:bg-blue-600",
     },
+    {
+      name: "Interactive Summary",
+      href: `/projects/${projectId}/estimate-summary`,
+      icon: TrendingUp,
+      description: "Adjust parameters & see impact",
+      color: "bg-indigo-500 hover:bg-indigo-600",
+    },
     // {
     //   name: "Misc Metals AI",
     //   href: `/misc-metals?projectId=${projectId}`,
