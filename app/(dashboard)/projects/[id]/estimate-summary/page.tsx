@@ -13,6 +13,7 @@ import { isFirebaseConfigured } from "@/lib/firebase/config";
 import { useCompanyId } from "@/lib/hooks/useCompanyId";
 import ProjectBubbleChart from "@/components/estimating/ProjectBubbleChart";
 import CategoryComparisonChart from "@/components/estimating/CategoryComparisonChart";
+import BidStrategyPanel from "@/components/dashboard/BidStrategyPanel";
 
 export default function EstimateSummaryPage() {
   const params = useParams();
@@ -20,19 +21,21 @@ export default function EstimateSummaryPage() {
   const projectId = params.id as string;
   const companyId = useCompanyId();
   const [lines, setLines] = useState<EstimatingLine[]>([]);
+  const [project, setProject] = useState<any>(null);
   const [projectName, setProjectName] = useState<string>("");
   const [selectedMetric, setSelectedMetric] = useState<"laborHoursPerTon" | "costPerTon">("laborHoursPerTon");
   const [adjustedTotals, setAdjustedTotals] = useState<any>(null);
 
-  // Load project name
+  // Load project data
   useEffect(() => {
     if (!isFirebaseConfigured() || !projectId || !companyId) return;
 
     const loadProject = async () => {
       try {
         const projectPath = getProjectPath(companyId, projectId);
-        const projectData = await getDocument<{ projectName?: string }>(projectPath);
+        const projectData = await getDocument<any>(projectPath);
         if (projectData) {
+          setProject(projectData);
           setProjectName(projectData.projectName || projectId);
         }
       } catch (error) {
@@ -111,22 +114,42 @@ export default function EstimateSummaryPage() {
 
         {/* Charts that update with adjusted totals */}
         {lines.length > 0 && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <ProjectBubbleChart
+          <>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <ProjectBubbleChart
+                lines={lines}
+                companyId={companyId}
+                projectName={projectName}
+                currentProjectId={projectId}
+                selectedMetric={selectedMetric}
+                onMetricChange={setSelectedMetric}
+              />
+              <CategoryComparisonChart
+                lines={lines}
+                companyId={companyId}
+                currentProjectId={projectId}
+                selectedMetric={selectedMetric}
+              />
+            </div>
+
+            {/* Bid Strategy Control Panel */}
+            <BidStrategyPanel
               lines={lines}
+              project={project}
+              estimatingStats={{
+                totalCost: lines.reduce((sum, line) => sum + (line.totalCost || 0), 0),
+                totalLabor: lines.reduce((sum, line) => sum + (line.totalLabor || 0), 0),
+                totalWeight: lines.reduce((sum, line) => {
+                  const weight = line.materialType === "Material"
+                    ? (line.totalWeight || 0)
+                    : (line.plateTotalWeight || 0);
+                  return sum + weight;
+                }, 0),
+              }}
               companyId={companyId}
-              projectName={projectName}
-              currentProjectId={projectId}
-              selectedMetric={selectedMetric}
-              onMetricChange={setSelectedMetric}
+              projectId={projectId}
             />
-            <CategoryComparisonChart
-              lines={lines}
-              companyId={companyId}
-              currentProjectId={projectId}
-              selectedMetric={selectedMetric}
-            />
-          </div>
+          </>
         )}
       </div>
     </div>
