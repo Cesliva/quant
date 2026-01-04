@@ -17,6 +17,7 @@ import {
 import { validateCompanySettings, getFieldError, type ValidationError } from "@/lib/utils/validation";
 import { useCompanyId } from "@/lib/hooks/useCompanyId";
 import { uploadFileToStorage, deleteFileFromStorage } from "@/lib/firebase/storage";
+import { showToast } from "@/lib/utils/toast";
 
 type TabType = "company" | "labor" | "material" | "coating" | "markup" | "advanced" | "executive" | "addressbook";
 
@@ -50,21 +51,24 @@ function SettingsPageContent() {
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
 
   const [companySettings, setCompanySettings] = useState({
-    companyName: "",
-    address: "",
-    city: "",
-    state: "",
-    zip: "",
-    phone: "",
-    email: "",
-    licenseNumber: "",
-    taxId: "",
-    logoUrl: "",
+    companyInfo: {
+      companyName: "",
+      address: "",
+      city: "",
+      state: "",
+      zip: "",
+      phone: "",
+      email: "",
+      licenseNumber: "",
+      taxId: "",
+      logoUrl: "",
+    },
   });
   
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [logoUploadError, setLogoUploadError] = useState<string | null>(null);
 
   const [laborRates, setLaborRates] = useState<LaborRate[]>([
     { id: "1", trade: "Fabricator", rate: 45 },
@@ -144,16 +148,18 @@ function SettingsPageContent() {
       // Load company info
       if (settings.companyInfo) {
         setCompanySettings({
-          companyName: settings.companyInfo.companyName || "",
-          address: settings.companyInfo.address || "",
-          city: settings.companyInfo.city || "",
-          state: settings.companyInfo.state || "",
-          zip: settings.companyInfo.zip || "",
-          phone: settings.companyInfo.phone || "",
-          email: settings.companyInfo.email || "",
-          licenseNumber: settings.companyInfo.licenseNumber || "",
-          taxId: settings.companyInfo.taxId || "",
-          logoUrl: settings.companyInfo.logoUrl || "",
+          companyInfo: {
+            companyName: settings.companyInfo.companyName || "",
+            address: settings.companyInfo.address || "",
+            city: settings.companyInfo.city || "",
+            state: settings.companyInfo.state || "",
+            zip: settings.companyInfo.zip || "",
+            phone: settings.companyInfo.phone || "",
+            email: settings.companyInfo.email || "",
+            licenseNumber: settings.companyInfo.licenseNumber || "",
+            taxId: settings.companyInfo.taxId || "",
+            logoUrl: settings.companyInfo.logoUrl || "",
+          },
         });
         // Set logo preview if logo exists
         if (settings.companyInfo.logoUrl) {
@@ -202,7 +208,13 @@ function SettingsPageContent() {
       
       // Load advanced settings
       if (settings.advancedSettings) {
-        setAdvancedSettings(settings.advancedSettings);
+        setAdvancedSettings({
+          defaultUnit: settings.advancedSettings.defaultUnit || "imperial",
+          currencySymbol: settings.advancedSettings.currencySymbol || "$",
+          stockRounding: settings.advancedSettings.stockRounding || 0.125,
+          defaultEstimator: settings.advancedSettings.defaultEstimator || "",
+          autoSave: settings.advancedSettings.autoSave ?? true,
+        });
       }
       
       // Load pipeline ranges
@@ -252,15 +264,22 @@ function SettingsPageContent() {
 
   const handleSave = async () => {
     // Validate settings
+    // Map coatingTypes to ensure costPerSF is always a number (required by validation)
+    // For coatings that use costPerPound (like Galvanizing), use 0 for costPerSF
+    const coatingTypesForValidation = coatingTypes.map(ct => ({
+      type: ct.type,
+      costPerSF: ct.costPerSF ?? 0, // Use 0 if undefined (for coatings that use costPerPound)
+    }));
+    
     const validation = validateCompanySettings({
-      companyName: companySettings.companyName,
-      email: companySettings.email,
-      phone: companySettings.phone,
-      zip: companySettings.zip,
-      state: companySettings.state,
+      companyName: companySettings.companyInfo.companyName,
+      email: companySettings.companyInfo.email,
+      phone: companySettings.companyInfo.phone,
+      zip: companySettings.companyInfo.zip,
+      state: companySettings.companyInfo.state,
       laborRates,
       materialGrades,
-      coatingTypes,
+      coatingTypes: coatingTypesForValidation,
       markupSettings,
     });
 
@@ -289,16 +308,16 @@ function SettingsPageContent() {
     try {
       const settingsToSave: CompanySettings = {
         companyInfo: {
-          companyName: companySettings.companyName,
-          address: companySettings.address || undefined,
-          city: companySettings.city || undefined,
-          state: companySettings.state || undefined,
-          zip: companySettings.zip || undefined,
-          phone: companySettings.phone || undefined,
-          email: companySettings.email || undefined,
-          licenseNumber: companySettings.licenseNumber || undefined,
-          taxId: companySettings.taxId || undefined,
-          logoUrl: companySettings.logoUrl || undefined,
+          companyName: companySettings.companyInfo.companyName,
+          address: companySettings.companyInfo.address || undefined,
+          city: companySettings.companyInfo.city || undefined,
+          state: companySettings.companyInfo.state || undefined,
+          zip: companySettings.companyInfo.zip || undefined,
+          phone: companySettings.companyInfo.phone || undefined,
+          email: companySettings.companyInfo.email || undefined,
+          licenseNumber: companySettings.companyInfo.licenseNumber || undefined,
+          taxId: companySettings.companyInfo.taxId || undefined,
+          logoUrl: companySettings.companyInfo.logoUrl || undefined,
         },
         materialGrades: materialGrades.map(({ id, ...rest }) => rest),
         laborRates: laborRates.map(({ id, ...rest }) => rest),
@@ -323,7 +342,7 @@ function SettingsPageContent() {
       setTimeout(() => setSaveStatus("unsaved"), 3000);
     } catch (error) {
       console.error("Failed to save settings:", error);
-      alert("Failed to save settings. Please try again.");
+      showToast("Failed to save settings. Please try again.", { type: "error" });
     } finally {
       setIsSaving(false);
     }
@@ -332,26 +351,30 @@ function SettingsPageContent() {
   const handleLogoUpload = async () => {
     if (!logoFile || !companyId) return;
     
+    setLogoUploadError(null); // Clear previous errors
+    
     // Validate file type
     const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'];
     if (!validTypes.includes(logoFile.type)) {
-      alert("Invalid file type. Please upload a PNG, JPG, GIF, or WebP image.");
+      setLogoUploadError("Invalid file type. Please upload a PNG, JPG, GIF, or WebP image.");
       return;
     }
 
     // Validate file size (5MB max for logos)
     const maxSize = 5 * 1024 * 1024; // 5MB
     if (logoFile.size > maxSize) {
-      alert(`File size exceeds 5MB limit. Please use a smaller image.`);
+      setLogoUploadError("File size exceeds 5MB limit. Please use a smaller image.");
       return;
     }
     
     setIsUploadingLogo(true);
     try {
       // Delete old logo if exists (non-blocking)
-      if (companySettings.logoUrl) {
+      const oldLogoUrl = companySettings.companyInfo?.logoUrl;
+      if (oldLogoUrl) {
         try {
-          const oldPath = companySettings.logoUrl.split('/o/')[1]?.split('?')[0];
+          // Extract path from Firebase Storage URL
+          const oldPath = oldLogoUrl.split('/o/')[1]?.split('?')[0];
           if (oldPath) {
             // Don't await - delete in background
             deleteFileFromStorage(decodeURIComponent(oldPath)).catch((error) => {
@@ -363,26 +386,30 @@ function SettingsPageContent() {
         }
       }
       
-      // Upload new logo with 60 second timeout
+      // Upload new logo using Firebase Storage SDK only
       const timestamp = Date.now();
-      const fileExtension = logoFile.name.split('.').pop() || 'png';
-      const logoPath = `companies/${companyId}/logo/company-logo-${timestamp}.${fileExtension}`;
+      const sanitizedFileName = logoFile.name.replace(/[^a-zA-Z0-9.-]/g, "_");
+      const logoPath = `companies/${companyId}/branding/logo_${timestamp}_${sanitizedFileName}`;
       
-      console.log("[Logo Upload] Starting upload...");
+      console.log("[Logo Upload] Starting upload using Firebase Storage SDK...");
+      console.log("[Logo Upload] Path:", logoPath);
+      console.log("[Logo Upload] File:", logoFile.name, logoFile.size, "bytes");
+      
       const downloadURL = await uploadFileToStorage(logoFile, logoPath, 60000); // 60 second timeout
-      console.log("[Logo Upload] Upload successful:", downloadURL);
+      console.log("[Logo Upload] Upload successful, URL:", downloadURL);
       
-      // Update settings with new logo URL
-      setCompanySettings({ ...companySettings, logoUrl: downloadURL });
+      // Update settings with new logo URL (save to companyInfo.logoUrl)
+      const updatedCompanyInfo = {
+        ...companySettings.companyInfo,
+        logoUrl: downloadURL,
+      };
+      setCompanySettings({ ...companySettings, companyInfo: updatedCompanyInfo });
       setLogoPreview(downloadURL);
       setLogoFile(null);
       
-      // Save immediately
+      // Save immediately to Firestore at companies/{companyId}.settings.companyInfo.logoUrl
       const settingsToSave: CompanySettings = {
-        companyInfo: {
-          ...companySettings,
-          logoUrl: downloadURL,
-        },
+        companyInfo: updatedCompanyInfo,
         materialGrades: materialGrades.map(({ id, ...rest }) => rest),
         laborRates: laborRates.map(({ id, ...rest }) => rest),
         coatingTypes: coatingTypes.map(({ id, ...rest }) => rest),
@@ -405,27 +432,41 @@ function SettingsPageContent() {
       setSaveStatus("saved");
       setTimeout(() => setSaveStatus("unsaved"), 3000);
       
-      alert("Logo uploaded successfully!");
+      setLogoUploadError(null);
+      showToast("Logo uploaded successfully!", { type: "success", duration: 3000 });
     } catch (error: any) {
-      console.error("[Logo Upload] Failed to upload logo:", error);
+      // Robust error logging
+      console.error("[Logo Upload] Failed to upload logo");
+      console.error("[Logo Upload] Error:", error);
+      console.error("[Logo Upload] Error message:", error.message);
+      console.error("[Logo Upload] Error stack:", error.stack);
+      
       const errorMessage = error.message || "Please try again.";
       
-      // Check if it's a CORS error
-      const isCorsError = errorMessage.toLowerCase().includes('cors') || 
+      // Check for CORS or timeout errors
+      const isCorsError = errorMessage === "CORS_ERROR" || 
+                         errorMessage === "TIMEOUT_ERROR" ||
+                         errorMessage.toLowerCase().includes('cors') || 
                          errorMessage.toLowerCase().includes('cross-origin') ||
-                         errorMessage.toLowerCase().includes('blocked by cors policy');
+                         errorMessage.toLowerCase().includes('blocked') ||
+                         errorMessage.toLowerCase().includes('timed out');
       
       if (isCorsError) {
-        const corsFixMessage = `CORS Error: Firebase Storage is blocking the upload.\n\n` +
-          `To fix this:\n` +
-          `1. Go to: https://console.cloud.google.com/storage/browser/quant-80cff.firebasestorage.app?project=quant-80cff\n` +
-          `2. Click "Configuration" tab\n` +
-          `3. Edit CORS configuration\n` +
-          `4. See CORS_FIX_STEPS.md for detailed instructions\n\n` +
-          `This is a one-time setup required for Firebase Storage.`;
-        alert(corsFixMessage);
+        const corsInstructions = `CORS Error: Firebase Storage is blocking uploads from localhost:3000.\n\n` +
+          `To fix this, run these commands:\n\n` +
+          `1. Create cors.json file:\n` +
+          `   echo '[{"origin":["http://localhost:3000","https://quantsteel.com"],"method":["GET","POST","PUT","DELETE","HEAD","OPTIONS"],"maxAgeSeconds":3600,"responseHeader":["Content-Type","Authorization","Content-Length","x-goog-resumable"]}]' > cors.json\n\n` +
+          `2. Set CORS configuration:\n` +
+          `   gsutil cors set cors.json gs://${process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "quant-80cff.firebasestorage.app"}\n\n` +
+          `3. Verify it worked:\n` +
+          `   gsutil cors get gs://${process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "quant-80cff.firebasestorage.app"}\n\n` +
+          `See CORS_FIX_STEPS.md for detailed instructions.`;
+        
+        setLogoUploadError(corsInstructions);
+        showToast("Upload failed: CORS configuration required", { type: "error", duration: 5000 });
       } else {
-        alert(`Failed to upload logo: ${errorMessage}`);
+        setLogoUploadError(`Upload failed: ${errorMessage}`);
+        showToast(`Upload failed: ${errorMessage}`, { type: "error", duration: 5000 });
       }
     } finally {
       setIsUploadingLogo(false);
@@ -433,28 +474,30 @@ function SettingsPageContent() {
   };
 
   const handleLogoRemove = async () => {
-    if (!companyId || !companySettings.logoUrl) return;
+    const currentLogoUrl = companySettings.companyInfo?.logoUrl;
+    if (!companyId || !currentLogoUrl) return;
     
     if (!confirm("Are you sure you want to remove the company logo?")) return;
     
     try {
       // Delete from storage
-      const logoPath = companySettings.logoUrl.split('/o/')[1]?.split('?')[0];
+      const logoPath = currentLogoUrl.split('/o/')[1]?.split('?')[0];
       if (logoPath) {
         await deleteFileFromStorage(decodeURIComponent(logoPath));
       }
       
-      // Update settings
-      setCompanySettings({ ...companySettings, logoUrl: "" });
+      // Update settings - remove logoUrl from companyInfo
+      const updatedCompanyInfo = {
+        ...companySettings.companyInfo,
+        logoUrl: "",
+      };
+      setCompanySettings({ ...companySettings, companyInfo: updatedCompanyInfo });
       setLogoPreview(null);
       setLogoFile(null);
       
-      // Save
+      // Save to Firestore - remove logoUrl from companyInfo
       const settingsToSave: CompanySettings = {
-        companyInfo: {
-          ...companySettings,
-          logoUrl: undefined,
-        },
+        companyInfo: updatedCompanyInfo,
         materialGrades: materialGrades.map(({ id, ...rest }) => rest),
         laborRates: laborRates.map(({ id, ...rest }) => rest),
         coatingTypes: coatingTypes.map(({ id, ...rest }) => rest),
@@ -477,10 +520,10 @@ function SettingsPageContent() {
       setSaveStatus("saved");
       setTimeout(() => setSaveStatus("unsaved"), 3000);
       
-      alert("Logo removed successfully!");
+      showToast("Logo removed successfully!", { type: "success" });
     } catch (error: any) {
       console.error("Failed to remove logo:", error);
-      alert(`Failed to remove logo: ${error.message || "Please try again."}`);
+      showToast(`Failed to remove logo: ${error.message || "Please try again."}`, { type: "error" });
     }
   };
 
@@ -497,7 +540,7 @@ function SettingsPageContent() {
       setShowSampleData(value);
     } catch (error) {
       console.error("Failed to save sample data setting:", error);
-      alert("Failed to save setting. Please try again.");
+      showToast("Failed to save setting. Please try again.", { type: "error" });
     } finally {
       setSavingSampleDataToggle(false);
     }
@@ -716,9 +759,12 @@ function SettingsPageContent() {
                     Company Name <span className="text-red-500">*</span>
                   </label>
                   <Input
-                    value={companySettings.companyName}
+                    value={companySettings.companyInfo.companyName}
                     onChange={(e) => {
-                      setCompanySettings({ ...companySettings, companyName: e.target.value });
+                      setCompanySettings({ 
+                        ...companySettings, 
+                        companyInfo: { ...companySettings.companyInfo, companyName: e.target.value }
+                      });
                       // Clear validation error for this field
                       setValidationErrors(validationErrors.filter(e => e.field !== "companyName"));
                     }}
@@ -738,9 +784,12 @@ function SettingsPageContent() {
                     Street Address
                   </label>
                   <Input
-                    value={companySettings.address}
+                    value={companySettings.companyInfo.address}
                     onChange={(e) =>
-                      setCompanySettings({ ...companySettings, address: e.target.value })
+                      setCompanySettings({ 
+                        ...companySettings, 
+                        companyInfo: { ...companySettings.companyInfo, address: e.target.value }
+                      })
                     }
                     placeholder="123 Main Street"
                   />
@@ -751,9 +800,12 @@ function SettingsPageContent() {
                     City
                   </label>
                   <Input
-                    value={companySettings.city}
+                    value={companySettings.companyInfo.city}
                     onChange={(e) =>
-                      setCompanySettings({ ...companySettings, city: e.target.value })
+                      setCompanySettings({ 
+                        ...companySettings, 
+                        companyInfo: { ...companySettings.companyInfo, city: e.target.value }
+                      })
                     }
                     placeholder="City"
                   />
@@ -764,9 +816,12 @@ function SettingsPageContent() {
                     State
                   </label>
                   <Input
-                    value={companySettings.state}
+                    value={companySettings.companyInfo.state}
                     onChange={(e) => {
-                      setCompanySettings({ ...companySettings, state: e.target.value.toUpperCase() });
+                      setCompanySettings({ 
+                        ...companySettings, 
+                        companyInfo: { ...companySettings.companyInfo, state: e.target.value.toUpperCase() }
+                      });
                       setValidationErrors(validationErrors.filter(e => e.field !== "state"));
                     }}
                     placeholder="State"
@@ -785,9 +840,12 @@ function SettingsPageContent() {
                     ZIP Code
                   </label>
                   <Input
-                    value={companySettings.zip}
+                    value={companySettings.companyInfo.zip}
                     onChange={(e) => {
-                      setCompanySettings({ ...companySettings, zip: e.target.value });
+                      setCompanySettings({ 
+                        ...companySettings, 
+                        companyInfo: { ...companySettings.companyInfo, zip: e.target.value }
+                      });
                       setValidationErrors(validationErrors.filter(e => e.field !== "zip"));
                     }}
                     placeholder="12345"
@@ -806,9 +864,12 @@ function SettingsPageContent() {
                   </label>
                   <Input
                     type="tel"
-                    value={companySettings.phone}
+                    value={companySettings.companyInfo.phone}
                     onChange={(e) => {
-                      setCompanySettings({ ...companySettings, phone: e.target.value });
+                      setCompanySettings({ 
+                        ...companySettings, 
+                        companyInfo: { ...companySettings.companyInfo, phone: e.target.value }
+                      });
                       setValidationErrors(validationErrors.filter(e => e.field !== "phone"));
                     }}
                     placeholder="(555) 123-4567"
@@ -827,9 +888,12 @@ function SettingsPageContent() {
                   </label>
                   <Input
                     type="email"
-                    value={companySettings.email}
+                    value={companySettings.companyInfo.email}
                     onChange={(e) => {
-                      setCompanySettings({ ...companySettings, email: e.target.value });
+                      setCompanySettings({ 
+                        ...companySettings, 
+                        companyInfo: { ...companySettings.companyInfo, email: e.target.value }
+                      });
                       setValidationErrors(validationErrors.filter(e => e.field !== "email"));
                     }}
                     placeholder="contact@company.com"
@@ -847,9 +911,12 @@ function SettingsPageContent() {
                     License Number
                   </label>
                   <Input
-                    value={companySettings.licenseNumber}
+                    value={companySettings.companyInfo.licenseNumber}
                     onChange={(e) =>
-                      setCompanySettings({ ...companySettings, licenseNumber: e.target.value })
+                      setCompanySettings({ 
+                        ...companySettings, 
+                        companyInfo: { ...companySettings.companyInfo, licenseNumber: e.target.value }
+                      })
                     }
                     placeholder="Contractor License #"
                   />
@@ -860,9 +927,12 @@ function SettingsPageContent() {
                     Tax ID / EIN
                   </label>
                   <Input
-                    value={companySettings.taxId}
+                    value={companySettings.companyInfo.taxId}
                     onChange={(e) =>
-                      setCompanySettings({ ...companySettings, taxId: e.target.value })
+                      setCompanySettings({ 
+                        ...companySettings, 
+                        companyInfo: { ...companySettings.companyInfo, taxId: e.target.value }
+                      })
                     }
                     placeholder="XX-XXXXXXX"
                   />
@@ -906,12 +976,12 @@ function SettingsPageContent() {
                             if (file) {
                               // Validate file type
                               if (!file.type.startsWith('image/')) {
-                                alert("Please select an image file");
+                                showToast("Please select an image file", { type: "error" });
                                 return;
                               }
                               // Validate file size (max 5MB)
                               if (file.size > 5 * 1024 * 1024) {
-                                alert("Logo file must be less than 5MB");
+                                showToast("Logo file must be less than 5MB", { type: "error" });
                                 return;
                               }
                               setLogoFile(file);
@@ -936,6 +1006,75 @@ function SettingsPageContent() {
                         </Button>
                       )}
                     </div>
+                    {logoUploadError && (
+                      <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                        <div className="flex items-start gap-2">
+                          <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
+                          <div className="flex-1">
+                            <p className="text-sm font-semibold text-red-900 mb-2">
+                              Upload Failed
+                            </p>
+                            {logoUploadError.includes("CORS") || logoUploadError.includes("gsutil") ? (
+                              <div className="space-y-3">
+                                <p className="text-xs text-red-800 font-medium">
+                                  CORS Error: Firebase Storage is blocking uploads from localhost:3000
+                                </p>
+                                <div className="bg-white p-3 rounded border border-red-200">
+                                  <p className="text-xs font-semibold text-gray-900 mb-2">Fix with gsutil:</p>
+                                  <div className="space-y-1 text-xs font-mono text-gray-700">
+                                    <div>1. Create cors.json:</div>
+                                    <div className="ml-4 text-gray-600">
+                                      {`echo '[{"origin":["http://localhost:3000","https://quantsteel.com"],"method":["GET","POST","PUT","DELETE","HEAD","OPTIONS"],"maxAgeSeconds":3600,"responseHeader":["Content-Type","Authorization","Content-Length","x-goog-resumable"]}]' > cors.json`}
+                                    </div>
+                                    <div className="mt-2">2. Set CORS:</div>
+                                    <div className="ml-4 text-gray-600">
+                                      gsutil cors set cors.json gs://{process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "quant-80cff.firebasestorage.app"}
+                                    </div>
+                                    <div className="mt-2">3. Verify:</div>
+                                    <div className="ml-4 text-gray-600">
+                                      gsutil cors get gs://{process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "quant-80cff.firebasestorage.app"}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <a
+                                    href="https://console.cloud.google.com/storage/browser/quant-80cff.firebasestorage.app?project=quant-80cff"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-blue-600 hover:text-blue-700 underline font-medium"
+                                  >
+                                    Or use Google Cloud Console →
+                                  </a>
+                                  <span className="text-xs text-gray-500">•</span>
+                                  <a
+                                    href="#"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      window.open("SETUP_STORAGE_CORS.md", "_blank");
+                                    }}
+                                    className="text-xs text-blue-600 hover:text-blue-700 underline"
+                                  >
+                                    See SETUP_STORAGE_CORS.md
+                                  </a>
+                                </div>
+                              </div>
+                            ) : (
+                              <p className="text-xs text-red-700 whitespace-pre-wrap">
+                                {logoUploadError}
+                              </p>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setLogoUploadError(null)}
+                            className="text-red-400 hover:text-red-600 flex-shrink-0"
+                            title="Dismiss"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
                     <p className="text-xs text-gray-500">
                       Upload a company logo to appear on all document headers. Recommended: PNG or JPG, max 5MB, transparent background preferred.
                     </p>
