@@ -55,6 +55,7 @@ import Input from "@/components/ui/Input";
 import EstimatorHealthPanel from "@/components/dashboard/EstimatorHealthPanel";
 import ProjectBubbleChart from "@/components/estimating/ProjectBubbleChart";
 import CategoryComparisonChart from "@/components/estimating/CategoryComparisonChart";
+import BidStrategyPanel from "@/components/dashboard/BidStrategyPanel";
 
 interface SpecDivision {
   id: string;
@@ -1788,22 +1789,33 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
 
         {/* Historical Comparison Charts */}
         {estimatingLines.length > 0 && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <ProjectBubbleChart 
-              lines={estimatingLines} 
-              companyId={validCompanyId || companyId}
-              projectName={project?.projectName || ""}
-              currentProjectId={projectId}
-              selectedMetric={selectedMetric}
-              onMetricChange={setSelectedMetric}
-            />
-            <CategoryComparisonChart
+          <>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <ProjectBubbleChart 
+                lines={estimatingLines} 
+                companyId={validCompanyId || companyId}
+                projectName={project?.projectName || ""}
+                currentProjectId={projectId}
+                selectedMetric={selectedMetric}
+                onMetricChange={setSelectedMetric}
+              />
+              <CategoryComparisonChart
+                lines={estimatingLines}
+                companyId={validCompanyId || companyId}
+                currentProjectId={projectId}
+                selectedMetric={selectedMetric}
+              />
+            </div>
+
+            {/* Bid Strategy Control Panel */}
+            <BidStrategyPanel
               lines={estimatingLines}
+              project={project}
+              estimatingStats={estimatingStats}
               companyId={validCompanyId || companyId}
-              currentProjectId={projectId}
-              selectedMetric={selectedMetric}
+              projectId={projectId}
             />
-          </div>
+          </>
         )}
       </div>
     </div>
