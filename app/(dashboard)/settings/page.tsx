@@ -352,11 +352,13 @@ function SettingsPageContent() {
     if (!logoFile || !companyId) return;
     
     setLogoUploadError(null); // Clear previous errors
+    setIsUploadingLogo(true); // Set immediately to show loading state
     
     // Validate file type
     const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'];
     if (!validTypes.includes(logoFile.type)) {
       setLogoUploadError("Invalid file type. Please upload a PNG, JPG, GIF, or WebP image.");
+      setIsUploadingLogo(false);
       return;
     }
 
