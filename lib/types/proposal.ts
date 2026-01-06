@@ -25,6 +25,7 @@ export interface StructuredProposal {
   sections: {
     projectOverview?: ProposalSection;
     scopeOfWork?: ProposalSection;
+    price?: ProposalSection;
     projectSpecificInclusions?: ProposalSection;
     projectSpecificExclusions?: ProposalSection;
     clarificationsAssumptions?: ProposalSection;

@@ -2,6 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { calculateGPT4Cost } from "@/lib/openai/usageTracker";
 import { logAIUsage } from "@/lib/openai/usageTracker";
+import {
+  generateProjectIntelligence,
+  getGCRelationshipContext,
+  generatePersonalizedIntroduction,
+  generatePersonalizedClosing,
+  extractSeedInsights,
+} from "@/lib/utils/proposalPersonalization";
+import {
+  analyzeScope,
+  buildDetailedScope,
+} from "@/lib/utils/proposalScopeBuilder";
 
 const openai = process.env.OPENAI_API_KEY
   ? new OpenAI({
@@ -80,7 +91,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { formData, estimatingData, companyInfo, projectId, companyId } = body;
+    const { formData, estimatingData, companyInfo, projectId, companyId, projectData, proposalSeeds, companySettings } = body;
 
     // Support both old format (projectSummary) and new format (formData)
     const isNewFormat = !!formData;
@@ -177,42 +188,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Build scope section
-    const scopeItems: string[] = [];
-    if (formData.scope.structuralSteel) {
-      scopeItems.push(`Structural Steel
-- Furnishing and fabrication of wide-flange beams, columns, bracing, and associated structural members.
-- Shear plates, moment connections, clip angles, stiffeners, and connection hardware as shown.
-- Base plates, leveling plates, and necessary weld attachments.
-- Anchor bolts and templates (supply only unless noted).
-- Steel embeds for concrete (supply only).`);
-    }
-    if (formData.scope.joistsDecking) {
-      scopeItems.push(`Joists & Decking
-- Open-web steel joists per SJI specifications, including bridging.
-- Steel decking as specified (ASC unless otherwise required).
-- Standard shop primer on joist accessories.`);
-    }
-    if (formData.scope.miscellaneousMetals) {
-      scopeItems.push(`Miscellaneous Metals
-- Rails, ladders, and roof safety railings.
-- Steel canopies and support framing, galvanized where indicated.
-- Bollards (supply or install as noted).
-- Support frames, angle frames, equipment supports, and miscellaneous steel items.
-- Fall-protection anchors including engineering for anchors only.`);
-    }
-    if (formData.scope.detailingEngineering) {
-      scopeItems.push(`Detailing & Engineering
-- Shop drawings, erection plans, CNC data, and submittals.
-- Coordination with the general contractor and affected trades.
-- PE-stamped engineering for ladders and fall-protection anchors only.`);
-    }
-    if (formData.scope.delivery) {
-      scopeItems.push(`Delivery
-- Delivery F.O.B. jobsite.
-- Sequenced deliveries coordinated with site requirements.
-- Bundling, tagging, and protective handling.`);
-    }
+    // Analyze estimating lines for detailed scope
+    const estimatingLines = estimatingData?.lines || [];
+    const scopeAnalysis = analyzeScope(estimatingLines);
+    
+    // Build detailed scope section from actual line items
+    const scopeItems = buildDetailedScope(estimatingLines, formData, scopeAnalysis);
 
     // Build exclusions section
     const exclusionItems: string[] = [];
@@ -265,6 +246,48 @@ Breakdowns available upon request:
 - Hardware: $${totals.hardwareCost?.toLocaleString() || "0"}`;
     }
 
+    // Generate project intelligence and personalization
+    const totalCost = formData.totalLumpSum || 0;
+    const totalWeight = estimatingData?.totals?.totalWeight || 0;
+    const intelligence = generateProjectIntelligence(
+      estimatingLines,
+      projectData?.projectType,
+      totalCost,
+      totalWeight
+    );
+
+    // Get GC relationship context
+    const gcName = formData.contractor || projectData?.generalContractor || "the general contractor";
+    const relationshipContext = await getGCRelationshipContext(
+      gcName,
+      projectData?.gcId,
+      companyId
+    );
+
+    // Extract seed insights
+    const seedInsights = proposalSeeds ? extractSeedInsights(proposalSeeds) : {
+      criticalAssumptions: [],
+      importantClarifications: [],
+      keyExclusions: [],
+      notableInclusions: [],
+    };
+
+    // Generate personalized introduction and closing
+    const personalizedIntro = generatePersonalizedIntroduction(
+      formData.projectName || "this project",
+      formData.projectLocation || "",
+      projectData?.projectType,
+      gcName,
+      companySettings?.proposalSettings,
+      intelligence,
+      relationshipContext
+    );
+
+    const personalizedClosing = generatePersonalizedClosing(
+      companySettings?.proposalSettings,
+      formData.projectName || "this project"
+    );
+
     // Build context for AI
     const context = {
       header: {
@@ -287,6 +310,14 @@ Breakdowns available upon request:
       exclusions: exclusionItems.length > 0 ? exclusionItems.join("\n") : "None specified.",
       projectSummary: formData.projectSummary || "",
       estimatingData: estimatingData || null,
+      // Personalization context
+      personalization: {
+        introduction: personalizedIntro,
+        closing: personalizedClosing,
+        projectIntelligence: intelligence,
+        seedInsights: seedInsights,
+        companyVoice: companySettings?.proposalSettings?.companyVoice,
+      },
     };
 
     // Replace placeholders in template with actual values
@@ -304,7 +335,39 @@ Breakdowns available upon request:
       .replace(/{FABRICATION_WEEKS}/g, context.schedule.fabricationWeeks.toString())
       .replace(/{EXCLUSIONS_SECTION}/g, context.exclusions);
 
-    const prompt = `Generate a professional steel fabrication proposal using the following template structure and provided data.
+    // Build personalized prompt
+    const companyVoice = companySettings?.proposalSettings?.companyVoice;
+    const tone = companyVoice?.tone || "professional";
+    const keyMessages = companyVoice?.keyMessages || [];
+    const differentiators = companyVoice?.differentiators || [];
+
+    const totalLumpSumFormatted = formData.totalLumpSum.toLocaleString();
+    const prompt = `You are a senior estimator writing a personalized proposal for ${gcName} on the ${formData.projectName || "project"} project.
+
+PROJECT CONTEXT:
+- Project: ${formData.projectName}
+- Location: ${formData.projectLocation || "Not specified"}
+- Bid Date: ${formData.bidDate}
+- Project Type: ${projectData?.projectType || "Commercial"}
+- General Contractor: ${gcName}
+${relationshipContext ? `- Relationship: ${relationshipContext}` : ""}
+
+ESTIMATING INSIGHTS:
+- Total Tons: ${intelligence.totalTons.toFixed(2)} tons
+- Total Hours: ${intelligence.totalHours.toFixed(0)} hours
+- Cost per Ton: $${intelligence.costPerTon.toLocaleString()}
+${intelligence.complexityIndicators.length > 0 ? `- Key Insights:\n${intelligence.complexityIndicators.map(i => `  • ${i}`).join('\n')}` : ""}
+
+PROPOSAL SEEDS (Captured During Estimating):
+${seedInsights.criticalAssumptions.length > 0 ? `Critical Assumptions:\n${seedInsights.criticalAssumptions.map(a => `- ${a}`).join('\n')}` : ""}
+${seedInsights.importantClarifications.length > 0 ? `Important Clarifications:\n${seedInsights.importantClarifications.map(c => `- ${c}`).join('\n')}` : ""}
+${seedInsights.keyExclusions.length > 0 ? `Key Exclusions:\n${seedInsights.keyExclusions.map(e => `- ${e}`).join('\n')}` : ""}
+${seedInsights.notableInclusions.length > 0 ? `Notable Inclusions:\n${seedInsights.notableInclusions.map(i => `- ${i}`).join('\n')}` : ""}
+
+COMPANY VOICE & BRANDING:
+- Tone: ${tone}
+${keyMessages.length > 0 ? `- Key Messages: ${keyMessages.join(", ")}` : ""}
+${differentiators.length > 0 ? `- Differentiators: ${differentiators.join(", ")}` : ""}
 
 TEMPLATE STRUCTURE:
 ${filledTemplate}
@@ -312,46 +375,62 @@ ${filledTemplate}
 PROVIDED DATA:
 ${JSON.stringify(context, null, 2)}
 
+WRITING REQUIREMENTS:
+1. Use the personalized introduction provided in context.personalization.introduction as the foundation for projectOverview
+2. Write like a trusted partner, not a vendor - professional but conversational
+3. Reference specific project details naturally (e.g., "Given the ${projectData?.projectType || "commercial"} nature of this project...")
+4. Show understanding of their needs based on project intelligence
+5. Use active voice and confident language
+6. Include subtle relationship-building phrases when appropriate
+7. Make technical details accessible, not overwhelming
+8. Show enthusiasm for the opportunity without being salesy
+9. Use the personalized closing from context.personalization.closing for acceptanceSignature
+10. If proposal seeds show specific concerns, address them directly in the proposal
+11. For scopeOfWork: Use the detailed scope breakdown provided in context.scope. Expand each item with specific details from the estimating data. Include quantities, materials, and specifications where available.
+12. For price: Always include the total lump sum amount ($${totalLumpSumFormatted}) prominently. Reference the scope when explaining value. Include payment terms and pricing validity period.
+13. For projectSpecificInclusions: Use items from context.personalization.seedInsights.notableInclusions. Make them specific and relevant to the project.
+14. For projectSpecificExclusions: Use items from context.personalization.seedInsights.keyExclusions. Be clear and specific about what is excluded.
+15. For clarificationsAssumptions: Use items from context.personalization.seedInsights.criticalAssumptions and importantClarifications. These are critical for avoiding disputes.
+
 Return a JSON object with the following structure:
 {
   "projectOverview": {
-    "content": "Professional introduction paragraph describing the project and opportunity",
+    "content": "Personalized introduction paragraph that feels written specifically for this project and GC. Use the provided personalized introduction as a starting point but expand it naturally.",
     "type": "paragraph"
   },
   "scopeOfWork": {
-    "content": ["Bullet point 1", "Bullet point 2", "..."],
+    "content": ["Detailed bullet point 1 based on actual estimating data", "Detailed bullet point 2", "..."],
     "type": "bullets"
   },
+  "price": {
+    "content": "Professional paragraph describing the pricing. Include the total lump sum of $${totalLumpSumFormatted} naturally in the text. Mention payment terms, material escalation clauses (if applicable), and any relevant commercial conditions. Reference the detailed scope when appropriate. If breakdowns are included, reference them naturally.",
+    "type": "paragraph"
+  },
   "projectSpecificInclusions": {
-    "content": ["Inclusion 1", "Inclusion 2", "..."],
+    "content": ["Inclusion 1 from proposal seeds", "Inclusion 2", "..."],
     "type": "bullets"
   },
   "projectSpecificExclusions": {
-    "content": ["Exclusion 1", "Exclusion 2", "..."],
+    "content": ["Exclusion 1 from proposal seeds", "Exclusion 2", "..."],
     "type": "bullets"
   },
   "clarificationsAssumptions": {
-    "content": ["Clarification 1", "Assumption 1", "..."],
+    "content": ["Clarification 1 from proposal seeds", "Assumption 1", "..."],
     "type": "bullets"
   },
   "commercialTerms": {
-    "content": "Professional paragraph describing pricing, payment terms, and commercial conditions",
+    "content": "Professional paragraph describing payment terms, material escalation clauses (30-day pricing validity), change order procedures, and other commercial conditions",
     "type": "paragraph"
   },
   "acceptanceSignature": {
-    "content": "Professional closing paragraph with acceptance instructions",
+    "content": "Use the provided personalized closing. Make it feel warm and professional, written specifically for this relationship.",
     "type": "paragraph"
   }
 }
 
-INSTRUCTIONS:
-1. Use the provided template structure and data to populate each section
-2. Expand each section with professional, detailed language appropriate for a steel fabrication proposal
-3. Use the project summary to add relevant details to the scope section
-4. If estimating data is provided, reference actual costs and quantities where appropriate
-5. Ensure all sections are complete and well-written
-6. Maintain the professional tone throughout
-7. Return ONLY valid JSON, no markdown formatting or code blocks.`;
+CRITICAL: The proposal should feel like it was written specifically for ${gcName} and the ${formData.projectName || "project"}, not a generic template. Reference project-specific details, show understanding of the project type and complexity, and demonstrate that you've thought deeply about their needs.
+
+Return ONLY valid JSON, no markdown formatting or code blocks.`;
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -371,11 +450,36 @@ INSTRUCTIONS:
     
     try {
       structuredProposal = JSON.parse(proposalContent);
+      
+      // Ensure price section is included
+      if (!structuredProposal.price) {
+        structuredProposal.price = {
+          content: `Total Lump Sum: $${formData.totalLumpSum.toLocaleString()}\n\n${formData.includeBreakdowns && estimatingData?.totals ? `Breakdowns:\n- Structural Steel: $${estimatingData.totals.materialCost?.toLocaleString() || "0"}\n- Labor: $${estimatingData.totals.laborCost?.toLocaleString() || "0"}\n- Coating: $${estimatingData.totals.coatingCost?.toLocaleString() || "0"}\n- Hardware: $${estimatingData.totals.hardwareCost?.toLocaleString() || "0"}` : "Sales tax, if applicable, will be added."}`,
+          type: "paragraph"
+        };
+      }
+      
+      // Ensure metadata includes price
+      if (!structuredProposal.metadata) {
+        structuredProposal.metadata = {};
+      }
+      structuredProposal.metadata.totalLumpSum = formData.totalLumpSum;
+      structuredProposal.metadata.shopDrawingsDays = formData.shopDrawingsDays;
+      structuredProposal.metadata.fabricationWeeks = formData.fabricationWeeks;
     } catch (e) {
       // Fallback: convert filled template to structured format
       structuredProposal = {
         projectOverview: { content: filledTemplate.split("\n\n")[0] || "", type: "paragraph" },
         scopeOfWork: { content: filledTemplate.split("2. SCOPE OF WORK")[1]?.split("3. PRICE")[0]?.trim() || "", type: "paragraph" },
+        price: {
+          content: `Total Lump Sum: $${formData.totalLumpSum.toLocaleString()}\n\n${priceBreakdown || "Sales tax, if applicable, will be added."}`,
+          type: "paragraph"
+        },
+        metadata: {
+          totalLumpSum: formData.totalLumpSum,
+          shopDrawingsDays: formData.shopDrawingsDays,
+          fabricationWeeks: formData.fabricationWeeks,
+        },
       };
     }
 

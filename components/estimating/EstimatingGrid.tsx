@@ -4,8 +4,8 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Plus, Upload, Edit, Trash2, Copy, Check, X, Undo2, Redo2, Download, Layers, ChevronDown, ChevronUp } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { subscribeToCollection, createDocument, updateDocument, deleteDocument } from "@/lib/firebase/firestore";
-import { deleteField } from "firebase/firestore";
+import { subscribeToCollection, createDocument, updateDocument, deleteDocument, getDocRef } from "@/lib/firebase/firestore";
+import { deleteField, getDoc } from "firebase/firestore";
 import { getProjectPath } from "@/lib/firebase/firestore";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
 import { getFieldFromNumber, parseNumberFieldFormat } from "@/lib/utils/fieldNumberMap";
@@ -1012,7 +1012,31 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
           }
         }
         
-        await updateDocument(linePath, editingId, dataToSave);
+        // Check if document exists before updating
+        if (!editingId || !currentLine?.id) {
+          // Document doesn't exist or line has no ID - create it instead
+          const newId = await createDocument(linePath, dataToSave);
+          console.log("Created new line document:", newId);
+        } else {
+          // Verify document exists before updating
+          try {
+            const docRef = getDocRef(`${linePath}/${editingId}`);
+            const docSnap = await getDoc(docRef);
+            
+            if (!docSnap.exists()) {
+              // Document doesn't exist - create it instead
+              console.warn(`Document ${editingId} does not exist, creating new document`);
+              await createDocument(linePath, { ...dataToSave, id: editingId });
+            } else {
+              // Document exists - update it
+              await updateDocument(linePath, editingId, dataToSave);
+            }
+          } catch (checkError: any) {
+            // If check fails, try to create instead
+            console.warn("Error checking document existence, attempting to create:", checkError);
+            await createDocument(linePath, dataToSave);
+          }
+        }
         // Don't clear editing state in manual mode - keep it editable
         // The line will be updated via Firestore subscription
       } catch (error: any) {

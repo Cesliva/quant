@@ -64,11 +64,13 @@ export default function SeedDataPage() {
     }
 
     if (!confirm(
-      "This will create sample data for an $8M fab shop mid-year scenario.\n\n" +
+      "This will create a marketing-grade demo dataset.\n\n" +
       "This includes:\n" +
-      "• 12 projects (won, active, lost)\n" +
+      "• Projects across won/active/lost/submitted\n" +
       "• Hundreds of estimating lines\n" +
-      "• Realistic steel fabrication data\n\n" +
+      "• Bid schedule + production capacity entries\n" +
+      "• Win/Loss records + Spec Review risk outputs\n" +
+      "• Future-shifted dates so dashboards look current\n\n" +
       "Continue?"
     )) {
       return;

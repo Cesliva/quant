@@ -12,7 +12,7 @@ import * as d3 from "d3";
 import { EstimatingLine } from "@/components/estimating/EstimatingGrid";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
-import { BarChart3 } from "lucide-react";
+import { BarChart3, Info, X, Sparkles } from "lucide-react";
 import { loadCompanySettings, type CompanySettings } from "@/lib/utils/settingsLoader";
 
 interface ProjectData {
@@ -91,6 +91,8 @@ export default function CostTrendBubbleChart({
   const [internalMetric, setInternalMetric] = useState<"laborHoursPerTon" | "costPerTon">("laborHoursPerTon");
   const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+  const [showFirstTimeHelp, setShowFirstTimeHelp] = useState(false);
+  const [showInfoTooltip, setShowInfoTooltip] = useState(false);
   const svgRef = useRef<SVGSVGElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   
@@ -851,9 +853,58 @@ export default function CostTrendBubbleChart({
       <CardHeader className="pb-4">
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between flex-wrap gap-3">
-            <CardTitle className="text-xl font-semibold text-gray-900">
-              Cost Trend Analysis
-            </CardTitle>
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <CardTitle className="text-xl font-semibold text-gray-900">
+                Cost Trend Analysis
+              </CardTitle>
+              {/* Always-visible info button with rich tooltip */}
+              <div className="relative flex-shrink-0">
+                <button
+                  onClick={() => setShowInfoTooltip(!showInfoTooltip)}
+                  className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors group"
+                  aria-label="Chart information"
+                >
+                  <Info className="w-4 h-4 text-gray-400 group-hover:text-gray-600 transition-colors" />
+                </button>
+                {showInfoTooltip && (
+                  <>
+                    <div 
+                      className="fixed inset-0 z-40" 
+                      onClick={() => setShowInfoTooltip(false)}
+                    />
+                    <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-xl shadow-xl border border-gray-200 p-4 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                      <div className="flex items-start justify-between mb-3">
+                        <h3 className="text-sm font-semibold text-gray-900">How to read this chart</h3>
+                        <button
+                          onClick={() => setShowInfoTooltip(false)}
+                          className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
+                          <X className="w-3.5 h-3.5 text-gray-400" />
+                        </button>
+                      </div>
+                      <div className="space-y-3 text-xs text-gray-600">
+                        <div>
+                          <p className="font-medium text-gray-900 mb-1">Bubble size</p>
+                          <p>Represents {selectedMetric === "laborHoursPerTon" ? "man hours per ton (MH/T)" : "cost per ton ($/T)"} for each category. Larger bubbles indicate higher intensity.</p>
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900 mb-1">Project comparison</p>
+                          <p>Select a project from the dropdown to see how it compares to the company average. Deviation indicators show if a category is above or below average.</p>
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900 mb-1">Deviation colors</p>
+                          <p>Red = &gt;15% deviation, Amber = 5-15% deviation, Green = &lt;5% deviation from company average.</p>
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900 mb-1">Hover for details</p>
+                          <p>Hover over any bubble to see exact values and percentage of total.</p>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
             <div className="flex items-center gap-2 flex-wrap">
               <select
                 value={selectedProjectId}
@@ -886,6 +937,46 @@ export default function CostTrendBubbleChart({
               </Button>
             </div>
           </div>
+          
+          {/* Subtitle */}
+          <p className="text-xs text-gray-500 -mt-2">
+            {selectedMetric === "laborHoursPerTon" 
+              ? "Company-wide labor intensity distribution. Compare individual projects to identify efficiency opportunities."
+              : "Company-wide cost distribution. Compare individual projects to identify cost drivers and optimization areas."
+            }
+          </p>
+          
+          {/* First-time help banner - Apple-style subtle and dismissible */}
+          {showFirstTimeHelp && bubbleData.length > 0 && (
+            <div className="p-3 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/50 rounded-xl shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
+              <div className="flex items-start gap-2.5">
+                <div className="p-1.5 bg-blue-100 rounded-lg flex-shrink-0">
+                  <Sparkles className="w-4 h-4 text-blue-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-blue-900 mb-1.5">Quick tip</p>
+                  <p className="text-xs text-blue-800 leading-relaxed mb-2">
+                    Bubble size shows {selectedMetric === "laborHoursPerTon" ? "labor intensity" : "cost intensity"} per category. 
+                    Select a project to compare it against company averages and spot outliers.
+                  </p>
+                  <button
+                    onClick={handleDismissHelp}
+                    className="text-[11px] font-medium text-blue-700 hover:text-blue-900 transition-colors"
+                  >
+                    Got it
+                  </button>
+                </div>
+                <button
+                  onClick={handleDismissHelp}
+                  className="p-1 hover:bg-blue-100 rounded-lg transition-colors flex-shrink-0"
+                  aria-label="Dismiss"
+                >
+                  <X className="w-3.5 h-3.5 text-blue-600" />
+                </button>
+              </div>
+            </div>
+          )}
+          
           {selectedProjectId && (
             <div className="flex items-center gap-3 text-xs text-gray-600 flex-wrap">
               <div className="flex items-center gap-1.5">

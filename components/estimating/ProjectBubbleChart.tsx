@@ -5,7 +5,7 @@ import * as d3 from "d3";
 import { EstimatingLine } from "./EstimatingGrid";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
-import { BarChart3, Info, X, TrendingUp, TrendingDown } from "lucide-react";
+import { BarChart3, Info, X, TrendingUp, TrendingDown, Sparkles } from "lucide-react";
 import { loadCompanySettings, type CompanySettings } from "@/lib/utils/settingsLoader";
 import { subscribeToCollection, getProjectPath } from "@/lib/firebase/firestore";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
@@ -51,6 +51,7 @@ const LABOR_COLORS: Record<string, string> = {
   "Paint": "#ec4899",
   "Handle/Move": "#6366f1",
   "Load/Ship": "#14b8a6",
+  "Allowance": "#a855f7", // Purple for allowance (unrealized profit if unused)
 };
 
 // Cost category colors
@@ -82,8 +83,28 @@ interface ProjectData {
 export default function ProjectBubbleChart({ lines, companyId, projectName, currentProjectId, selectedMetric: externalMetric, onMetricChange }: ProjectBubbleChartProps) {
   const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
   const [internalMetric, setInternalMetric] = useState<"laborHoursPerTon" | "costPerTon">("laborHoursPerTon");
+  const [showFirstTimeHelp, setShowFirstTimeHelp] = useState(false);
+  const [showInfoTooltip, setShowInfoTooltip] = useState(false);
   
   const selectedMetric = externalMetric || internalMetric;
+  
+  // Check if user has dismissed first-time help
+  useEffect(() => {
+    const hasSeenHelp = localStorage.getItem('quant-bubble-chart-help-dismissed');
+    const activeLines = lines.filter((line) => line.status !== "Void");
+    if (!hasSeenHelp && activeLines.length > 0) {
+      // Use a small delay to ensure bubbleData is calculated
+      const timer = setTimeout(() => {
+        setShowFirstTimeHelp(true);
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [lines]);
+  
+  const handleDismissHelp = () => {
+    setShowFirstTimeHelp(false);
+    localStorage.setItem('quant-bubble-chart-help-dismissed', 'true');
+  };
   
   const handleMetricChange = (metric: "laborHoursPerTon" | "costPerTon") => {
     if (onMetricChange) {
@@ -218,6 +239,19 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
         });
       });
       
+      // Add Allowance category (from allowance lines)
+      const allowanceHours = activeLines
+        .filter(line => line.category === "Allowances" || line.subCategory === "Bid Coach")
+        .reduce((sum, line) => sum + (line.totalLabor || 0), 0);
+      const allowanceMHPT = totalWeight > 0 ? (allowanceHours / (totalWeight / 2000)) : 0;
+      if (allowanceMHPT > 0) {
+        data.push({
+          category: "Allowance",
+          label: "Allowance",
+          mhPerTon: allowanceMHPT,
+        });
+      }
+      
       const total = data.reduce((sum, d) => sum + d.mhPerTon, 0);
       
       return data.map((item) => ({
@@ -309,6 +343,15 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
         const avgMHPT = totalWeight > 0 ? (totalLaborHours / (totalWeight / 2000)) : 0;
         averages.set(laborCat.key, avgMHPT);
       });
+      
+      // Add Allowance category average
+      const allowanceHours = allActiveLines
+        .filter(line => line.category === "Allowances" || line.subCategory === "Bid Coach")
+        .reduce((sum, line) => sum + (line.totalLabor || 0), 0);
+      const avgAllowanceMHPT = totalWeight > 0 ? (allowanceHours / (totalWeight / 2000)) : 0;
+      if (avgAllowanceMHPT > 0) {
+        averages.set("Allowance", avgAllowanceMHPT);
+      }
     } else {
       // Calculate average cost per ton for each category
       const materialCost = allActiveLines.reduce((sum, line) => sum + (line.materialCost || 0), 0);
@@ -411,6 +454,15 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
           const avgMHPT = totalWeight > 0 ? (totalLaborHours / (totalWeight / 2000)) : 0;
           averages.set(laborCat.key, avgMHPT);
         });
+        
+        // Add Allowance category average
+        const allowanceHours = allActiveLines
+          .filter(line => line.category === "Allowances" || line.subCategory === "Bid Coach")
+          .reduce((sum, line) => sum + (line.totalLabor || 0), 0);
+        const avgAllowanceMHPT = totalWeight > 0 ? (allowanceHours / (totalWeight / 2000)) : 0;
+        if (avgAllowanceMHPT > 0) {
+          averages.set("Allowance", avgAllowanceMHPT);
+        }
       } else {
         const materialCost = allActiveLines.reduce((sum, line) => sum + (line.materialCost || 0), 0);
         const laborCost = allActiveLines.reduce((sum, line) => sum + (line.laborCost || 0), 0);
@@ -967,33 +1019,77 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
       <Card className="p-4">
         <CardHeader className="mb-2">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <BarChart3 className="w-4 h-4" />
-                {selectedMetric === "laborHoursPerTon" ? LABOR_FINGERPRINT_NAME : "Estimate Weight Distribution"}
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <CardTitle className="text-lg flex items-center gap-2 min-w-0">
+                <BarChart3 className="w-4 h-4 flex-shrink-0" />
+                <span className="truncate">
+                  {selectedMetric === "laborHoursPerTon" ? LABOR_FINGERPRINT_NAME : "Cost Distribution"}
+                </span>
                 {projectName && (
-                  <span className="text-xs font-normal text-gray-500 ml-1">
+                  <span className="text-xs font-normal text-gray-500 ml-1 hidden sm:inline">
                     - {projectName}
                   </span>
                 )}
               </CardTitle>
-              {selectedMetric === "laborHoursPerTon" && (
-                <div className="group relative">
-                  <Info className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help" />
-                  <div className="absolute left-0 bottom-full mb-2 w-64 p-2 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
-                    {LABOR_FINGERPRINT_TOOLTIP}
-                  </div>
-                </div>
-              )}
+              {/* Always-visible info button with rich tooltip */}
+              <div className="relative flex-shrink-0">
+                <button
+                  onClick={() => setShowInfoTooltip(!showInfoTooltip)}
+                  className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors group"
+                  aria-label="Chart information"
+                >
+                  <Info className="w-4 h-4 text-gray-400 group-hover:text-gray-600 transition-colors" />
+                </button>
+                {showInfoTooltip && (
+                  <>
+                    <div 
+                      className="fixed inset-0 z-40" 
+                      onClick={() => setShowInfoTooltip(false)}
+                    />
+                    <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-xl shadow-xl border border-gray-200 p-4 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                      <div className="flex items-start justify-between mb-3">
+                        <h3 className="text-sm font-semibold text-gray-900">How to read this chart</h3>
+                        <button
+                          onClick={() => setShowInfoTooltip(false)}
+                          className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
+                          <X className="w-3.5 h-3.5 text-gray-400" />
+                        </button>
+                      </div>
+                      <div className="space-y-3 text-xs text-gray-600">
+                        <div>
+                          <p className="font-medium text-gray-900 mb-1">Bubble size</p>
+                          <p>Represents {selectedMetric === "laborHoursPerTon" ? "man hours per ton (MH/T)" : "cost per ton ($/T)"} for each category. Larger bubbles indicate higher intensity.</p>
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900 mb-1">Dotted circles</p>
+                          <p>Show historical averages from won and lost projects. Use these as benchmarks to spot outliers.</p>
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900 mb-1">Click to compare</p>
+                          <p>Click any bubble to see a detailed comparison with historical data, including won vs. lost averages.</p>
+                        </div>
+                        {selectedMetric === "laborHoursPerTon" && (
+                          <div className="pt-2 border-t border-gray-200">
+                            <p className="text-[11px] text-gray-500 italic">
+                              {LABOR_FINGERPRINT_TOOLTIP}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
               <Button
                 variant={selectedMetric === "laborHoursPerTon" ? "primary" : "outline"}
                 size="sm"
                 className="text-xs px-2 py-1"
                 onClick={() => handleMetricChange("laborHoursPerTon")}
               >
-                Man Hours / Ton
+                MH/T
               </Button>
               <Button
                 variant={selectedMetric === "costPerTon" ? "primary" : "outline"}
@@ -1001,16 +1097,49 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
                 className="text-xs px-2 py-1"
                 onClick={() => handleMetricChange("costPerTon")}
               >
-                Cost / Ton
+                $/T
               </Button>
             </div>
           </div>
         </CardHeader>
         <CardContent className="pt-0">
-          {selectedMetric === "laborHoursPerTon" && (
-            <p className="text-xs text-gray-600 mb-2">
-              {LABOR_FINGERPRINT_SUBTITLE}
-            </p>
+          {/* Subtitle for both metrics */}
+          <p className="text-xs text-gray-500 mb-3">
+            {selectedMetric === "laborHoursPerTon" 
+              ? LABOR_FINGERPRINT_SUBTITLE
+              : "Cost per ton distribution across all cost categories. Compare against historical averages to identify cost drivers."
+            }
+          </p>
+          
+          {/* First-time help banner - Apple-style subtle and dismissible */}
+          {showFirstTimeHelp && bubbleData.length > 0 && (
+            <div className="mb-4 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/50 rounded-xl shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
+              <div className="flex items-start gap-2.5">
+                <div className="p-1.5 bg-blue-100 rounded-lg flex-shrink-0">
+                  <Sparkles className="w-4 h-4 text-blue-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-blue-900 mb-1.5">Quick tip</p>
+                  <p className="text-xs text-blue-800 leading-relaxed mb-2">
+                    Bubble size shows {selectedMetric === "laborHoursPerTon" ? "labor intensity" : "cost intensity"} per category. 
+                    Click any bubble to compare with historical projects and spot opportunities.
+                  </p>
+                  <button
+                    onClick={handleDismissHelp}
+                    className="text-[11px] font-medium text-blue-700 hover:text-blue-900 transition-colors"
+                  >
+                    Got it
+                  </button>
+                </div>
+                <button
+                  onClick={handleDismissHelp}
+                  className="p-1 hover:bg-blue-100 rounded-lg transition-colors flex-shrink-0"
+                  aria-label="Dismiss"
+                >
+                  <X className="w-3.5 h-3.5 text-blue-600" />
+                </button>
+              </div>
+            </div>
           )}
           {bubbleData.length === 0 || nonZeroData.length === 0 ? (
             <div className="flex items-center justify-center h-96 text-gray-500">
@@ -1033,8 +1162,31 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
                     className="border border-gray-200 rounded-lg cursor-move"
                     style={{ maxWidth: "100%", height: "auto", aspectRatio: "4/3", maxHeight: "400px" }}
                   />
-                  <div className="absolute top-1 right-1 text-xs text-gray-400 bg-white/80 px-1.5 py-0.5 rounded shadow-sm">
-                    Scroll to zoom • Drag to pan
+                  <div className="absolute top-2 right-2 flex flex-col items-end gap-1.5">
+                    <div className="text-xs text-gray-400 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-lg shadow-sm border border-gray-200/50">
+                      Scroll to zoom • Drag to pan
+                    </div>
+                    {bubbleData.length > 0 && (
+                      <div className="text-[10px] text-gray-500 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-lg shadow-sm border border-gray-200/50">
+                        <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1">
+                            <div className="w-2 h-2 rounded-full border-2 border-red-500 border-dashed" />
+                            <span>All avg</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <div className="w-2 h-2 rounded-full border-2 border-green-500 border-dashed" />
+                            <span>Won avg</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <div className="w-2 h-2 rounded-full border-2 border-orange-500 border-dashed" />
+                            <span>Lost avg</span>
+                          </div>
+                        </div>
+                        <div className="text-[9px] text-gray-400 mt-1 text-center">
+                          Click bubbles to compare
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

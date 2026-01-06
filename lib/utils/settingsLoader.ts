@@ -76,6 +76,20 @@ export interface CompanySettings {
     resetEachYear?: boolean; // Default true
     nextSequence?: number; // Current sequence number
   };
+  // Proposal Personalization Settings
+  proposalSettings?: {
+    companyVoice?: {
+      tone?: "professional" | "friendly" | "technical" | "consultative";
+      keyMessages?: string[]; // e.g., ["Quality craftsmanship", "On-time delivery", "Partnership approach"]
+      differentiators?: string[]; // e.g., ["AISC Certified", "30 years experience", "Local shop"]
+      closingStyle?: "formal" | "warm" | "direct";
+    };
+    proposalTemplates?: {
+      introduction?: string; // Custom intro paragraph template
+      closing?: string; // Custom closing paragraph template
+      signatureBlock?: string; // Custom signature format
+    };
+  };
 }
 
 export interface ProjectSettings {

@@ -4,8 +4,9 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { Card } from "@/components/ui/Card";
 import { EstimatingLine } from "./EstimatingGrid";
 import { Slider } from "@/components/ui/Slider";
-import { Info, TrendingUp, TrendingDown, RotateCcw, Save, History } from "lucide-react";
+import { Info, TrendingUp, TrendingDown, RotateCcw, Save, History, ExternalLink } from "lucide-react";
 import Button from "@/components/ui/Button";
+import Link from "next/link";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { logActivity } from "@/lib/utils/activityLogger";
 import { createDocument } from "@/lib/firebase/firestore";
@@ -368,6 +369,15 @@ export default function InteractiveEstimateSummary({
     }).format(value);
   };
 
+  // Check for allowance lines
+  const allowanceLines = useMemo(() => {
+    return lines.filter(
+      (line) => 
+        line.status !== "Void" && 
+        (line.category === "Allowances" || line.subCategory === "Bid Coach" || line.itemDescription?.includes("Bid Coach"))
+    );
+  }, [lines]);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -376,6 +386,11 @@ export default function InteractiveEstimateSummary({
           <h2 className="text-2xl font-semibold text-slate-900">Interactive Estimate Summary</h2>
           <p className="text-sm text-slate-500 mt-1">
             Adjust parameters in real-time to see impact on totals and metrics
+            {allowanceLines.length > 0 && (
+              <span className="ml-2 text-blue-600 font-medium">
+                • {allowanceLines.length} allowance{allowanceLines.length !== 1 ? "s" : ""} applied
+              </span>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -589,6 +604,118 @@ export default function InteractiveEstimateSummary({
           </div>
         </Card>
       </div>
+
+      {/* Allowances & Adjustments */}
+      {(() => {
+        // Always show the section, even if empty, so users know where allowances appear
+        if (allowanceLines.length === 0) {
+          return (
+            <Card className="border-slate-200 bg-slate-50/30">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-lg font-semibold text-slate-900">Allowances & Adjustments</h3>
+                  <span className="text-xs text-slate-500">No allowances yet</span>
+                </div>
+                <p className="text-sm text-slate-500">
+                  Allowance lines (including Bid Coach adjustments) will appear here when added.
+                </p>
+              </div>
+            </Card>
+          );
+        }
+
+        return (
+          <Card className="border-blue-200 bg-blue-50/30">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-slate-900">Allowances & Adjustments</h3>
+                <span className="text-xs font-medium text-blue-700 bg-blue-100 px-2 py-1 rounded">
+                  {allowanceLines.length} {allowanceLines.length === 1 ? "line" : "lines"}
+                </span>
+              </div>
+              <div className="space-y-3">
+                {allowanceLines.map((line) => {
+                  const isBidCoach = line.subCategory === "Bid Coach";
+                  const lineLabor = line.totalLabor || 0;
+                  const lineCost = line.totalCost || 0;
+                  const laborRate = line.laborRate || 0;
+                  
+                  return (
+                    <div
+                      key={line.lineId || line.id}
+                      className={`bg-white rounded-lg border p-4 ${
+                        isBidCoach ? "border-blue-300 shadow-sm" : "border-slate-200"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h4 className="text-sm font-semibold text-slate-900">
+                              {line.itemDescription || "Allowance"}
+                            </h4>
+                            {isBidCoach && (
+                              <span className="text-[10px] font-medium text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded border border-blue-200">
+                                Bid Coach
+                              </span>
+                            )}
+                          </div>
+                          {line.notes && (
+                            <p className="text-xs text-slate-600 mt-1 line-clamp-2">{line.notes}</p>
+                          )}
+                          <Link
+                            href={`/projects/${projectId}/estimating`}
+                            className="mt-2 inline-flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-700 font-medium"
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                            View in Estimating Grid
+                          </Link>
+                          {isBidCoach && (
+                            <div className="mt-2 text-[11px] text-slate-500 bg-purple-50 border border-purple-200 rounded px-2 py-1">
+                              <span className="font-medium text-purple-700">Note:</span> This allowance appears as a single "Allowance" category on all charts. If unused when the project is awarded, it becomes unrealized profit.
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <div className="text-sm font-semibold text-slate-900 tabular-nums">
+                            {formatMoney(lineCost)}
+                          </div>
+                          <div className="text-xs text-slate-600 mt-0.5">
+                            {formatNumber(lineLabor, 1)} hrs
+                          </div>
+                          {laborRate > 0 && (
+                            <div className="text-[10px] text-slate-500 mt-0.5">
+                              @ {formatMoney(laborRate)}/hr
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-4 pt-4 border-t border-slate-200">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-600">Total Allowances:</span>
+                  <div className="text-right">
+                    <div className="font-semibold text-slate-900 tabular-nums">
+                      {formatMoney(
+                        allowanceLines.reduce((sum, line) => sum + (line.totalCost || 0), 0)
+                      )}
+                    </div>
+                    <div className="text-xs text-slate-600 mt-0.5">
+                      {formatNumber(
+                        allowanceLines.reduce((sum, line) => sum + (line.totalLabor || 0), 0),
+                        1
+                      )}{" "}
+                      hrs
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Card>
+        );
+      })()}
 
       {/* Cost Breakdown */}
       <Card>

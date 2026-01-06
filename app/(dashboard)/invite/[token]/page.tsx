@@ -12,13 +12,22 @@ import { where } from "firebase/firestore";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { auth } from "@/lib/firebase/config";
 
+interface Invitation {
+  id: string;
+  email: string;
+  role: string;
+  status?: string;
+  expiresAt?: any; // Firestore Timestamp or Date
+  companyId?: string;
+}
+
 export default function InviteAcceptancePage() {
   const params = useParams();
   const router = useRouter();
   const { user } = useAuth();
   const token = params.token as string;
   
-  const [invitation, setInvitation] = useState<any>(null);
+  const [invitation, setInvitation] = useState<Invitation | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isAccepting, setIsAccepting] = useState(false);
@@ -61,7 +70,7 @@ export default function InviteAcceptancePage() {
           const invitationsSnapshot = await getDocs(invitationsQuery);
           
           if (!invitationsSnapshot.empty) {
-            const inv = { id: invitationsSnapshot.docs[0].id, ...invitationsSnapshot.docs[0].data() };
+            const inv = { id: invitationsSnapshot.docs[0].id, ...invitationsSnapshot.docs[0].data() } as Invitation;
             
             if (inv.status === "accepted") {
               setError("This invitation has already been accepted");

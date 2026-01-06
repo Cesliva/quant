@@ -115,6 +115,9 @@ function EnhancedProposalPageContent() {
     hardwareCost: 0,
   });
   const [companyInfo, setCompanyInfo] = useState<any>(null);
+  const [companySettings, setCompanySettings] = useState<any>(null);
+  const [projectData, setProjectData] = useState<any>(null);
+  const [proposalSeeds, setProposalSeeds] = useState<any[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [proposalText, setProposalText] = useState("");
   const [isExtracting, setIsExtracting] = useState(false);
@@ -130,6 +133,9 @@ function EnhancedProposalPageContent() {
 
   // Load project and company data
   useEffect(() => {
+    let linesUnsubscribe: (() => void) | null = null;
+    let seedsUnsubscribe: (() => void) | null = null;
+
     const loadData = async () => {
       if (!isFirebaseConfigured() || !companyId) return;
 
@@ -137,6 +143,7 @@ function EnhancedProposalPageContent() {
         // Load company settings
         const settings = await loadCompanySettings(companyId);
         setCompanyInfo(settings.companyInfo);
+        setCompanySettings(settings);
         setFormData(prev => ({
           ...prev,
           contractor: settings.companyInfo?.companyName || "",
@@ -145,19 +152,44 @@ function EnhancedProposalPageContent() {
         // Load project data if projectId provided
         if (projectId) {
           const projectPath = getProjectPath(companyId, projectId);
-          const projectData = await getDocument(projectPath);
+          const projectDoc = await getDocument(projectPath);
           
-          if (projectData) {
+          if (projectDoc) {
+            setProjectData(projectDoc);
             setFormData(prev => ({
               ...prev,
-              projectName: projectData.projectName || "",
-              projectLocation: projectData.projectLocation || "",
+              projectName: projectDoc.projectName || "",
+              projectLocation: projectDoc.location || projectDoc.projectLocation || "",
+              to: projectDoc.owner || prev.to,
+              contractor: projectDoc.generalContractor || prev.contractor,
+              bidDate: projectDoc.bidDueDate 
+                ? new Date(projectDoc.bidDueDate).toLocaleDateString() 
+                : prev.bidDate,
             }));
           }
 
+          // Subscribe to proposal seeds
+          seedsUnsubscribe = subscribeToProposalSeeds(
+            companyId,
+            projectId,
+            (seeds) => {
+              setProposalSeeds(seeds);
+              
+              // Auto-populate custom exclusions from seeds
+              const exclusionSeeds = seeds
+                .filter(s => s.type === "exclusion" && s.status === "active")
+                .map(s => s.text);
+              
+              setFormData(prev => ({
+                ...prev,
+                customExclusions: exclusionSeeds,
+              }));
+            }
+          );
+
           // Load estimating lines
           const linesPath = getProjectPath(companyId, projectId, "lines");
-          const unsubscribe = subscribeToCollection<EstimatingLine>(
+          linesUnsubscribe = subscribeToCollection<EstimatingLine>(
             linesPath,
             (lines) => {
               const activeLines = lines.filter(line => line.status !== "Void");
@@ -206,8 +238,6 @@ function EnhancedProposalPageContent() {
               }));
             }
           );
-
-          return () => unsubscribe();
         }
       } catch (error) {
         console.error("Failed to load data:", error);
@@ -219,6 +249,12 @@ function EnhancedProposalPageContent() {
     if (projectId) {
       loadSavedProposals();
     }
+
+    // Cleanup function
+    return () => {
+      if (linesUnsubscribe) linesUnsubscribe();
+      if (seedsUnsubscribe) seedsUnsubscribe();
+    };
   }, [companyId, projectId, user]);
 
   // Load saved templates
@@ -352,10 +388,14 @@ function EnhancedProposalPageContent() {
           formData,
           estimatingData: {
             totals: estimatingTotals,
+            lines: estimatingLines,
             lineCount: estimatingLines.length,
             categories: [...new Set(estimatingLines.map(l => l.category).filter(Boolean))],
           },
           companyInfo,
+          companySettings,
+          projectData,
+          proposalSeeds,
           projectId,
           companyId,
         }),

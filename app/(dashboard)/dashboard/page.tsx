@@ -17,7 +17,7 @@ import CostTrendAnalysis from "@/components/dashboard/CostTrendAnalysis";
 import EstimatorWorkload from "@/components/dashboard/EstimatorWorkload";
 import BidForecastModal from "@/components/dashboard/BidForecastModal";
 import Input from "@/components/ui/Input";
-import { Search, Lightbulb, TrendingUp, AlertCircle } from "lucide-react";
+import { Search, Lightbulb, TrendingUp, TrendingDown, AlertCircle, ArrowRight, Eye } from "lucide-react";
 import { PRODUCT_SYSTEM_NAME } from "@/lib/branding";
 import { Bid } from "@/lib/bids/types";
 import { calculateBidForecast } from "@/lib/bids/forecast";
@@ -603,9 +603,47 @@ export default function DashboardPage() {
       1 // Ensure at least 1 to prevent division by zero in rendering
     );
 
+    // Count projects per range for tooltips
+    const projectCountsByRange = {
+      small: 0,
+      medium: 0,
+      large: 0,
+      xlarge: 0,
+      xxlarge: 0,
+    };
+
+    upcomingProjects.forEach((project) => {
+      const rawValue = project.estimatedValue;
+      let projectValue = 0;
+      if (typeof rawValue === "string") {
+        const cleaned = rawValue.replace(/[^0-9.-]/g, "");
+        projectValue = parseFloat(cleaned) || 0;
+      } else if (typeof rawValue === "number") {
+        projectValue = rawValue;
+      }
+      if (projectValue <= 0) return;
+      
+      let probability = project.winProbability ?? 0.5;
+      if (probability > 1) probability = probability / 100;
+      const weightedValue = projectValue * probability;
+      
+      if (weightedValue >= pipelineRanges.xxlarge.min) {
+        projectCountsByRange.xxlarge += 1;
+      } else if (weightedValue >= pipelineRanges.xlarge.min) {
+        projectCountsByRange.xlarge += 1;
+      } else if (weightedValue >= pipelineRanges.large.min) {
+        projectCountsByRange.large += 1;
+      } else if (weightedValue >= pipelineRanges.medium.min) {
+        projectCountsByRange.medium += 1;
+      } else {
+        projectCountsByRange.small += 1;
+      }
+    });
+
     return {
       values: projectsByRange,
       maxValue,
+      projectCounts: projectCountsByRange,
       colors: {
         small: "#ef4444",
         medium: "#f97316",
@@ -744,12 +782,54 @@ export default function DashboardPage() {
       </div>
 
         {/* Graph Row */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 lg:gap-5 mb-4 md:mb-6">
-        <div className="bg-white p-3 md:p-4 rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300">
-          <p className="text-sm font-semibold mb-1">Win Rate ({new Date().getFullYear()})</p>
-          <p className="text-xs text-slate-400 mb-3">Current calendar year • Company-wide</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all duration-300">
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Win Rate ({new Date().getFullYear()})</p>
+              <p className="text-xs text-slate-500 mt-0.5">Current calendar year • Company-wide</p>
+            </div>
+            {/* Trend indicator */}
+            {(() => {
+              // Calculate trend (would need previous period data - placeholder for now)
+              const hasTrend = totalBids >= 2;
+              const trendDirection = winRate >= 50 ? "up" : "down";
+              return hasTrend ? (
+                <div className={`flex items-center gap-1 text-xs ${
+                  trendDirection === "up" ? "text-emerald-600" : "text-red-600"
+                }`}>
+                  {trendDirection === "up" ? (
+                    <TrendingUp className="w-3 h-3" />
+                  ) : (
+                    <TrendingDown className="w-3 h-3" />
+                  )}
+                  <span className="font-medium">vs target</span>
+                </div>
+              ) : null;
+            })()}
+          </div>
           <div className="relative w-48 h-32 mx-auto">
             <svg className="w-full h-full" viewBox="0 0 200 100" preserveAspectRatio="xMidYMid meet">
+              {/* Target line at 50% */}
+              <line
+                x1="20"
+                y1="80"
+                x2="180"
+                y2="80"
+                stroke="#e5e7eb"
+                strokeWidth="1"
+                strokeDasharray="4 4"
+                opacity="0.5"
+              />
+              <text
+                x="190"
+                y="82"
+                textAnchor="end"
+                className="text-[9px] fill-slate-400"
+                fontSize="9"
+              >
+                50% target
+              </text>
               {(() => {
                 // Gradient: 50% = yellow, >50% = yellow to red, <50% = yellow to green
                 const getWinRateColor = (percentage: number) => {
@@ -849,15 +929,15 @@ export default function DashboardPage() {
               <span className="text-[10px] text-slate-400">High</span>
             </div>
           </div>
-          <p className="text-center text-xs text-slate-400 mt-4">
+          <p className="text-center text-xs text-slate-500 mt-4">
             {totalBids === 0 
               ? `No decisions logged in ${new Date().getFullYear()}` 
               : `${totalBids} decision${totalBids !== 1 ? 's' : ''} logged this year`}
           </p>
         </div>
-        <div className="bg-white p-3 md:p-4 rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300">
-          <p className="text-sm font-semibold mb-1">Pipeline Distribution</p>
-          <p className="text-xs text-slate-400 mb-3">By bid value (next 60 days)</p>
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all duration-300">
+          <p className="text-sm font-semibold text-slate-900 mb-1">Pipeline Distribution</p>
+          <p className="text-xs text-slate-500 mb-3">By bid value (next 60 days)</p>
           <div className="flex items-end gap-3 h-44 justify-center">
             {(() => {
               const ranges = [
@@ -877,31 +957,41 @@ export default function DashboardPage() {
                 const value = pipelineDistribution.values[range.key as keyof typeof pipelineDistribution.values];
                 const height = Math.max(value * scale, 0);
                 const color = pipelineDistribution.colors[range.key as keyof typeof pipelineDistribution.colors];
+                const projectCount = pipelineDistribution.projectCounts?.[range.key as keyof typeof pipelineDistribution.projectCounts] || 0;
                 
                 return (
-                  <div key={range.key} className="flex flex-col items-center gap-1 flex-1">
+                  <div 
+                    key={range.key} 
+                    className="flex flex-col items-center gap-1 flex-1 group relative"
+                    title={projectCount > 0 ? `${projectCount} project${projectCount !== 1 ? 's' : ''} in ${range.label} range ($${Math.round(value).toLocaleString()} weighted value)` : `${range.label} range: No projects`}
+                  >
                     <div
-                      className={`w-full rounded-xl transition-all duration-500 ${
-                        value > 0 ? "opacity-100" : "opacity-20"
+                      className={`w-full rounded-lg transition-all duration-500 cursor-help ${
+                        value > 0 ? "opacity-100 hover:opacity-90" : "opacity-20"
                       }`}
                       style={{
-                        height: `${Math.max(height, 2)}px`, // Minimum 2px height so bars are always visible
+                        height: `${Math.max(height, 2)}px`,
                         backgroundColor: color,
                         minHeight: "2px",
                       }}
                     />
-                    <span className="text-[10px] text-slate-500 font-medium">
+                    <span className="text-[10px] text-slate-600 font-medium">
                       {value > 0 
                         ? `$${Math.round(value / 1000)}K`
                         : "$0"
                       }
                     </span>
+                    {projectCount > 0 && (
+                      <span className="text-[9px] text-slate-400 mt-0.5">
+                        {projectCount} {projectCount === 1 ? 'project' : 'projects'}
+                      </span>
+                    )}
                   </div>
                 );
               });
             })()}
           </div>
-          <div className="flex justify-between mt-3 text-[11px] text-slate-400">
+          <div className="flex justify-between mt-3 text-[11px] text-slate-500">
             <span>Small</span>
             <span>Medium</span>
             <span>Large</span>
@@ -909,9 +999,9 @@ export default function DashboardPage() {
             <span>XX-Large</span>
           </div>
         </div>
-        <div className="bg-white p-3 md:p-4 rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300">
-          <p className="text-sm font-semibold mb-1">Risk Exposure</p>
-          <p className="text-xs text-slate-400 mb-3">Based on AI spec review</p>
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all duration-300">
+          <p className="text-sm font-semibold text-slate-900 mb-1">Risk Exposure</p>
+          <p className="text-xs text-slate-500 mb-3">Based on AI spec review</p>
           <div className="relative w-48 h-32 mx-auto">
             <svg className="w-full h-full" viewBox="0 0 200 100" preserveAspectRatio="xMidYMid meet">
               {/* Background arc - always visible, muted gray */}
@@ -996,7 +1086,7 @@ export default function DashboardPage() {
               <span className="text-[10px] text-slate-400">High</span>
             </div>
           </div>
-          <p className="text-center text-sm font-medium text-slate-700 mt-4">
+          <p className="text-center text-sm font-medium text-slate-900 mt-4">
             {aggregatedRisk.label}
           </p>
           <p className="text-center text-xs text-slate-500 mt-1">
@@ -1007,11 +1097,11 @@ export default function DashboardPage() {
 
         {/* Lower Row */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 md:gap-4 lg:gap-5 items-stretch">
-        <div className="lg:col-span-2 bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300 p-3 md:p-4 flex flex-col">
+        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all duration-300 p-4 flex flex-col">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <p className="text-sm font-semibold">Active Projects</p>
-              <p className="text-xs text-slate-400">
+              <p className="text-sm font-semibold text-slate-900">Active Projects</p>
+              <p className="text-xs text-slate-500 mt-0.5">
                 {projectFilter === "all" 
                   ? `${filteredProjects.length} total active projects`
                   : `${displayedProjects.length} my projects`
@@ -1088,7 +1178,22 @@ export default function DashboardPage() {
           </div>
           <div className="text-sm">
             {displayedProjects.length === 0 ? (
-              <p className="py-4 text-slate-400">No projects yet.</p>
+              <div className="py-8 text-center">
+                <p className="text-slate-500 font-medium mb-1">No projects found</p>
+                <p className="text-xs text-slate-400 mb-4">
+                  {projectFilter === "all" 
+                    ? "Create your first project to get started"
+                    : "You don't have any assigned projects yet"
+                  }
+                </p>
+                {projectFilter === "all" && (
+                  <Link href="/projects/new">
+                    <Button size="sm" className="text-xs">
+                      + New Project
+                    </Button>
+                  </Link>
+                )}
+              </div>
             ) : (
               <div className="space-y-0">
               {displayedProjects.map((project, index) => {
@@ -1135,7 +1240,7 @@ export default function DashboardPage() {
                   >
                     <Link
                       href={project.id ? `/projects/${project.id}` : "#"}
-                      className="flex-1 flex items-center"
+                      className="flex-1 flex items-center group"
                       onClick={(e) => {
                         if (!project.id) {
                           e.preventDefault();
@@ -1146,14 +1251,16 @@ export default function DashboardPage() {
                         }
                       }}
                     >
-                      <div className="flex-1">
-                        <p className={`font-medium ${isArchived ? "text-slate-500" : "text-slate-800"}`}>
-                          {project.name}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className={`font-medium truncate ${isArchived ? "text-slate-500" : "text-slate-900 group-hover:text-blue-600 transition-colors"}`}>
+                            {project.name}
+                          </p>
                           {isArchived && (
-                            <span className="ml-2 text-xs text-slate-400 font-normal">(Archived)</span>
+                            <span className="text-[10px] text-slate-400 font-normal bg-slate-100 px-1.5 py-0.5 rounded">Archived</span>
                           )}
-                        </p>
-                        <p className="text-xs text-slate-400">
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">
                           {project.gc || "GC TBD"} ·{" "}
                           {project.bidDate
                             ? `Bid due ${new Date(project.bidDate).toLocaleDateString("en-US", {
@@ -1163,10 +1270,10 @@ export default function DashboardPage() {
                             : "Bid date TBD"}
                         </p>
                       </div>
-                      <div className="w-28 text-xs text-right font-medium">
+                      <div className="w-28 text-xs text-right font-semibold">
                         {project.estimatedValue
                           ? (
-                              <span className={isArchived ? "text-slate-400" : "text-emerald-500"}>
+                              <span className={isArchived ? "text-slate-400" : "text-emerald-600"}>
                                 {Number(project.estimatedValue).toLocaleString("en-US", {
                                   style: "currency",
                                   currency: "USD",
@@ -1174,18 +1281,38 @@ export default function DashboardPage() {
                                 })}
                               </span>
                             )
-                          : "—"}
+                          : <span className="text-slate-400">—</span>}
                       </div>
                       <div className="w-24 text-right">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium border capitalize ${
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium border capitalize ${
                           isArchived
                             ? "bg-slate-100 text-slate-600 border-slate-200"
-                            : "bg-amber-50 text-amber-700 border-amber-100"
+                            : project.status === "active"
+                              ? "bg-blue-50 text-blue-700 border-blue-200"
+                              : project.status === "submitted"
+                                ? "bg-orange-50 text-orange-700 border-orange-200"
+                                : project.status === "won"
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                  : project.status === "lost"
+                                    ? "bg-red-50 text-red-700 border-red-200"
+                                    : "bg-amber-50 text-amber-700 border-amber-200"
                         }`}>
                           {project.status || "draft"}
                         </span>
                       </div>
                     </Link>
+                    {!isArchived && (
+                      <div className="flex items-center gap-1 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Link
+                          href={project.id ? `/projects/${project.id}` : "#"}
+                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="View project"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </Link>
+                      </div>
+                    )}
                     {isArchived && (
                       <button
                         onClick={handleRestore}
@@ -1206,7 +1333,7 @@ export default function DashboardPage() {
           {/* Top Card - Bid & Production Calendar */}
           <Link
             href="/bid-schedule"
-            className="bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] hover:-translate-y-0.5 transition-all duration-300 p-3 md:p-4 text-left w-full flex-1 flex flex-col"
+            className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 p-4 text-left w-full flex-1 flex flex-col"
           >
             <div className="flex items-center justify-between mb-1">
               <p className="text-sm font-semibold">Bid & Production Calendar</p>

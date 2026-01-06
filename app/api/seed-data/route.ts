@@ -8,10 +8,11 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { createDocument, deleteDocument } from "@/lib/firebase/firestore";
+import { createDocument, deleteDocument, setDocument } from "@/lib/firebase/firestore";
 import { Timestamp, collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
 import { EstimatingLine } from "@/components/estimating/EstimatingGrid";
+import type { ProposalSeedType, ProposalSeedContext } from "@/lib/types/proposalSeeds";
 
 // Import the seed function logic (we'll inline it here for API route)
 // Material rates
@@ -82,8 +83,17 @@ const ELEVATIONS = [
   "Basement",
 ];
 
+// Shift the entire demo timeline forward so schedules and dashboards look current/future-dated.
+// TODO: Consider making this configurable via POST body for repeatable marketing captures.
+const SEED_TIME_SHIFT_DAYS = 45;
+const SEED_BASE_DATE = (() => {
+  const d = new Date();
+  d.setDate(d.getDate() + SEED_TIME_SHIFT_DAYS);
+  return d;
+})();
+
 function daysAgo(days: number): Date {
-  const date = new Date();
+  const date = new Date(SEED_BASE_DATE);
   date.setDate(date.getDate() - days);
   return date;
 }
@@ -456,30 +466,39 @@ function createColumnLine(lineId: string): EstimatingLine {
   const sspcPrep = getSSPCPrepForCoating(coatingSystem);
   
   // Calculate surface area (approximate: 1 lb steel ≈ 0.15 SF surface area)
-  const surfaceArea = totalWeight * 0.15;
+  const totalSurfaceArea = totalWeight * 0.15;
+  const surfaceAreaPerFoot = weightPerFoot * 0.15;
   
   let coatingCost = 0;
   let coatingRate = 0;
   
   if (coatingSystem === "Paint") {
     coatingRate = PAINT_RATE;
-    coatingCost = surfaceArea * PAINT_RATE;
+    coatingCost = totalSurfaceArea * PAINT_RATE;
   } else if (coatingSystem === "Galvanizing") {
     coatingRate = GALVANIZE_RATE;
     coatingCost = totalWeight * GALVANIZE_RATE; // Galvanizing is per pound
   } else if (coatingSystem === "Standard Shop Primer") {
     coatingRate = SHOP_PRIMER_RATE;
-    coatingCost = surfaceArea * SHOP_PRIMER_RATE;
+    coatingCost = totalSurfaceArea * SHOP_PRIMER_RATE;
   } else if (coatingSystem === "Zinc Primer") {
     coatingRate = ZINC_PRIMER_RATE;
-    coatingCost = surfaceArea * ZINC_PRIMER_RATE;
+    coatingCost = totalSurfaceArea * ZINC_PRIMER_RATE;
   } else if (coatingSystem === "Powder Coat") {
     coatingRate = POWDER_COAT_RATE;
-    coatingCost = surfaceArea * POWDER_COAT_RATE;
+    coatingCost = totalSurfaceArea * POWDER_COAT_RATE;
   } else if (coatingSystem === "Specialty Coating") {
     coatingRate = SPECIALTY_COATING_RATE;
-    coatingCost = surfaceArea * SPECIALTY_COATING_RATE;
+    coatingCost = totalSurfaceArea * SPECIALTY_COATING_RATE;
   }
+  
+  // Generate hardware data (30% of columns have hardware)
+  const hasHardware = Math.random() < 0.3;
+  const hardwareBoltDiameter = hasHardware ? randomChoice(["3/4", "7/8", "1", "1-1/4"]) : undefined;
+  const hardwareBoltType = hasHardware ? randomChoice(["A325", "A490", "A307"]) : undefined;
+  const hardwareQuantity = hasHardware ? randomInt(8, 32) * qty : undefined;
+  const hardwareCostPerSet = hasHardware ? randomBetween(2.50, 8.00) : undefined;
+  const hardwareCost = hasHardware && hardwareQuantity && hardwareCostPerSet ? hardwareQuantity * hardwareCostPerSet : 0;
   
   return {
     lineId,
@@ -489,14 +508,17 @@ function createColumnLine(lineId: string): EstimatingLine {
     elevation: randomChoice(ELEVATIONS),
     category: "Columns",
     subCategory: "Main Column",
-    materialType: "Material",
-    shapeType: "W",
+    workType: "STRUCTURAL" as const,
+    materialType: "Material" as const,
+    shapeType: "W" as const,
     sizeDesignation: size,
     grade,
     lengthFt,
     qty,
     weightPerFoot,
     totalWeight,
+    surfaceAreaPerFoot,
+    totalSurfaceArea,
     coatingSystem,
     sspcPrep,
     materialRate: MATERIAL_RATE,
@@ -507,9 +529,21 @@ function createColumnLine(lineId: string): EstimatingLine {
     laborCost,
     coatingRate,
     coatingCost,
-    totalCost: materialCost + laborCost + coatingCost,
-    status: "Active",
+    hardwareBoltDiameter,
+    hardwareBoltType,
+    hardwareQuantity,
+    hardwareCostPerSet,
+    hardwareCost,
+    totalCost: materialCost + laborCost + coatingCost + hardwareCost,
+    status: "Active" as const,
     isMainMember: true,
+    useStockRounding: randomChoice([true, false]),
+    notes: Math.random() < 0.2 ? randomChoice([
+      "Full penetration welds required at base",
+      "Check shop drawing approval before fabrication",
+      "Coordinate with foundation contractor",
+      "Special handling required due to length",
+    ]) : undefined,
   };
 }
 
@@ -534,30 +568,39 @@ function createBeamLine(lineId: string): EstimatingLine {
   const sspcPrep = getSSPCPrepForCoating(coatingSystem);
   
   // Calculate surface area (approximate: 1 lb steel ≈ 0.15 SF surface area)
-  const surfaceArea = totalWeight * 0.15;
+  const totalSurfaceArea = totalWeight * 0.15;
+  const surfaceAreaPerFoot = weightPerFoot * 0.15;
   
   let coatingCost = 0;
   let coatingRate = 0;
   
   if (coatingSystem === "Paint") {
     coatingRate = PAINT_RATE;
-    coatingCost = surfaceArea * PAINT_RATE;
+    coatingCost = totalSurfaceArea * PAINT_RATE;
   } else if (coatingSystem === "Galvanizing") {
     coatingRate = GALVANIZE_RATE;
     coatingCost = totalWeight * GALVANIZE_RATE; // Galvanizing is per pound
   } else if (coatingSystem === "Standard Shop Primer") {
     coatingRate = SHOP_PRIMER_RATE;
-    coatingCost = surfaceArea * SHOP_PRIMER_RATE;
+    coatingCost = totalSurfaceArea * SHOP_PRIMER_RATE;
   } else if (coatingSystem === "Zinc Primer") {
     coatingRate = ZINC_PRIMER_RATE;
-    coatingCost = surfaceArea * ZINC_PRIMER_RATE;
+    coatingCost = totalSurfaceArea * ZINC_PRIMER_RATE;
   } else if (coatingSystem === "Powder Coat") {
     coatingRate = POWDER_COAT_RATE;
-    coatingCost = surfaceArea * POWDER_COAT_RATE;
+    coatingCost = totalSurfaceArea * POWDER_COAT_RATE;
   } else if (coatingSystem === "Specialty Coating") {
     coatingRate = SPECIALTY_COATING_RATE;
-    coatingCost = surfaceArea * SPECIALTY_COATING_RATE;
+    coatingCost = totalSurfaceArea * SPECIALTY_COATING_RATE;
   }
+  
+  // Generate hardware data (40% of beams have hardware)
+  const hasHardware = Math.random() < 0.4;
+  const hardwareBoltDiameter = hasHardware ? randomChoice(["3/4", "7/8", "1"]) : undefined;
+  const hardwareBoltType = hasHardware ? randomChoice(["A325", "A490"]) : undefined;
+  const hardwareQuantity = hasHardware ? randomInt(12, 48) * qty : undefined;
+  const hardwareCostPerSet = hasHardware ? randomBetween(2.50, 6.00) : undefined;
+  const hardwareCost = hasHardware && hardwareQuantity && hardwareCostPerSet ? hardwareQuantity * hardwareCostPerSet : 0;
   
   return {
     lineId,
@@ -567,14 +610,17 @@ function createBeamLine(lineId: string): EstimatingLine {
     elevation: randomChoice(ELEVATIONS),
     category: "Beams",
     subCategory: "Main Beam",
-    materialType: "Material",
-    shapeType: "W",
+    workType: "STRUCTURAL" as const,
+    materialType: "Material" as const,
+    shapeType: "W" as const,
     sizeDesignation: size,
     grade,
     lengthFt,
     qty,
     weightPerFoot,
     totalWeight,
+    surfaceAreaPerFoot,
+    totalSurfaceArea,
     coatingSystem,
     sspcPrep,
     materialRate: MATERIAL_RATE,
@@ -585,8 +631,13 @@ function createBeamLine(lineId: string): EstimatingLine {
     laborCost,
     coatingRate,
     coatingCost,
-    totalCost: materialCost + laborCost + coatingCost,
-    status: "Active",
+    hardwareBoltDiameter,
+    hardwareBoltType,
+    hardwareQuantity,
+    hardwareCostPerSet,
+    hardwareCost,
+    totalCost: materialCost + laborCost + coatingCost + hardwareCost,
+    status: "Active" as const,
     isMainMember: true,
   };
 }
@@ -630,6 +681,14 @@ function createPlateLine(lineId: string): EstimatingLine {
     coatingCost = plateSurfaceArea * POWDER_COAT_RATE;
   }
   
+  // Generate hardware data (20% of plates have hardware)
+  const hasHardware = Math.random() < 0.2;
+  const hardwareBoltDiameter = hasHardware ? randomChoice(["5/8", "3/4", "7/8"]) : undefined;
+  const hardwareBoltType = hasHardware ? randomChoice(["A325", "A307"]) : undefined;
+  const hardwareQuantity = hasHardware ? randomInt(4, 16) * plateQty : undefined;
+  const hardwareCostPerSet = hasHardware ? randomBetween(1.50, 4.00) : undefined;
+  const hardwareCost = hasHardware && hardwareQuantity && hardwareCostPerSet ? hardwareQuantity * hardwareCostPerSet : 0;
+  
   return {
     lineId,
     drawingNumber: `D-${randomInt(100, 999)}`,
@@ -638,7 +697,8 @@ function createPlateLine(lineId: string): EstimatingLine {
     elevation: randomChoice(ELEVATIONS),
     category: "Plates",
     subCategory: randomChoice(["Base Plate", "Gusset", "Stiffener", "Clip"]),
-    materialType: "Plate",
+    workType: "STRUCTURAL" as const,
+    materialType: "Plate" as const,
     thickness,
     width,
     plateLength,
@@ -647,6 +707,7 @@ function createPlateLine(lineId: string): EstimatingLine {
     plateArea,
     plateSurfaceArea,
     plateTotalWeight,
+    oneSideCoat: Math.random() < 0.1, // 10% are one-side coat only
     coatingSystem,
     sspcPrep,
     materialRate: MATERIAL_RATE,
@@ -657,8 +718,19 @@ function createPlateLine(lineId: string): EstimatingLine {
     laborCost,
     coatingRate,
     coatingCost,
-    totalCost: materialCost + laborCost + coatingCost,
-    status: "Active",
+    hardwareBoltDiameter,
+    hardwareBoltType,
+    hardwareQuantity,
+    hardwareCostPerSet,
+    hardwareCost,
+    totalCost: materialCost + laborCost + coatingCost + hardwareCost,
+    status: "Active" as const,
+    useStockRounding: false, // Plates typically don't use stock rounding
+    notes: Math.random() < 0.15 ? randomChoice([
+      "Check thickness tolerance",
+      "Verify plate grade per spec",
+      "Coordinate with connection details",
+    ]) : undefined,
   };
 }
 
@@ -685,21 +757,30 @@ function createMiscMetalLine(lineId: string): EstimatingLine {
   const sspcPrep = getSSPCPrepForCoating(coatingSystem);
   
   // Calculate surface area (approximate: 1 lb steel ≈ 0.15 SF surface area)
-  const surfaceArea = totalWeight * 0.15;
+  const totalSurfaceArea = totalWeight * 0.15;
+  const surfaceAreaPerFoot = weightPerFoot * 0.15;
   
   let coatingCost = 0;
   let coatingRate = 0;
   
   if (coatingSystem === "Paint") {
     coatingRate = PAINT_RATE;
-    coatingCost = surfaceArea * PAINT_RATE;
+    coatingCost = totalSurfaceArea * PAINT_RATE;
   } else if (coatingSystem === "Standard Shop Primer") {
     coatingRate = SHOP_PRIMER_RATE;
-    coatingCost = surfaceArea * SHOP_PRIMER_RATE;
+    coatingCost = totalSurfaceArea * SHOP_PRIMER_RATE;
   } else if (coatingSystem === "Zinc Primer") {
     coatingRate = ZINC_PRIMER_RATE;
-    coatingCost = surfaceArea * ZINC_PRIMER_RATE;
+    coatingCost = totalSurfaceArea * ZINC_PRIMER_RATE;
   }
+  
+  // Generate hardware data (50% of misc metals have hardware)
+  const hasHardware = Math.random() < 0.5;
+  const hardwareBoltDiameter = hasHardware ? randomChoice(["1/2", "5/8", "3/4"]) : undefined;
+  const hardwareBoltType = hasHardware ? randomChoice(["A325", "A307"]) : undefined;
+  const hardwareQuantity = hasHardware ? randomInt(2, 12) * qty : undefined;
+  const hardwareCostPerSet = hasHardware ? randomBetween(1.00, 3.50) : undefined;
+  const hardwareCost = hasHardware && hardwareQuantity && hardwareCostPerSet ? hardwareQuantity * hardwareCostPerSet : 0;
   
   return {
     lineId,
@@ -709,7 +790,9 @@ function createMiscMetalLine(lineId: string): EstimatingLine {
     elevation: randomChoice(ELEVATIONS),
     category: "Misc Metals",
     subCategory: randomChoice(["Brace", "Clip", "Angle", "Connection"]),
-    materialType: "Material",
+    workType: "MISC" as const,
+    miscMethod: "DETAILED" as const,
+    materialType: "Material" as const,
     shapeType: type as any,
     sizeDesignation: size,
     grade,
@@ -717,6 +800,8 @@ function createMiscMetalLine(lineId: string): EstimatingLine {
     qty,
     weightPerFoot,
     totalWeight,
+    surfaceAreaPerFoot,
+    totalSurfaceArea,
     coatingSystem,
     sspcPrep,
     materialRate: MATERIAL_RATE,
@@ -727,8 +812,19 @@ function createMiscMetalLine(lineId: string): EstimatingLine {
     laborCost,
     coatingRate,
     coatingCost,
-    totalCost: materialCost + laborCost + coatingCost,
-    status: "Active",
+    hardwareBoltDiameter,
+    hardwareBoltType,
+    hardwareQuantity,
+    hardwareCostPerSet,
+    hardwareCost,
+    totalCost: materialCost + laborCost + coatingCost + hardwareCost,
+    status: "Active" as const,
+    useStockRounding: randomChoice([true, false]),
+    notes: Math.random() < 0.2 ? randomChoice([
+      "Verify connection details",
+      "Check material availability",
+      "Coordinate with structural steel",
+    ]) : undefined,
   };
 }
 
@@ -751,7 +847,8 @@ function generateEstimatingLines(projectValue: number): EstimatingLine[] {
       line.materialCost = (line.materialCost || 0) * scaleFactor;
       line.laborCost = (line.laborCost || 0) * scaleFactor;
       line.coatingCost = (line.coatingCost || 0) * scaleFactor;
-      line.totalCost = (line.materialCost || 0) + (line.laborCost || 0) + (line.coatingCost || 0);
+      line.hardwareCost = (line.hardwareCost || 0) * scaleFactor;
+      line.totalCost = (line.materialCost || 0) + (line.laborCost || 0) + (line.coatingCost || 0) + (line.hardwareCost || 0);
     }
     lines.push(line);
     currentValue += line.totalCost || 0;
@@ -760,9 +857,230 @@ function generateEstimatingLines(projectValue: number): EstimatingLine[] {
   return lines;
 }
 
+// Proposal seed templates for realistic demo data
+const PROPOSAL_SEED_TEMPLATES: Record<ProposalSeedType, string[]> = {
+  exclusion: [
+    "Exclude field touch-up paint",
+    "Exclude permits and engineering stamps",
+    "Erection by others",
+    "Exclude anchor bolts and templates",
+    "Exclude shipping and delivery",
+    "Exclude field welding",
+    "Exclude fireproofing",
+    "Exclude galvanizing",
+    "Exclude powder coating",
+    "Exclude specialty metals (stainless, weathering steel)",
+    "Exclude delegated design",
+    "Exclude BIM modeling",
+    "Exclude shop drawings for miscellaneous metals",
+    "Exclude material handling at job site",
+    "Exclude crane rental and rigging",
+    "Exclude temporary bracing",
+    "Exclude field modifications",
+    "Exclude warranty beyond standard AISC",
+    // Misc metals specific exclusions
+    "Exclude stair nosings and tread finishes",
+    "Exclude glass railing infill",
+    "Exclude cable rail tensioning",
+    "Exclude ladder cage fabrication",
+    "Exclude roof access hatch coordination",
+    "Exclude decorative metal finishes",
+    "Exclude stair handrail installation",
+  ],
+  inclusion: [
+    "Include anchor bolts and templates",
+    "Include shop primer only",
+    "Include material handling to staging area",
+    "Include shop drawings",
+    "Include structural steel fabrication",
+    "Include miscellaneous metals fabrication",
+    "Include standard shop primer (SSPC-SP 2)",
+    "Include delivery to job site",
+    "Include material offloading",
+    "Include connection hardware (bolts, washers, nuts)",
+    "Include shop drawings for structural steel",
+    "Include standard AISC tolerances",
+    "Include QA/QC inspection",
+    "Include material certifications",
+    "Include erection drawings",
+    // Misc metals specific inclusions
+    "Include steel stairs with stringers, treads, and landings",
+    "Include handrails and guardrails per code requirements",
+    "Include roof access ladders with safety cages",
+    "Include connection hardware for all misc metals",
+    "Include shop drawings for stairs, rails, and ladders",
+    "Include ladder safety cages and fall protection",
+    "Include rail post bases and anchoring",
+  ],
+  clarification: [
+    "Clarify: electrical work by others",
+    "Clarify: foundation work by others",
+    "Clarify: concrete work by others",
+    "Clarify: coating system per Division 9 specifications",
+    "Clarify: connection design responsibility",
+    "Clarify: material grade per structural drawings",
+    "Clarify: shop drawing approval process",
+    "Clarify: delivery schedule coordination",
+    "Clarify: field welding requirements",
+    "Clarify: special inspection requirements",
+    "Clarify: material handling at site",
+    "Clarify: erection sequence and phasing",
+    // Misc metals specific clarifications
+    "Clarify: Stair tread finish and nosing requirements",
+    "Clarify: Rail post spacing and infill type",
+    "Clarify: Ladder access requirements and safety cage specifications",
+    "Clarify: Misc metals coating requirements vs structural steel",
+    "Clarify: Stair landing connection details",
+    "Clarify: Rail mounting method (surface vs embedded)",
+  ],
+  assumption: [
+    "Assume standard shop primer (SSPC-SP 2)",
+    "Assume AISC tolerances",
+    "Assume standard delivery within 50 miles",
+    "Assume normal shop hours (no overtime)",
+    "Assume material availability within 4 weeks",
+    "Assume standard connection details",
+    "Assume A992 material grade unless specified",
+    "Assume standard fabrication practices",
+    "Assume shop drawings approved within 2 weeks",
+    "Assume no escalation beyond 30 days",
+    "Assume standard QA/QC procedures",
+    "Assume normal working conditions",
+    // Misc metals specific assumptions
+    "Assume standard stair tread configuration",
+    "Assume code-compliant rail heights and spacing",
+    "Assume standard ladder rung spacing per OSHA",
+    "Assume shop welding for all misc metals connections",
+  ],
+  allowance: [
+    "Allowance for field modifications: $5,000",
+    "Allowance for additional material: 5%",
+    "Allowance for schedule acceleration: $10,000",
+    "Allowance for design changes: $15,000",
+    "Allowance for material escalation: 3%",
+    "Allowance for field adjustments: $7,500",
+    "Allowance for additional connections: $8,000",
+    "Allowance for scope additions: 10%",
+    // Misc metals specific allowances
+    "Allowance for stair modifications: $3,000",
+    "Allowance for rail adjustments: $2,500",
+  ],
+};
+
+/**
+ * Generate proposal seeds for a project
+ * Creates a realistic mix of inclusions, exclusions, clarifications, assumptions, and allowances
+ */
+function generateProposalSeeds(
+  projectId: string,
+  projectType: string | undefined,
+  lines: EstimatingLine[],
+  createdBy: string = "system"
+): Array<{
+  projectId: string;
+  type: ProposalSeedType;
+  text: string;
+  context: ProposalSeedContext;
+  createdBy: string;
+  status: "active";
+}> {
+  const seeds: Array<{
+    projectId: string;
+    type: ProposalSeedType;
+    text: string;
+    context: ProposalSeedContext;
+    createdBy: string;
+    status: "active";
+  }> = [];
+
+  // Generate 2-5 exclusions (most common)
+  const exclusionCount = randomInt(2, 5);
+  for (let i = 0; i < exclusionCount; i++) {
+    const text = randomChoice(PROPOSAL_SEED_TEMPLATES.exclusion);
+    const line = randomChoice(lines);
+    seeds.push({
+      projectId,
+      type: "exclusion",
+      text,
+      context: {
+        lineItemId: line?.lineId,
+        drawing: line?.drawingNumber,
+        detail: line?.detailNumber,
+        category: line?.category,
+      },
+      createdBy,
+      status: "active",
+    });
+  }
+
+  // Generate 2-4 inclusions
+  const inclusionCount = randomInt(2, 4);
+  for (let i = 0; i < inclusionCount; i++) {
+    const text = randomChoice(PROPOSAL_SEED_TEMPLATES.inclusion);
+    const line = randomChoice(lines);
+    seeds.push({
+      projectId,
+      type: "inclusion",
+      text,
+      context: {
+        lineItemId: line?.lineId,
+        drawing: line?.drawingNumber,
+        detail: line?.detailNumber,
+        category: line?.category,
+      },
+      createdBy,
+      status: "active",
+    });
+  }
+
+  // Generate 1-3 clarifications
+  const clarificationCount = randomInt(1, 3);
+  for (let i = 0; i < clarificationCount; i++) {
+    const text = randomChoice(PROPOSAL_SEED_TEMPLATES.clarification);
+    seeds.push({
+      projectId,
+      type: "clarification",
+      text,
+      context: {},
+      createdBy,
+      status: "active",
+    });
+  }
+
+  // Generate 2-4 assumptions
+  const assumptionCount = randomInt(2, 4);
+  for (let i = 0; i < assumptionCount; i++) {
+    const text = randomChoice(PROPOSAL_SEED_TEMPLATES.assumption);
+    seeds.push({
+      projectId,
+      type: "assumption",
+      text,
+      context: {},
+      createdBy,
+      status: "active",
+    });
+  }
+
+  // Generate 0-2 allowances (less common)
+  const allowanceCount = randomInt(0, 2);
+  for (let i = 0; i < allowanceCount; i++) {
+    const text = randomChoice(PROPOSAL_SEED_TEMPLATES.allowance);
+    seeds.push({
+      projectId,
+      type: "allowance",
+      text,
+      context: {},
+      createdBy,
+      status: "active",
+    });
+  }
+
+  return seeds;
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const { companyId } = await request.json();
+    const { companyId, timeShiftDays } = await request.json();
     
     if (!companyId) {
       return NextResponse.json(
@@ -771,13 +1089,75 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Optional knob for marketing captures: move the entire demo timeline forward/back.
+    // Example: { companyId, timeShiftDays: 90 }
+    if (typeof timeShiftDays === "number" && Number.isFinite(timeShiftDays)) {
+      const d = new Date();
+      d.setDate(d.getDate() + timeShiftDays);
+      // @ts-expect-error - mutate module-level seed base date for this run
+      SEED_BASE_DATE.setTime(d.getTime());
+    }
+
     const results = {
       projectsCreated: 0,
       linesCreated: 0,
       bidEventsCreated: 0,
       productionEntriesCreated: 0,
+      winLossRecordsCreated: 0,
+      specReviewsCreated: 0,
+      proposalSeedsCreated: 0,
       errors: [] as string[],
     };
+
+    // Ensure company settings are demo-ready (powers multiple dashboards/filters)
+    try {
+      await setDocument(
+        `companies/${companyId}`,
+        {
+          settings: {
+            showSampleData: true,
+            // Executive dashboard + backlog widgets
+            shopCapacityHoursPerWeek: 800,
+            shopCapacityHoursPerDay: 160,
+            backlogForecastWeeks: 24,
+            underUtilizedThreshold: 0.7,
+            // Pipeline bucketing (used by dashboards)
+            pipelineRanges: {
+              small: { min: 0, max: 250000 },
+              medium: { min: 250000, max: 750000 },
+              large: { min: 750000, max: 1500000 },
+              xlarge: { min: 1500000, max: 4000000 },
+              xxlarge: { min: 4000000, max: 999999999 },
+            },
+            // Estimator workload panel
+            estimators: ESTIMATOR_NAMES.map((name) => ({
+              name,
+              weeklyCapacityHours: 40,
+              active: true,
+            })),
+          },
+        },
+        true
+      );
+    } catch (e) {
+      results.errors.push(`Warning: failed to update company settings for demo mode: ${e instanceof Error ? e.message : "Unknown error"}`);
+    }
+
+    const createdProjects: Array<{
+      id: string;
+      projectName: string;
+      projectNumber: string;
+      status: string;
+      bidDate?: string;
+      decisionDate?: string;
+      estimatedValue?: number;
+      awardValue?: number;
+      generalContractor?: string;
+      gcId?: string;
+      projectType?: string;
+      createdAt: Date;
+      updatedAt: Date;
+    }> = [];
 
     for (const projectData of PROJECTS) {
       try {
@@ -801,6 +1181,28 @@ export async function POST(request: NextRequest) {
             updatedAt: Timestamp.now(),
           });
           results.linesCreated++;
+        }
+
+        // Create proposal seeds (inclusions/exclusions/clarifications/assumptions/allowances)
+        try {
+          const proposalSeeds = generateProposalSeeds(
+            projectId,
+            projectData.projectType,
+            lines,
+            "system"
+          );
+          const seedsPath = `companies/${companyId}/projects/${projectId}/proposalSeeds`;
+          
+          for (const seed of proposalSeeds) {
+            await createDocument(seedsPath, {
+              ...seed,
+              createdAt: Timestamp.fromDate(projectData.createdAt),
+              updatedAt: Timestamp.fromDate(projectData.updatedAt),
+            });
+            results.proposalSeedsCreated++;
+          }
+        } catch (e) {
+          results.errors.push(`Warning: failed to seed proposal seeds for ${projectData.projectNumber}: ${e instanceof Error ? e.message : "Unknown error"}`);
         }
 
         // Create bid events for projects with bidDueDate
@@ -870,12 +1272,116 @@ export async function POST(request: NextRequest) {
           results.productionEntriesCreated++;
         }
 
+        createdProjects.push({
+          id: projectId,
+          projectName: projectData.projectName,
+          projectNumber: projectData.projectNumber,
+          status: projectData.status,
+          bidDate: projectData.bidDueDate || projectData.bidDate,
+          decisionDate: projectData.decisionDate,
+          estimatedValue: projectData.estimatedValue,
+          awardValue: projectData.awardValue,
+          generalContractor: projectData.generalContractor,
+          gcId: (projectData as any).gcId,
+          projectType: projectData.projectType,
+          createdAt: projectData.createdAt,
+          updatedAt: projectData.updatedAt,
+        });
+
         results.projectsCreated++;
       } catch (error) {
         const errorMsg = `Error creating project ${projectData.projectNumber}: ${error instanceof Error ? error.message : "Unknown error"}`;
         results.errors.push(errorMsg);
         console.error(errorMsg, error);
       }
+    }
+
+    // Seed win/loss records to power Executive KPIs / WinLoss widgets (marketing-ready)
+    try {
+      const recordsPath = `companies/${companyId}/winLossRecords`;
+      for (const p of createdProjects) {
+        const status = p.status?.toLowerCase();
+        if (status !== "won" && status !== "lost") continue;
+
+        const bidDate = p.bidDate || new Date().toISOString().split("T")[0];
+        const decisionDate =
+          p.decisionDate || new Date(p.updatedAt).toISOString().split("T")[0];
+
+        await createDocument(recordsPath, {
+          projectId: p.id,
+          projectName: p.projectName || p.projectNumber,
+          bidDate,
+          decisionDate,
+          bidAmount: p.estimatedValue || 0,
+          projectValue: p.awardValue || p.estimatedValue || 0,
+          status,
+          gcId: p.gcId,
+          projectType: p.projectType,
+          isSampleData: true,
+          createdAt: Timestamp.fromDate(p.createdAt),
+          updatedAt: Timestamp.fromDate(p.updatedAt),
+        } as any);
+        results.winLossRecordsCreated++;
+      }
+    } catch (e) {
+      results.errors.push(`Warning: failed to seed win/loss records: ${e instanceof Error ? e.message : "Unknown error"}`);
+    }
+
+    // Seed spec review outputs to power risk dashboards + reports (marketing-ready)
+    try {
+      const reviewTypes = ["structural-steel", "misc-metals", "div-01", "div-09", "aess-noma", "div-03"];
+      const grades = ["A", "B", "C", "D"] as const;
+
+      for (const p of createdProjects) {
+        // Focus on active/submitted to show “in-progress” risk signals
+        const status = p.status?.toLowerCase();
+        if (status !== "active" && status !== "submitted") continue;
+
+        for (const type of reviewTypes) {
+          const grade = randomChoice([...grades]);
+          const riskPct = grade === "A" ? randomInt(5, 20) : grade === "B" ? randomInt(20, 40) : grade === "C" ? randomInt(40, 65) : randomInt(65, 85);
+          const createdAt = Timestamp.fromDate(daysAgo(randomInt(5, 25)));
+          const updatedAt = Timestamp.fromDate(daysAgo(randomInt(0, 4)));
+
+          await setDocument(
+            `companies/${companyId}/projects/${p.id}/specReviews/${type}`,
+            {
+              type,
+              isSampleData: true,
+              createdAt,
+              updatedAt,
+              // Minimal but rich-enough structure for dashboards + reports
+              result: {
+                summary: {
+                  overallRiskGrade: grade,
+                  riskPercentage: riskPct,
+                  executiveSummary:
+                    "Automated spec scan highlights scope ambiguities, coating requirements, and schedule-driven risks.",
+                },
+                keyRisks: [
+                  { title: "Coating system ambiguity", severity: grade === "A" ? "low" : "medium", note: "Verify primer/finish requirements and warranty language." },
+                  { title: "Connection responsibility", severity: grade === "A" ? "low" : "high", note: "Clarify delegated design and RFI flow." },
+                  { title: "Schedule pressure", severity: riskPct > 50 ? "high" : "medium", note: "Confirm long-lead material + detailing constraints." },
+                ],
+                assumptions: [
+                  "No escalation beyond standard steel pricing index.",
+                  "Normal shop hours; overtime not included unless awarded.",
+                  "Standard QA/QC; special inspections excluded unless noted.",
+                ],
+                recommendations: [
+                  "Submit 2–3 RFIs early to lock scope and reduce change exposure.",
+                  "Confirm coating spec section for DF/T and surface prep requirements.",
+                  "Align fab window with GC milestone schedule before final pricing.",
+                ],
+              },
+            } as any,
+            true
+          );
+          results.specReviewsCreated++;
+        }
+      }
+    } catch (e) {
+      results.errors.push(`Warning: failed to seed spec reviews: ${e instanceof Error ? e.message : "Unknown error"}`);
     }
 
     // Add additional standalone bid events for variety (not tied to projects)

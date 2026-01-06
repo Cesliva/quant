@@ -1,10 +1,11 @@
 /**
  * Firebase Storage Utilities
- * Handles file uploads to Firebase Storage
+ * Handles file uploads to Firebase Storage using Firebase SDK only
+ * No direct XMLHttpRequest/fetch calls - all operations use Firebase Storage SDK
  */
 
-import { storage, isFirebaseConfigured } from "./config";
-import { ref, uploadBytes, getDownloadURL, deleteObject, uploadBytesResumable } from "firebase/storage";
+import { storage, isFirebaseConfigured, app } from "./config";
+import { ref, getDownloadURL, deleteObject, uploadBytesResumable, StorageError } from "firebase/storage";
 
 /**
  * Check if Firebase Storage is properly configured
@@ -15,9 +16,10 @@ export function isStorageConfigured(): boolean {
 }
 
 /**
- * Upload a file to Firebase Storage with timeout protection
+ * Upload a file to Firebase Storage using Firebase SDK only
+ * Uses uploadBytesResumable with proper metadata configuration
  * @param file - The file to upload
- * @param path - Storage path (e.g., "specs/{companyId}/{projectId}/{filename}")
+ * @param path - Storage path (e.g., "companies/{companyId}/branding/logo_{timestamp}_{filename}")
  * @param timeoutMs - Optional timeout in milliseconds (default: 60000 = 60 seconds)
  * @returns Download URL of the uploaded file
  */
@@ -29,49 +31,61 @@ export async function uploadFileToStorage(
   // Check storage bucket configuration
   const storageBucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
   if (!storageBucket || storageBucket.length === 0) {
-    throw new Error("Firebase Storage bucket is not configured. Please set NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET in your environment.");
+    const error = new Error("Firebase Storage bucket is not configured. Please set NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET in your environment.");
+    console.error("[Storage] Configuration error:", error.message);
+    throw error;
   }
 
-  if (!isFirebaseConfigured()) {
-    throw new Error("Firebase is not configured. Please check your environment variables.");
+  if (!isFirebaseConfigured() || !app) {
+    const error = new Error("Firebase is not configured. Please check your environment variables.");
+    console.error("[Storage] Configuration error:", error.message);
+    throw error;
   }
   
   if (!storage) {
-    throw new Error("Firebase Storage is not initialized. This may be a server-side rendering issue.");
+    const error = new Error("Firebase Storage is not initialized. This may be a server-side rendering issue.");
+    console.error("[Storage] Initialization error:", error.message);
+    throw error;
   }
 
-  // Validate file size (max 10MB for logos, but allow larger for other files)
-  const maxSize = path.includes('/logo/') ? 5 * 1024 * 1024 : 50 * 1024 * 1024; // 5MB for logos, 50MB for others
+  // Validate file size (max 5MB for logos, 50MB for others)
+  const maxSize = path.includes('/logo/') || path.includes('/branding/') ? 5 * 1024 * 1024 : 50 * 1024 * 1024;
   if (file.size > maxSize) {
-    throw new Error(`File size exceeds maximum allowed size (${Math.round(maxSize / 1024 / 1024)}MB). Please use a smaller file.`);
+    const error = new Error(`File size exceeds maximum allowed size (${Math.round(maxSize / 1024 / 1024)}MB). Please use a smaller file.`);
+    console.error("[Storage] Validation error:", error.message);
+    throw error;
   }
 
-  console.log(`[Storage] Starting upload to: ${path}`);
-  console.log(`[Storage] File size: ${file.size} bytes, type: ${file.type}`);
-  console.log(`[Storage] Storage bucket: ${storageBucket}`);
-  console.log(`[Storage] Timeout: ${timeoutMs}ms`);
+  console.log(`[Storage] Starting upload using Firebase SDK`);
+  console.log(`[Storage] Path: ${path}`);
+  console.log(`[Storage] File: ${file.name}, size: ${file.size} bytes, type: ${file.type}`);
+  console.log(`[Storage] Bucket: ${storageBucket}`);
 
-  // Create upload promise with cancellation support
-  let uploadTask: any = null;
+  // Create upload promise using Firebase SDK only
+  let uploadTask: ReturnType<typeof uploadBytesResumable> | null = null;
   let timeoutId: NodeJS.Timeout | null = null;
   
   const uploadPromise = new Promise<string>((resolve, reject) => {
     let isResolved = false;
 
     try {
-      const storageRef = ref(storage, path);
+      // Use Firebase Storage SDK - create reference
+      const fileRef = ref(storage, path);
       
-      // Use resumable upload for better reliability and progress tracking
-      uploadTask = uploadBytesResumable(storageRef, file);
+      // Use uploadBytesResumable with metadata
+      uploadTask = uploadBytesResumable(fileRef, file, {
+        contentType: file.type,
+        cacheControl: "public,max-age=31536000", // Cache for 1 year
+      });
       
+      // Monitor upload progress
       uploadTask.on(
         "state_changed",
-        (snapshot: any) => {
-          // Track upload progress
+        (snapshot) => {
           const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
           console.log(`[Storage] Upload progress: ${progress.toFixed(1)}%`);
         },
-        (error: any) => {
+        (error: StorageError) => {
           if (isResolved) return;
           isResolved = true;
           
@@ -81,19 +95,23 @@ export async function uploadFileToStorage(
             timeoutId = null;
           }
           
-          // Handle upload errors
-          console.error("[Storage] Upload failed:", error);
+          // Robust error logging
+          console.error("[Storage] Upload failed");
+          console.error("[Storage] Error code:", error.code);
+          console.error("[Storage] Error message:", error.message);
+          console.error("[Storage] Full error:", error);
+          
+          // Check for CORS errors
+          const isCorsError = 
+            error.code === "storage/unknown" ||
+            error.message?.toLowerCase().includes("cors") ||
+            error.message?.toLowerCase().includes("cross-origin") ||
+            error.message?.toLowerCase().includes("blocked");
           
           let errorMessage = "Failed to upload file";
           
-          // Check for CORS errors specifically
-          const errorString = JSON.stringify(error).toLowerCase();
-          const isCorsError = errorString.includes('cors') || 
-                             errorString.includes('cross-origin') ||
-                             error.code === 'storage/unknown' && errorString.includes('blocked');
-          
           if (isCorsError) {
-            errorMessage = "CORS Error: Firebase Storage is blocking requests. Please configure CORS for your storage bucket. See QUICK_CORS_FIX.md for instructions.";
+            errorMessage = "CORS_ERROR"; // Special marker for CORS errors
           } else {
             switch (error.code) {
               case "storage/unauthorized":
@@ -103,7 +121,7 @@ export async function uploadFileToStorage(
                 errorMessage = "Upload was canceled.";
                 break;
               case "storage/unknown":
-                errorMessage = "An unknown error occurred. This may be a CORS issue. Please check your internet connection and Firebase Storage CORS configuration.";
+                errorMessage = "An unknown error occurred. This may be a CORS issue.";
                 break;
               case "storage/quota-exceeded":
                 errorMessage = "Storage quota exceeded. Please contact support.";
@@ -136,25 +154,32 @@ export async function uploadFileToStorage(
             timeoutId = null;
           }
           
-          // Upload completed successfully
+          // Upload completed successfully - get download URL using Firebase SDK
           try {
-            console.log("[Storage] Upload complete, getting download URL...");
+            console.log("[Storage] Upload complete, getting download URL using Firebase SDK...");
+            if (!uploadTask) {
+              throw new Error("Upload task is null");
+            }
             const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-            console.log("[Storage] Download URL obtained successfully");
+            console.log("[Storage] Download URL obtained successfully:", downloadURL);
             isResolved = true;
             resolve(downloadURL);
           } catch (urlError: any) {
             if (isResolved) return;
             isResolved = true;
-            console.error("[Storage] Failed to get download URL:", urlError);
-            reject(new Error(`Upload succeeded but failed to get download URL: ${urlError.message}`));
+            console.error("[Storage] Failed to get download URL");
+            console.error("[Storage] Error code:", urlError.code);
+            console.error("[Storage] Error message:", urlError.message);
+            console.error("[Storage] Full error:", urlError);
+            reject(new Error(`Upload succeeded but failed to get download URL: ${urlError.message || urlError.code || "Unknown error"}`));
           }
         }
       );
     } catch (error: any) {
       if (isResolved) return;
       isResolved = true;
-      console.error("[Storage] Failed to start upload:", error);
+      console.error("[Storage] Failed to start upload");
+      console.error("[Storage] Error:", error);
       reject(new Error(`Failed to start upload: ${error.message || "Unknown error"}`));
     }
   });
@@ -171,7 +196,7 @@ export async function uploadFileToStorage(
           console.warn("[Storage] Failed to cancel upload task:", cancelError);
         }
       }
-      reject(new Error(`Upload timed out after ${timeoutMs / 1000} seconds. This is often caused by CORS configuration issues. Please check your Firebase Storage CORS settings. See QUICK_CORS_FIX.md for instructions.`));
+      reject(new Error("TIMEOUT_ERROR")); // Special marker for timeout
     }, timeoutMs);
   });
 
@@ -184,7 +209,7 @@ export async function uploadFileToStorage(
       timeoutId = null;
     }
     return result;
-  } catch (error) {
+  } catch (error: any) {
     // Ensure timeout is cleared on error
     if (timeoutId) {
       clearTimeout(timeoutId);
@@ -195,19 +220,36 @@ export async function uploadFileToStorage(
 }
 
 /**
- * Delete a file from Firebase Storage
- * @param path - Storage path of the file to delete
+ * Delete a file from Firebase Storage using Firebase SDK
+ * @param path - Storage path of the file to delete (or full download URL)
  */
 export async function deleteFileFromStorage(path: string): Promise<void> {
   if (!isFirebaseConfigured() || !storage) {
+    console.error("[Storage] Delete failed: Firebase Storage not configured");
     throw new Error("Firebase Storage is not configured");
   }
 
   try {
-    const storageRef = ref(storage, path);
+    // If path is a full URL, extract the path
+    let storagePath = path;
+    if (path.includes('firebasestorage.googleapis.com')) {
+      // Extract path from URL: https://firebasestorage.googleapis.com/v0/b/{bucket}/o/{path}?alt=media
+      const urlMatch = path.match(/\/o\/([^?]+)/);
+      if (urlMatch) {
+        storagePath = decodeURIComponent(urlMatch[1]);
+      }
+    }
+
+    console.log("[Storage] Deleting file from path:", storagePath);
+    const storageRef = ref(storage, storagePath);
     await deleteObject(storageRef);
+    console.log("[Storage] File deleted successfully");
   } catch (error: any) {
-    throw new Error(`Failed to delete file: ${error.message}`);
+    console.error("[Storage] Delete failed");
+    console.error("[Storage] Error code:", error.code);
+    console.error("[Storage] Error message:", error.message);
+    console.error("[Storage] Full error:", error);
+    throw new Error(`Failed to delete file: ${error.message || error.code || "Unknown error"}`);
   }
 }
 

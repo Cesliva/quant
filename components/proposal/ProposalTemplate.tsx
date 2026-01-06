@@ -177,6 +177,11 @@ export default function ProposalTemplate({
           "scopeOfWork"
         )}
         {renderSection(
+          "Price",
+          proposal.sections.price,
+          "price"
+        )}
+        {renderSection(
           "Project-Specific Inclusions",
           proposal.sections.projectSpecificInclusions,
           "projectSpecificInclusions"
