@@ -76,18 +76,28 @@ async function extractTextFromPdf(
 ): Promise<string> {
   try {
     // Use pdfjs-dist for client-side PDF extraction
+    onProgress?.({ status: "extracting", message: "Loading PDF library..." });
     const pdfjsLib = await import("pdfjs-dist");
     
-    // Set worker source - use a more reliable CDN
+    // Set worker source - use a more reliable CDN with fallback
     if (typeof window !== "undefined") {
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+      // Try to use the version-specific worker, with fallback
+      const version = pdfjsLib.version || "3.11.174";
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${version}/pdf.worker.min.js`;
     }
 
     onProgress?.({ status: "extracting", message: "Loading PDF document..." });
     const arrayBuffer = await file.arrayBuffer();
+    
+    if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+      throw new Error("PDF file appears to be empty or corrupted");
+    }
+    
+    onProgress?.({ status: "extracting", message: "Parsing PDF structure..." });
     const pdf = await pdfjsLib.getDocument({ 
       data: arrayBuffer,
       verbosity: 0, // Suppress warnings
+      useSystemFonts: true, // Better font handling
     }).promise;
     
     const totalPages = pdf.numPages;

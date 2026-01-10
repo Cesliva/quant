@@ -176,7 +176,6 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingLine, setEditingLine] = useState<Partial<EstimatingLine>>({});
-  const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
   const [groupByMainMember, setGroupByMainMember] = useState<boolean>(false);
   const [showAllLines, setShowAllLines] = useState<boolean>(false);
   const [sortBy, setSortBy] = useState<string>("lineId");
@@ -195,12 +194,8 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
       // Find the line
       const line = lines.find(l => l.id === highlightLineId);
       if (line) {
-        // Expand the row if it's not already expanded
-        if (expandedRowId !== line.id) {
-          setExpandedRowId(line.id);
-        }
         // Set editing state to make it editable
-        if (editingId !== line.id) {
+        if (editingId !== line.id && line.id) {
           setEditingId(line.id);
           setEditingLine(line);
         }
@@ -218,7 +213,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
         }, 300);
       }
     }
-  }, [highlightLineId, lines, expandedRowId, editingId]);
+  }, [highlightLineId, lines, editingId]);
   
   // Group lines by main member
   const groupLinesByMainMember = (linesToGroup: EstimatingLine[]): EstimatingLine[] => {
@@ -383,7 +378,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
                           target.closest('input, textarea, select');
       
       // Only work when a row is expanded or being edited
-      const hasActiveRow = editingId || expandedRowId;
+      const hasActiveRow = editingId;
       
       // Ctrl+Alt+number - allows multi-digit entry (e.g., Ctrl+Alt+1 then 0 = field 10)
       if ((e.ctrlKey || e.metaKey) && e.altKey && !e.shiftKey && e.key.length === 1 && /^[0-9]$/.test(e.key) && hasActiveRow) {
@@ -404,60 +399,34 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
           const number = parseInt(numberBufferRef.current, 10);
           if (number > 0 && number <= 50) { // Max field number
             // Get material type from the expanded row or editing line
-            const targetLine = lines.find(l => l.id === (editingId || expandedRowId));
+            const targetLine = lines.find(l => l.id === editingId);
             const materialType = targetLine?.materialType || editingLine.materialType as "Material" | "Plate" | undefined;
             const field = getFieldFromNumber(number, materialType);
             
-            if (field) {
-              // Try to find the field in the currently editing line or expanded row
-              const targetLineId = editingId || expandedRowId;
-              if (targetLineId) {
-                // First, try to find the expanded detail row container
-                // The expanded detail is in a <tr> with a <td> containing EstimatingRowDetail
-                // Find the row that contains the field with the target line ID
-                const expandedRow = Array.from(document.querySelectorAll('tr')).find(tr => {
-                  const td = tr.querySelector('td[colspan="13"]');
-                  return td && td.querySelector(`[data-line-id="${targetLineId}"]`);
-                }) as HTMLElement;
-                
-                // Search within the expanded detail row first (if it exists)
-                let inputElement: HTMLElement | null = null;
-                if (expandedRow) {
-                  const inputId = `field-${targetLineId}-${field}`;
-                  inputElement = expandedRow.querySelector(`#${inputId}`) as HTMLElement;
-                  
-                  // If not found by ID, try data attributes within the expanded row
-                  if (!inputElement) {
-                    inputElement = expandedRow.querySelector(`[data-field="${field}"][data-line-id="${targetLineId}"]`) as HTMLElement;
-                  }
+            if (field && editingId) {
+              // Find the input field in the table row
+              const inputId = `field-${editingId}-${field}`;
+              let inputElement = document.getElementById(inputId) as HTMLElement;
+              
+              // If not found by ID, try data attributes
+              if (!inputElement) {
+                inputElement = document.querySelector(`[data-field="${field}"][data-line-id="${editingId}"]`) as HTMLElement;
+              }
+              
+              // For labor fields, the container div has the ID, so find the first input inside it
+              if (inputElement && !(inputElement instanceof HTMLInputElement || inputElement instanceof HTMLTextAreaElement || inputElement instanceof HTMLSelectElement)) {
+                const nestedInput = inputElement.querySelector('input, textarea, select') as HTMLElement;
+                if (nestedInput) {
+                  inputElement = nestedInput;
                 }
-                
-                // Fallback: search document-wide if not found in expanded row
-                if (!inputElement) {
-                  const inputId = `field-${targetLineId}-${field}`;
-                  inputElement = document.getElementById(inputId) as HTMLElement;
-                  
-                  // If not found by ID, try data attributes
-                  if (!inputElement) {
-                    inputElement = document.querySelector(`[data-field="${field}"][data-line-id="${targetLineId}"]`) as HTMLElement;
-                  }
-                }
-                
-                // For labor fields, the container div has the ID, so find the first input inside it
-                if (inputElement && !(inputElement instanceof HTMLInputElement || inputElement instanceof HTMLTextAreaElement || inputElement instanceof HTMLSelectElement)) {
-                  const nestedInput = inputElement.querySelector('input, textarea, select') as HTMLElement;
-                  if (nestedInput) {
-                    inputElement = nestedInput;
-                  }
-                }
-                
-                if (inputElement) {
-                  inputElement.focus();
-                  if (inputElement instanceof HTMLInputElement || inputElement instanceof HTMLTextAreaElement || inputElement instanceof HTMLSelectElement) {
-                    // Select text if it's a text input
-                    if (inputElement instanceof HTMLInputElement && inputElement.type !== "checkbox") {
-                      inputElement.select();
-                    }
+              }
+              
+              if (inputElement) {
+                inputElement.focus();
+                if (inputElement instanceof HTMLInputElement || inputElement instanceof HTMLTextAreaElement || inputElement instanceof HTMLSelectElement) {
+                  // Select text if it's a text input
+                  if (inputElement instanceof HTMLInputElement && inputElement.type !== "checkbox") {
+                    inputElement.select();
                   }
                 }
               }
@@ -480,56 +449,32 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
         
         const number = parseInt(numberBufferRef.current, 10);
         if (number > 0 && number <= 50) {
-          const targetLine = lines.find(l => l.id === (editingId || expandedRowId));
-          const materialType = targetLine?.materialType || editingLine.materialType as "Rolled" | "Plate" | undefined;
+          const targetLine = lines.find(l => l.id === editingId);
+          const materialType = targetLine?.materialType || editingLine.materialType as "Material" | "Plate" | undefined;
           const field = getFieldFromNumber(number, materialType);
           
-          if (field && hasActiveRow) {
-            const targetLineId = editingId || expandedRowId;
-            if (targetLineId) {
-              // First, try to find the expanded detail row container
-              // Find the row that contains the field with the target line ID
-              const expandedRow = Array.from(document.querySelectorAll('tr')).find(tr => {
-                const td = tr.querySelector('td[colspan="13"]');
-                return td && td.querySelector(`[data-line-id="${targetLineId}"]`);
-              }) as HTMLElement;
-              
-              // Search within the expanded detail row first (if it exists)
-              let inputElement: HTMLElement | null = null;
-              if (expandedRow) {
-                const inputId = `field-${targetLineId}-${field}`;
-                inputElement = expandedRow.querySelector(`#${inputId}`) as HTMLElement;
-                
-                // If not found by ID, try data attributes within the expanded row
-                if (!inputElement) {
-                  inputElement = expandedRow.querySelector(`[data-field="${field}"][data-line-id="${targetLineId}"]`) as HTMLElement;
-                }
+          if (field && editingId) {
+            // Find the input field in the table row
+            const inputId = `field-${editingId}-${field}`;
+            let inputElement = document.getElementById(inputId) as HTMLElement;
+            
+            // If not found by ID, try data attributes
+            if (!inputElement) {
+              inputElement = document.querySelector(`[data-field="${field}"][data-line-id="${editingId}"]`) as HTMLElement;
+            }
+            
+            // For labor fields, the container div has the ID, so find the first input inside it
+            if (inputElement && !(inputElement instanceof HTMLInputElement || inputElement instanceof HTMLTextAreaElement || inputElement instanceof HTMLSelectElement)) {
+              const nestedInput = inputElement.querySelector('input, textarea, select') as HTMLElement;
+              if (nestedInput) {
+                inputElement = nestedInput;
               }
-              
-              // Fallback: search document-wide if not found in expanded row
-              if (!inputElement) {
-                const inputId = `field-${targetLineId}-${field}`;
-                inputElement = document.getElementById(inputId) as HTMLElement;
-                
-                // If not found by ID, try data attributes
-                if (!inputElement) {
-                  inputElement = document.querySelector(`[data-field="${field}"][data-line-id="${targetLineId}"]`) as HTMLElement;
-                }
-              }
-              
-              // For labor fields, the container div has the ID, so find the first input inside it
-              if (inputElement && !(inputElement instanceof HTMLInputElement || inputElement instanceof HTMLTextAreaElement || inputElement instanceof HTMLSelectElement)) {
-                const nestedInput = inputElement.querySelector('input, textarea, select') as HTMLElement;
-                if (nestedInput) {
-                  inputElement = nestedInput;
-                }
-              }
-              
-              if (inputElement) {
-                inputElement.focus();
-                if (inputElement instanceof HTMLInputElement && inputElement.type !== "checkbox") {
-                  inputElement.select();
-                }
+            }
+            
+            if (inputElement) {
+              inputElement.focus();
+              if (inputElement instanceof HTMLInputElement && inputElement.type !== "checkbox") {
+                inputElement.select();
               }
             }
           }
@@ -546,7 +491,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
       }
       numberBufferRef.current = "";
     };
-  }, [isManualMode, canUndo, canRedo, undo, redo, editingId, expandedRowId, editingLine.materialType, lines]);
+  }, [isManualMode, canUndo, canRedo, undo, redo, editingId, editingLine.materialType, lines]);
 
   useEffect(() => {
     if (!isFirebaseConfigured()) {
@@ -839,59 +784,30 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
         
         // In manual mode, automatically start editing the new line
         if (isManualMode && newId) {
-          // Close any previously open detailed view
-          setExpandedRowId(null);
-          
           setTimeout(() => {
-            // Expand the detail view for the new line
-            setExpandedRowId(newId);
             setEditingId(newId);
             setEditingLine(addedLine);
             
-            // Scroll to the first input field in the detail view after a short delay
-            // Need to wait for the detail view to render
+            // Scroll to the new line and focus the first editable field
             setTimeout(() => {
-              // Find the first input field (Drawing #) in the editing detail view
-              // The field ID format is: field-{lineId}-{fieldName}
-              const firstInput = document.getElementById(`field-${newId}-drawingNumber`) as HTMLInputElement;
-              if (firstInput) {
-                // Scroll to the input field, positioning it at the top left of the viewport
-                firstInput.scrollIntoView({ 
+              const lineElement = document.getElementById(`line-${newId}`);
+              if (lineElement) {
+                lineElement.scrollIntoView({ 
                   behavior: "smooth", 
-                  block: "start",
+                  block: "center",
                   inline: "nearest"
                 });
-                // Small additional offset to account for any fixed headers
                 setTimeout(() => {
-                  window.scrollBy({ top: -20, behavior: "smooth" });
-                  // Focus the first input field after scrolling
-                  firstInput.focus();
-                  firstInput.select(); // Select text if any for easy replacement
+                  // Focus the drawing number input in the table row
+                  const drawingInput = lineElement.querySelector('input[placeholder="Drawing #"]') as HTMLInputElement;
+                  if (drawingInput) {
+                    drawingInput.focus();
+                    drawingInput.select();
+                  }
                 }, 300);
-              } else {
-                // Fallback: scroll to the line row itself or the detail panel
-                const lineElement = document.getElementById(`line-${newId}`);
-                const detailPanel = lineElement?.closest('tr[class*="detail"]') || lineElement?.nextElementSibling;
-                const targetElement = detailPanel || lineElement;
-                if (targetElement) {
-                  targetElement.scrollIntoView({ 
-                    behavior: "smooth", 
-                    block: "start",
-                    inline: "nearest"
-                  });
-                  setTimeout(() => {
-                    window.scrollBy({ top: -20, behavior: "smooth" });
-                    // Try to find and focus first input again after scroll
-                    const retryInput = document.getElementById(`field-${newId}-drawingNumber`) as HTMLInputElement;
-                    if (retryInput) {
-                      retryInput.focus();
-                      retryInput.select();
-                    }
-                  }, 300);
-                }
               }
-            }, 300); // Increased delay to ensure detail view is rendered
-          }, 100);
+            }, 100);
+          }, 50);
         }
       }).catch((error: any) => {
         console.error("Failed to add line:", error);
@@ -1194,7 +1110,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
           qty = line.qty !== undefined && line.qty !== null ? line.qty : 0;
         }
         // Ensure qty is a number
-        const numQty = typeof qty === "number" ? qty : (typeof qty === "string" && qty.trim() !== "" ? parseFloat(qty) || 0 : 0);
+        const numQty = typeof qty === "number" ? (isNaN(qty) ? 0 : qty) : 0;
         return sum + numQty;
       }, 0),
       materialCost: activeLines.reduce((sum, line) => sum + (line.materialCost || 0), 0),
@@ -1373,15 +1289,23 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
           const importHardwareCostPerSet = lineToImport.hardwareCostPerSet || 0;
           lineToImport.hardwareCost = importHardwareQty * importHardwareCostPerSet;
 
-          // Calculate total cost with markup
-          lineToImport.totalCost = calculateTotalCostWithMarkup(
-            lineToImport.materialCost || 0,
-            lineToImport.laborCost || 0,
-            lineToImport.coatingCost || 0,
-            lineToImport.hardwareCost || 0,
-            companySettings,
-            projectSettings || undefined
-          );
+          // Calculate total cost with markup (only if companySettings is available)
+          if (companySettings) {
+            lineToImport.totalCost = calculateTotalCostWithMarkup(
+              lineToImport.materialCost || 0,
+              lineToImport.laborCost || 0,
+              lineToImport.coatingCost || 0,
+              lineToImport.hardwareCost || 0,
+              companySettings,
+              projectSettings || undefined
+            );
+          } else {
+            // Fallback: simple sum without markup if settings not loaded
+            lineToImport.totalCost = (lineToImport.materialCost || 0) + 
+              (lineToImport.laborCost || 0) + 
+              (lineToImport.coatingCost || 0) + 
+              (lineToImport.hardwareCost || 0);
+          }
 
           // Create document in Firestore
           await createDocument(linesPath, lineToImport);
@@ -1451,8 +1375,8 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
               <Upload className="w-4 h-4 text-gray-600" />
             </button>
             <button
-              onClick={() => exportLinesToCSV(lines.filter(l => l.status !== "void"))}
-              disabled={lines.filter(l => l.status !== "void").length === 0}
+              onClick={() => exportLinesToCSV(lines.filter(l => l.status !== "Void"))}
+              disabled={lines.filter(l => l.status !== "Void").length === 0}
               className="p-2 rounded-xl hover:bg-white transition-all duration-200 hover:shadow-sm active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
               title="Export CSV"
             >
@@ -1569,8 +1493,6 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
           onDuplicate={handleDuplicate}
           onChange={handleChange}
           totals={totals}
-          expandedRowId={expandedRowId}
-          onExpandedRowChange={setExpandedRowId}
           sortBy={sortBy}
           sortDirection={sortDirection}
           onSortChange={handleSortChange}

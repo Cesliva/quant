@@ -12,7 +12,7 @@ import * as d3 from "d3";
 import { EstimatingLine } from "@/components/estimating/EstimatingGrid";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
-import { BarChart3, Info, X, Sparkles } from "lucide-react";
+import { BarChart3, Info, X, Sparkles, TrendingUp, TrendingDown } from "lucide-react";
 import { loadCompanySettings, type CompanySettings } from "@/lib/utils/settingsLoader";
 
 interface ProjectData {
@@ -93,8 +93,8 @@ export default function CostTrendBubbleChart({
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [showFirstTimeHelp, setShowFirstTimeHelp] = useState(false);
   const [showInfoTooltip, setShowInfoTooltip] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
-  const tooltipRef = useRef<HTMLDivElement>(null);
   
   // Load company settings
   useEffect(() => {
@@ -112,6 +112,13 @@ export default function CostTrendBubbleChart({
     } else {
       setInternalMetric(metric);
     }
+  };
+  
+  // Check if user has dismissed first-time help (moved after bubbleData declaration)
+  
+  const handleDismissHelp = () => {
+    setShowFirstTimeHelp(false);
+    localStorage.setItem('quant-cost-trend-help-dismissed', 'true');
   };
   
   // Calculate data for labor categories or cost categories
@@ -227,6 +234,17 @@ export default function CostTrendBubbleChart({
     }
   }, [lines, selectedMetric, companySettings]);
   
+  // Check if user has dismissed first-time help
+  useEffect(() => {
+    const hasSeenHelp = localStorage.getItem('quant-cost-trend-help-dismissed');
+    if (!hasSeenHelp && bubbleData.length > 0) {
+      const timer = setTimeout(() => {
+        setShowFirstTimeHelp(true);
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [bubbleData]);
+  
   // Calculate selected project's data for overlay
   const selectedProjectData = useMemo(() => {
     if (!selectedProjectId || allProjectLines.length === 0) return null;
@@ -315,6 +333,153 @@ export default function CostTrendBubbleChart({
     }
   }, [selectedProjectId, allProjectLines, selectedMetric, companySettings]);
   
+  // Calculate company-wide averages (won/lost/all) for comparison
+  const averageData = useMemo(() => {
+    if (allProjectLines.length === 0) return new Map<string, number>();
+    
+    const allActiveLines = allProjectLines.flatMap((p) =>
+      p.lines.filter((line) => line.status !== "Void")
+    );
+    
+    if (allActiveLines.length === 0) return new Map<string, number>();
+    
+    const totalWeight = allActiveLines.reduce((sum, line) => {
+      const weight = line.materialType === "Material"
+        ? (line.totalWeight || 0)
+        : (line.plateTotalWeight || 0);
+      return sum + weight;
+    }, 0);
+    
+    const averages = new Map<string, number>();
+    
+    if (selectedMetric === "laborHoursPerTon") {
+      LABOR_CATEGORIES.forEach((laborCat) => {
+        const totalLaborHours = allActiveLines.reduce((sum, line) => {
+          const value = (line as any)[laborCat.field] || 0;
+          return sum + (typeof value === "number" ? value : 0);
+        }, 0);
+        const avgMHPT = totalWeight > 0 ? (totalLaborHours / (totalWeight / 2000)) : 0;
+        averages.set(laborCat.key, avgMHPT);
+      });
+    } else {
+      const materialCost = allActiveLines.reduce((sum, line) => sum + (line.materialCost || 0), 0);
+      const laborCost = allActiveLines.reduce((sum, line) => sum + (line.laborCost || 0), 0);
+      const coatingCost = allActiveLines.reduce((sum, line) => sum + (line.coatingCost || 0), 0);
+      const hardwareCost = allActiveLines.reduce((sum, line) => sum + (line.hardwareCost || 0), 0);
+      
+      const materialWasteFactor = companySettings?.markupSettings?.materialWasteFactor || 0;
+      const laborWasteFactor = companySettings?.markupSettings?.laborWasteFactor || 0;
+      const materialWithWaste = materialCost * (1 + materialWasteFactor / 100);
+      const laborWithWaste = laborCost * (1 + laborWasteFactor / 100);
+      
+      const subtotal = materialWithWaste + laborWithWaste + coatingCost + hardwareCost;
+      const overheadPercentage = companySettings?.markupSettings?.overheadPercentage || 0;
+      const overheadAmount = subtotal * (overheadPercentage / 100);
+      const profitPercentage = companySettings?.markupSettings?.profitPercentage || 0;
+      const subtotalWithOverhead = subtotal + overheadAmount;
+      const profitAmount = subtotalWithOverhead * (profitPercentage / 100);
+      
+      const costCategories = [
+        { key: "Material", value: materialWithWaste },
+        { key: "Labor", value: laborWithWaste },
+        { key: "Coating", value: coatingCost },
+        { key: "Hardware", value: hardwareCost },
+        { key: "Overhead", value: overheadAmount },
+        { key: "Profit", value: profitAmount },
+      ];
+      
+      costCategories.forEach((cat) => {
+        const avgCostPT = totalWeight > 0 ? (cat.value / (totalWeight / 2000)) : 0;
+        averages.set(cat.key, avgCostPT);
+      });
+    }
+    
+    return averages;
+  }, [allProjectLines, selectedMetric, companySettings]);
+  
+  // Calculate won/lost averages
+  const wonLostAverageData = useMemo(() => {
+    const projectStatusMap = new Map<string, string>();
+    projects.forEach((p: any) => {
+      if (p.id && p.status) {
+        projectStatusMap.set(p.id, p.status);
+      }
+    });
+    
+    const wonProjects = allProjectLines.filter((p) => projectStatusMap.get(p.projectId) === "won");
+    const lostProjects = allProjectLines.filter((p) => projectStatusMap.get(p.projectId) === "lost");
+    
+    const calculateAverages = (projectList: typeof allProjectLines) => {
+      if (projectList.length === 0) return new Map<string, number>();
+      
+      const allActiveLines = projectList.flatMap((p) =>
+        p.lines.filter((line) => line.status !== "Void")
+      );
+      
+      if (allActiveLines.length === 0) return new Map<string, number>();
+      
+      const totalWeight = allActiveLines.reduce((sum, line) => {
+        const weight = line.materialType === "Material"
+          ? (line.totalWeight || 0)
+          : (line.plateTotalWeight || 0);
+        return sum + weight;
+      }, 0);
+      
+      const averages = new Map<string, number>();
+      
+      if (selectedMetric === "laborHoursPerTon") {
+        LABOR_CATEGORIES.forEach((laborCat) => {
+          const totalLaborHours = allActiveLines.reduce((sum, line) => {
+            const value = (line as any)[laborCat.field] || 0;
+            return sum + (typeof value === "number" ? value : 0);
+          }, 0);
+          const avgMHPT = totalWeight > 0 ? (totalLaborHours / (totalWeight / 2000)) : 0;
+          averages.set(laborCat.key, avgMHPT);
+        });
+      } else {
+        const materialCost = allActiveLines.reduce((sum, line) => sum + (line.materialCost || 0), 0);
+        const laborCost = allActiveLines.reduce((sum, line) => sum + (line.laborCost || 0), 0);
+        const coatingCost = allActiveLines.reduce((sum, line) => sum + (line.coatingCost || 0), 0);
+        const hardwareCost = allActiveLines.reduce((sum, line) => sum + (line.hardwareCost || 0), 0);
+        
+        const materialWasteFactor = companySettings?.markupSettings?.materialWasteFactor || 0;
+        const laborWasteFactor = companySettings?.markupSettings?.laborWasteFactor || 0;
+        const materialWithWaste = materialCost * (1 + materialWasteFactor / 100);
+        const laborWithWaste = laborCost * (1 + laborWasteFactor / 100);
+        
+        const subtotal = materialWithWaste + laborWithWaste + coatingCost + hardwareCost;
+        const overheadPercentage = companySettings?.markupSettings?.overheadPercentage || 0;
+        const overheadAmount = subtotal * (overheadPercentage / 100);
+        const profitPercentage = companySettings?.markupSettings?.profitPercentage || 0;
+        const subtotalWithOverhead = subtotal + overheadAmount;
+        const profitAmount = subtotalWithOverhead * (profitPercentage / 100);
+        
+        const costCategories = [
+          { key: "Material", value: materialWithWaste },
+          { key: "Labor", value: laborWithWaste },
+          { key: "Coating", value: coatingCost },
+          { key: "Hardware", value: hardwareCost },
+          { key: "Overhead", value: overheadAmount },
+          { key: "Profit", value: profitAmount },
+        ];
+        
+        costCategories.forEach((cat) => {
+          const avgCostPT = totalWeight > 0 ? (cat.value / (totalWeight / 2000)) : 0;
+          averages.set(cat.key, avgCostPT);
+        });
+      }
+      
+      return averages;
+    };
+    
+    return {
+      won: calculateAverages(wonProjects),
+      lost: calculateAverages(lostProjects),
+      wonCount: wonProjects.length,
+      lostCount: lostProjects.length,
+    };
+  }, [allProjectLines, projects, selectedMetric, companySettings]);
+  
   // Get available projects for dropdown
   const availableProjects = useMemo(() => {
     const projectMap = new Map<string, { id: string; name: string }>();
@@ -342,6 +507,50 @@ export default function CostTrendBubbleChart({
     return Array.from(projectMap.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [projects, allProjectLines]);
   
+  // Calculate comparison data for selected category
+  const categoryComparison = useMemo(() => {
+    if (!selectedCategory) return null;
+    
+    // Get current value: use selected project data if available, otherwise use company average (bubbleData)
+    let currentValue = 0;
+    let currentLabel = "All Projects (Average)";
+    if (selectedProjectId && selectedProjectData) {
+      // Use selected project's value
+      const projectItem = selectedProjectData.find(d => d.category === selectedCategory);
+      currentValue = projectItem?.mhPerTon || 0;
+      const project = availableProjects.find(p => p.id === selectedProjectId);
+      currentLabel = project?.name || "Selected Project";
+    } else {
+      // Use company average (which is what bubbleData shows)
+      currentValue = bubbleData.find(d => d.category === selectedCategory)?.mhPerTon || 0;
+      currentLabel = "All Projects (Average)";
+    }
+    
+    // Company average should be from averageData (all projects average) - this should always be different from current when a project is selected
+    const allAvg = averageData.get(selectedCategory) || 0;
+    const wonAvg = wonLostAverageData.won.get(selectedCategory) || 0;
+    const lostAvg = wonLostAverageData.lost.get(selectedCategory) || 0;
+    
+    const allCount = allProjectLines.length;
+    
+    const categoryLabel = selectedMetric === "laborHoursPerTon"
+      ? LABOR_CATEGORIES.find(c => c.key === selectedCategory)?.label || selectedCategory
+      : COST_COLORS[selectedCategory] ? selectedCategory : selectedCategory;
+    
+    return {
+      category: selectedCategory,
+      label: categoryLabel,
+      current: currentValue,
+      currentLabel: currentLabel,
+      allAverage: allAvg,
+      wonAverage: wonAvg,
+      lostAverage: lostAvg,
+      allCount,
+      wonCount: wonLostAverageData.wonCount,
+      lostCount: wonLostAverageData.lostCount,
+    };
+  }, [selectedCategory, bubbleData, selectedProjectData, selectedProjectId, averageData, wonLostAverageData, allProjectLines, selectedMetric, availableProjects]);
+  
   // Render D3 circle packing
   useEffect(() => {
     if (!svgRef.current || bubbleData.length === 0) return;
@@ -361,6 +570,7 @@ export default function CostTrendBubbleChart({
       children: bubbleData.map(d => ({
         name: d.category,
         value: d.mhPerTon,
+        mhPerTon: d.mhPerTon, // Keep original value for text display
         label: d.label,
         color: d.color,
         percentage: d.percentage,
@@ -376,7 +586,7 @@ export default function CostTrendBubbleChart({
       .size([width - padding * 2, height - padding * 2])
       .padding(3);
     
-    const packed = pack(root);
+    const packed = pack(root as any);
     
     // Store bubble positions for overlay
     const bubblePositions = new Map<string, { x: number; y: number; r: number; avgValue: number }>();
@@ -430,12 +640,18 @@ export default function CostTrendBubbleChart({
       .attr("font-weight", "600")
       .attr("opacity", 0)
       .style("font-size", (d: any) => {
-        // Scale font size based on circle radius
-        const fontSize = Math.max(10, Math.min(16, d.r * 0.25));
+        // Scale font size based on circle radius - ensure minimum readable size
+        // For smaller bubbles, use a larger multiplier to ensure visibility
+        const fontSize = d.r < 20 
+          ? Math.max(10, d.r * 0.4) // Larger multiplier for small bubbles
+          : Math.max(11, Math.min(16, d.r * 0.3));
         return `${fontSize}px`;
       })
       .style("pointer-events", "none")
-      .text((d: any) => d.data.label);
+      .style("text-shadow", "0 1px 3px rgba(0,0,0,0.7), 0 0 2px rgba(0,0,0,0.5)") // Stronger shadow for better visibility
+      .style("stroke", "rgba(0,0,0,0.3)") // Add stroke for contrast
+      .style("stroke-width", "0.5px")
+      .text((d: any) => d.data.label || d.data.name);
     
     // Animate labels with delay after circles
     labels.each(function(d: any, i: number) {
@@ -456,16 +672,22 @@ export default function CostTrendBubbleChart({
       .attr("dy", (d: any) => d.r * 0.3)
       .attr("opacity", 0)
       .style("font-size", (d: any) => {
-        const fontSize = Math.max(8, Math.min(12, d.r * 0.2));
+        // Ensure value text is readable even on small bubbles
+        const fontSize = d.r < 20
+          ? Math.max(8, d.r * 0.25) // Larger multiplier for small bubbles
+          : Math.max(8, Math.min(12, d.r * 0.2));
         return `${fontSize}px`;
       })
       .style("pointer-events", "none")
+      .style("text-shadow", "0 1px 2px rgba(0,0,0,0.7)") // Add shadow for better visibility
+      .style("stroke", "rgba(0,0,0,0.2)")
+      .style("stroke-width", "0.3px")
       .text((d: any) => {
+        const value = d.data.mhPerTon !== undefined ? d.data.mhPerTon : d.data.value;
         if (selectedMetric === "laborHoursPerTon") {
-          return `${d.data.value.toFixed(1)} MH/T`;
+          return `${value.toFixed(1)} MH/T`;
         } else {
           // Format cost per ton
-          const value = d.data.value;
           if (value >= 1000) {
             return `$${(value / 1000).toFixed(1)}K`;
           }
@@ -517,53 +739,6 @@ export default function CostTrendBubbleChart({
             return `${fontSize}px`;
           });
         
-        // Show tooltip with fade-in
-        if (tooltipRef.current) {
-          const tooltip = tooltipRef.current;
-          const data = d.data;
-          tooltip.style.display = "block";
-          tooltip.style.opacity = "0";
-          const value = data.value;
-          const valueDisplay = selectedMetric === "laborHoursPerTon" 
-            ? `${value.toFixed(2)} MH/T`
-            : value >= 1000 
-              ? `$${(value / 1000).toFixed(2)}K/T`
-              : `$${value.toFixed(2)}/T`;
-          
-          tooltip.innerHTML = `
-            <div class="font-semibold text-sm mb-1">${data.label}</div>
-            <div class="text-xs text-gray-200">
-              ${valueDisplay}
-            </div>
-            <div class="text-xs text-gray-300 mt-1">
-              ${data.percentage.toFixed(1)}% of total
-            </div>
-          `;
-          
-          // Position tooltip relative to mouse
-          const rect = svg.node()?.getBoundingClientRect();
-          if (rect) {
-            const [x, y] = d3.pointer(event, svg.node() as any);
-            tooltip.style.left = `${rect.left + x + 20}px`;
-            tooltip.style.top = `${rect.top + y - 10}px`;
-          }
-          
-          // Fade in tooltip
-          d3.select(tooltip)
-            .transition()
-            .duration(200)
-            .style("opacity", "1");
-        }
-      })
-      .on("mousemove", function(event) {
-        if (tooltipRef.current) {
-          const rect = svg.node()?.getBoundingClientRect();
-          if (rect) {
-            const [x, y] = d3.pointer(event, svg.node() as any);
-            tooltipRef.current.style.left = `${rect.left + x + 20}px`;
-            tooltipRef.current.style.top = `${rect.top + y - 10}px`;
-          }
-        }
       })
       .on("mouseleave", function(event, d: any) {
         const node = d3.select(this);
@@ -596,19 +771,10 @@ export default function CostTrendBubbleChart({
             const fontSize = Math.max(10, Math.min(16, currentR * 0.25));
             return `${fontSize}px`;
           });
-        
-        // Fade out tooltip
-        if (tooltipRef.current) {
-          d3.select(tooltipRef.current)
-            .transition()
-            .duration(200)
-            .style("opacity", "0")
-            .on("end", function() {
-              if (tooltipRef.current) {
-                tooltipRef.current.style.display = "none";
-              }
-            });
-        }
+      })
+      .on("click", function(event, d: any) {
+        event.stopPropagation();
+        setSelectedCategory(d.data.name);
       });
     
     // Draw overlay bubbles for selected project
@@ -728,56 +894,10 @@ export default function CostTrendBubbleChart({
               .attr("opacity", 1)
               .style("filter", `drop-shadow(0 0 8px ${strokeColor}CC)`);
             
-            if (tooltipRef.current) {
-              const tooltip = tooltipRef.current;
-              tooltip.style.display = "block";
-              tooltip.style.opacity = "0";
-              const valueDisplay = selectedMetric === "laborHoursPerTon" 
-                ? `${projectValue.toFixed(2)} MH/T`
-                : projectValue >= 1000 
-                  ? `$${(projectValue / 1000).toFixed(2)}K/T`
-                  : `$${projectValue.toFixed(2)}/T`;
-              
-              const avgDisplay = selectedMetric === "laborHoursPerTon" 
-                ? `${avgValue.toFixed(2)} MH/T`
-                : avgValue >= 1000 
-                  ? `$${(avgValue / 1000).toFixed(2)}K/T`
-                  : `$${avgValue.toFixed(2)}/T`;
-              
-              tooltip.innerHTML = `
-                <div class="font-semibold text-sm mb-1">${projectItem.label}</div>
-                <div class="text-xs text-gray-200 mb-1">
-                  <div>Project: ${valueDisplay}</div>
-                  <div>Average: ${avgDisplay}</div>
-                </div>
-                <div class="text-xs ${percentDiff > 0 ? 'text-red-300' : 'text-green-300'} mt-1 font-semibold">
-                  ${isAbove ? '+' : ''}${percentDiff.toFixed(1)}% ${isAbove ? 'above' : 'below'} average
-                </div>
-              `;
-              
-              const rect = svg.node()?.getBoundingClientRect();
-              if (rect) {
-                const [x, y] = d3.pointer(event, svg.node() as any);
-                tooltip.style.left = `${rect.left + x + 20}px`;
-                tooltip.style.top = `${rect.top + y - 10}px`;
-              }
-              
-              // Fade in tooltip
-              d3.select(tooltip)
-                .transition()
-                .duration(200)
-                .style("opacity", "1");
-            }
           })
-          .on("mousemove", function(event) {
-            if (tooltipRef.current) {
-              const rect = svg.node()?.getBoundingClientRect();
-              if (rect) {
-                const [x, y] = d3.pointer(event, svg.node() as any);
-                tooltipRef.current.style.left = `${rect.left + x + 20}px`;
-                tooltipRef.current.style.top = `${rect.top + y - 10}px`;
-              }
-            }
+          .on("click", function(event) {
+            event.stopPropagation();
+            setSelectedCategory(projectItem.category);
           })
           .on("mouseleave", function() {
             const circle = d3.select(this);
@@ -793,18 +913,10 @@ export default function CostTrendBubbleChart({
               .attr("opacity", 0.9)
               .style("filter", `drop-shadow(0 0 4px ${strokeColor}80)`);
             
-            // Fade out tooltip
-            if (tooltipRef.current) {
-              d3.select(tooltipRef.current)
-                .transition()
-                .duration(200)
-                .style("opacity", "0")
-                .on("end", function() {
-                  if (tooltipRef.current) {
-                    tooltipRef.current.style.display = "none";
-                  }
-                });
-            }
+          })
+          .on("click", function(event) {
+            event.stopPropagation();
+            setSelectedCategory(projectItem.category);
           });
       });
     }
@@ -896,8 +1008,8 @@ export default function CostTrendBubbleChart({
                           <p>Red = &gt;15% deviation, Amber = 5-15% deviation, Green = &lt;5% deviation from company average.</p>
                         </div>
                         <div>
-                          <p className="font-medium text-gray-900 mb-1">Hover for details</p>
-                          <p>Hover over any bubble to see exact values and percentage of total.</p>
+                          <p className="font-medium text-gray-900 mb-1">Click to compare</p>
+                          <p>Click any bubble to see a detailed comparison with historical data, including won vs. lost averages.</p>
                         </div>
                       </div>
                     </div>
@@ -997,13 +1109,6 @@ export default function CostTrendBubbleChart({
       </CardHeader>
       
       <CardContent className="space-y-6 relative">
-        {/* Tooltip */}
-        <div
-          ref={tooltipRef}
-          className="fixed bg-gray-900 text-white px-3 py-2 rounded-lg shadow-lg text-sm z-50 pointer-events-none hidden"
-          style={{ fontSize: "12px" }}
-        />
-        
         {/* Bubble Chart Visualization */}
         <div className="w-full flex justify-center" style={{ minHeight: "600px" }}>
           <svg
@@ -1069,6 +1174,125 @@ export default function CostTrendBubbleChart({
             </div>
           </div>
         </div>
+        
+        {/* Modal Popup (appears on click) */}
+        {selectedCategory && categoryComparison && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedCategory(null)}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h3 className="text-xl font-semibold text-slate-900">{categoryComparison.label}</h3>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Live comparison across all projects
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setSelectedCategory(null)}
+                    className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                  >
+                    <X className="w-5 h-5 text-slate-500" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Current */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-5">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-3 h-3 rounded-full bg-blue-600"></div>
+                      <span className="text-sm font-semibold text-slate-900">Current</span>
+                    </div>
+                    <p className="text-xs text-slate-600 mb-2 truncate">{categoryComparison.currentLabel}</p>
+                    <p className="text-2xl font-bold text-blue-900 tabular-nums">
+                      {categoryComparison.current.toFixed(2)} {selectedMetric === "laborHoursPerTon" ? "MH/T" : "$/T"}
+                    </p>
+                  </div>
+
+                  {/* Won Average */}
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-5">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-3 h-3 rounded-full bg-emerald-600"></div>
+                      <span className="text-sm font-semibold text-slate-900">Won Average</span>
+                      {categoryComparison.wonCount > 0 ? (
+                        <span className="text-xs text-slate-500">({categoryComparison.wonCount})</span>
+                      ) : (
+                        <span className="text-xs text-slate-400">(No data)</span>
+                      )}
+                    </div>
+                    {categoryComparison.wonCount > 0 ? (
+                      <>
+                        <div className="flex items-center gap-2 mb-2">
+                          {categoryComparison.current > categoryComparison.wonAverage ? (
+                            <TrendingUp className="w-4 h-4 text-amber-600" />
+                          ) : (
+                            <TrendingDown className="w-4 h-4 text-emerald-600" />
+                          )}
+                          <span className="text-xs text-slate-600">
+                            {categoryComparison.current > categoryComparison.wonAverage ? (
+                              <span className="text-amber-700">
+                                {((categoryComparison.current / categoryComparison.wonAverage - 1) * 100).toFixed(1)}% above
+                              </span>
+                            ) : (
+                              <span className="text-emerald-700">
+                                {((1 - categoryComparison.current / categoryComparison.wonAverage) * 100).toFixed(1)}% below
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                        <p className="text-2xl font-bold text-emerald-900 tabular-nums">
+                          {categoryComparison.wonAverage.toFixed(2)} {selectedMetric === "laborHoursPerTon" ? "MH/T" : "$/T"}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-sm text-slate-400 italic">No won projects data available</p>
+                    )}
+                  </div>
+
+                  {/* All Average */}
+                  {categoryComparison.allCount > 0 && (
+                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-5">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-3 h-3 rounded-full bg-slate-600"></div>
+                        <span className="text-sm font-semibold text-slate-900">All Average</span>
+                        <span className="text-xs text-slate-500">({categoryComparison.allCount})</span>
+                      </div>
+                      <div className="flex items-center gap-2 mb-2">
+                        {categoryComparison.current > categoryComparison.allAverage ? (
+                          <TrendingUp className="w-4 h-4 text-amber-600" />
+                        ) : (
+                          <TrendingDown className="w-4 h-4 text-emerald-600" />
+                        )}
+                        <span className="text-xs text-slate-600">
+                          {categoryComparison.current > categoryComparison.allAverage ? (
+                            <span className="text-amber-700">
+                              {((categoryComparison.current / categoryComparison.allAverage - 1) * 100).toFixed(1)}% above
+                            </span>
+                          ) : (
+                            <span className="text-emerald-700">
+                              {((1 - categoryComparison.current / categoryComparison.allAverage) * 100).toFixed(1)}% below
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                      <p className="text-2xl font-bold text-slate-900 tabular-nums">
+                        {categoryComparison.allAverage.toFixed(2)} {selectedMetric === "laborHoursPerTon" ? "MH/T" : "$/T"}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Insight */}
+                <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-slate-700">
+                    <strong className="text-slate-900">Live Control Panel:</strong> This comparison updates in real-time as projects are estimated. 
+                    Use won/lost averages to identify competitive positioning and adjust estimates accordingly.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        
       </CardContent>
     </Card>
   );

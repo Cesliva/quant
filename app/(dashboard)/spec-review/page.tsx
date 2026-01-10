@@ -233,7 +233,22 @@ function SpecReviewPageContent() {
   };
 
   // Use new structure if available, fall back to legacy
-  const complianceItems = analysisResult?.complianceItems || analysisResult?.items || [];
+  // Normalize complianceItems to ensure all have the same structure
+  type ComplianceItem = {
+    item: string;
+    status: "pass" | "warning" | "fail";
+    message: string;
+    specSection?: string;
+    category?: string;
+  };
+  
+  const complianceItems: ComplianceItem[] = (analysisResult?.complianceItems || analysisResult?.items || []).map((item: any) => ({
+    item: item.item,
+    status: item.status,
+    message: item.message,
+    specSection: item.specSection,
+    category: item.category,
+  }));
   const rfiSuggestions = analysisResult?.rfiSuggestions || [];
 
   return (
@@ -844,7 +859,21 @@ function SpecReviewPageContent() {
 
                   setIsExtracting(true);
                   setExtractionProgress({ message: "Starting extraction..." });
+                  
                   try {
+                    // Validate file type
+                    const fileName = file.name.toLowerCase();
+                    const validExtensions = ['.pdf', '.docx', '.doc', '.txt'];
+                    const isValidFile = validExtensions.some(ext => fileName.endsWith(ext)) || 
+                                       file.type === 'application/pdf' ||
+                                       file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+                                       file.type === 'application/msword' ||
+                                       file.type === 'text/plain';
+                    
+                    if (!isValidFile) {
+                      throw new Error(`Unsupported file type. Please upload a PDF, DOC, DOCX, or TXT file.`);
+                    }
+
                     // Extract text from file with progress updates
                     const extractedText = await extractTextFromFile(file, (progress) => {
                       // Update UI with extraction progress
@@ -854,6 +883,11 @@ function SpecReviewPageContent() {
                         totalPages: progress.totalPages,
                       });
                     });
+                    
+                    if (!extractedText || extractedText.trim().length === 0) {
+                      throw new Error("No text could be extracted from the file. The file may be empty, image-based, or corrupted.");
+                    }
+                    
                     setSpecText(extractedText);
                     setExtractionProgress(null);
                     
@@ -861,18 +895,32 @@ function SpecReviewPageContent() {
                     if (isFirebaseConfigured() && companyId && projectId) {
                       try {
                         const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-                        const fileExtension = file.name.split(".").pop() || "pdf";
                         const storagePath = `specs/${companyId}/${projectId}/${analysisType}/${timestamp}_${file.name.replace(/[^a-zA-Z0-9.-]/g, "_")}`;
                         await uploadFileToStorage(file, storagePath);
-                        // File uploaded successfully to Firebase Storage
+                        console.log("File uploaded successfully to Firebase Storage");
                       } catch (uploadError: any) {
                         // Don't fail the whole operation if upload fails, just log it
                         console.warn("Failed to upload file to storage (text extraction still succeeded):", uploadError.message);
+                        // Show a non-blocking warning
+                        alert(`Text extracted successfully, but file upload failed: ${uploadError.message}. You can still proceed with the analysis.`);
                       }
                     }
                   } catch (error: any) {
                     setExtractionProgress(null);
-                    alert(`Failed to extract text: ${error.message}`);
+                    console.error("File extraction error:", error);
+                    
+                    // Provide more helpful error messages
+                    let errorMessage = error.message || "Unknown error occurred";
+                    
+                    if (errorMessage.includes("pdfjs") || errorMessage.includes("worker")) {
+                      errorMessage = "PDF extraction failed. Please ensure you have a stable internet connection and try again. If the problem persists, the PDF may be corrupted or password-protected.";
+                    } else if (errorMessage.includes("CORS") || errorMessage.includes("cross-origin")) {
+                      errorMessage = "File upload failed due to CORS configuration. Please contact support.";
+                    } else if (errorMessage.includes("timeout")) {
+                      errorMessage = "File processing timed out. Please try a smaller file or check your internet connection.";
+                    }
+                    
+                    alert(`Failed to extract text from file:\n\n${errorMessage}\n\nPlease try:\n- Using a different file format (PDF, DOCX, or TXT)\n- Ensuring the file is not password-protected\n- Checking that the file is not corrupted`);
                   } finally {
                     setIsExtracting(false);
                     // Reset input so same file can be selected again

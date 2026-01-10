@@ -858,165 +858,7 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
   }, [selectedCategory, bubbleData, averageData, wonLostAverageData, allProjectLines, allProjects, currentProjectId]);
 
   return (
-    <>
-      {/* Tooltip */}
-      <div
-        ref={tooltipRef}
-        className="fixed bg-gray-900 text-white px-3 py-2 rounded-lg shadow-lg text-sm pointer-events-none z-50"
-        style={{ display: "none" }}
-      />
-
-      {/* Comparison Panel Modal */}
-      {selectedCategory && categoryComparison && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedCategory(null)}>
-          <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h3 className="text-2xl font-semibold text-slate-900">{categoryComparison.label}</h3>
-                  <p className="text-sm text-slate-500 mt-1">
-                    Live comparison across all projects
-                  </p>
-                </div>
-                <button
-                  onClick={() => setSelectedCategory(null)}
-                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-                >
-                  <X className="w-5 h-5 text-slate-500" />
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                {/* Current Project */}
-                <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-5">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-blue-600"></div>
-                      <span className="font-semibold text-slate-900">Current Project</span>
-                    </div>
-                    <span className="text-2xl font-bold text-blue-900 tabular-nums">
-                      {categoryComparison.current.toFixed(2)} {selectedMetric === "laborHoursPerTon" ? "MH/T" : "$/T"}
-                    </span>
-                  </div>
-                  <p className="text-sm text-slate-600">{projectName || "Current Estimate"}</p>
-                </div>
-
-                {/* Won Projects Average */}
-                {categoryComparison.wonCount > 0 && (
-                  <div className="bg-emerald-50 border-2 border-emerald-200 rounded-xl p-5">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-emerald-600"></div>
-                        <span className="font-semibold text-slate-900">Won Projects Average</span>
-                        <span className="text-xs text-slate-500">({categoryComparison.wonCount} project{categoryComparison.wonCount !== 1 ? 's' : ''})</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        {categoryComparison.current > categoryComparison.wonAverage ? (
-                          <TrendingUp className="w-5 h-5 text-amber-600" />
-                        ) : (
-                          <TrendingDown className="w-5 h-5 text-emerald-600" />
-                        )}
-                        <span className="text-2xl font-bold text-emerald-900 tabular-nums">
-                          {categoryComparison.wonAverage.toFixed(2)} {selectedMetric === "laborHoursPerTon" ? "MH/T" : "$/T"}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="text-sm text-slate-600">
-                      {categoryComparison.current > categoryComparison.wonAverage ? (
-                        <span className="text-amber-700 font-medium">
-                          Current is {((categoryComparison.current / categoryComparison.wonAverage - 1) * 100).toFixed(1)}% higher
-                        </span>
-                      ) : (
-                        <span className="text-emerald-700 font-medium">
-                          Current is {((1 - categoryComparison.current / categoryComparison.wonAverage) * 100).toFixed(1)}% lower
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Lost Projects Average */}
-                {categoryComparison.lostCount > 0 && (
-                  <div className="bg-rose-50 border-2 border-rose-200 rounded-xl p-5">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-rose-600"></div>
-                        <span className="font-semibold text-slate-900">Lost Projects Average</span>
-                        <span className="text-xs text-slate-500">({categoryComparison.lostCount} project{categoryComparison.lostCount !== 1 ? 's' : ''})</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        {categoryComparison.current > categoryComparison.lostAverage ? (
-                          <TrendingUp className="w-5 h-5 text-rose-600" />
-                        ) : (
-                          <TrendingDown className="w-5 h-5 text-emerald-600" />
-                        )}
-                        <span className="text-2xl font-bold text-rose-900 tabular-nums">
-                          {categoryComparison.lostAverage.toFixed(2)} {selectedMetric === "laborHoursPerTon" ? "MH/T" : "$/T"}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="text-sm text-slate-600">
-                      {categoryComparison.current > categoryComparison.lostAverage ? (
-                        <span className="text-rose-700 font-medium">
-                          Current is {((categoryComparison.current / categoryComparison.lostAverage - 1) * 100).toFixed(1)}% higher
-                        </span>
-                      ) : (
-                        <span className="text-emerald-700 font-medium">
-                          Current is {((1 - categoryComparison.current / categoryComparison.lostAverage) * 100).toFixed(1)}% lower
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* All Projects Average */}
-                {categoryComparison.allCount > 0 && (
-                  <div className="bg-slate-50 border-2 border-slate-200 rounded-xl p-5">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-slate-600"></div>
-                        <span className="font-semibold text-slate-900">All Projects Average</span>
-                        <span className="text-xs text-slate-500">({categoryComparison.allCount} project{categoryComparison.allCount !== 1 ? 's' : ''})</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        {categoryComparison.current > categoryComparison.allAverage ? (
-                          <TrendingUp className="w-5 h-5 text-amber-600" />
-                        ) : (
-                          <TrendingDown className="w-5 h-5 text-emerald-600" />
-                        )}
-                        <span className="text-2xl font-bold text-slate-900 tabular-nums">
-                          {categoryComparison.allAverage.toFixed(2)} {selectedMetric === "laborHoursPerTon" ? "MH/T" : "$/T"}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="text-sm text-slate-600">
-                      {categoryComparison.current > categoryComparison.allAverage ? (
-                        <span className="text-amber-700 font-medium">
-                          Current is {((categoryComparison.current / categoryComparison.allAverage - 1) * 100).toFixed(1)}% above average
-                        </span>
-                      ) : (
-                        <span className="text-emerald-700 font-medium">
-                          Current is {((1 - categoryComparison.current / categoryComparison.allAverage) * 100).toFixed(1)}% below average
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Insight */}
-                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 mt-6">
-                  <p className="text-sm text-slate-700">
-                    <strong className="text-slate-900">Live Control Panel:</strong> This comparison updates in real-time as projects are estimated. 
-                    Use won/lost averages to identify competitive positioning and adjust estimates accordingly.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </Card>
-        </div>
-      )}
-      
-      <Card className="p-4">
+    <Card className="p-4">
         <CardHeader className="mb-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -1268,9 +1110,118 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
               </div>
             </>
           )}
+          {/* Modal Popup (appears on click) */}
+          {selectedCategory && categoryComparison && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedCategory(null)}>
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h3 className="text-xl font-semibold text-slate-900">{categoryComparison.label}</h3>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Live comparison across all projects
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setSelectedCategory(null)}
+                      className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                    >
+                      <X className="w-5 h-5 text-slate-500" />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* Current Project */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-5">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-3 h-3 rounded-full bg-blue-600"></div>
+                        <span className="text-sm font-semibold text-slate-900">Current</span>
+                      </div>
+                      <p className="text-xs text-slate-600 mb-2 truncate">{projectName || "Current Estimate"}</p>
+                      <p className="text-2xl font-bold text-blue-900 tabular-nums">
+                        {categoryComparison.current.toFixed(2)} {selectedMetric === "laborHoursPerTon" ? "MH/T" : "$/T"}
+                      </p>
+                    </div>
+
+                    {/* Won Average */}
+                    {categoryComparison.wonCount > 0 && (
+                      <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-5">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-3 h-3 rounded-full bg-emerald-600"></div>
+                          <span className="text-sm font-semibold text-slate-900">Won Average</span>
+                          <span className="text-xs text-slate-500">({categoryComparison.wonCount})</span>
+                        </div>
+                        <div className="flex items-center gap-2 mb-2">
+                          {categoryComparison.current > categoryComparison.wonAverage ? (
+                            <TrendingUp className="w-4 h-4 text-amber-600" />
+                          ) : (
+                            <TrendingDown className="w-4 h-4 text-emerald-600" />
+                          )}
+                          <span className="text-xs text-slate-600">
+                            {categoryComparison.current > categoryComparison.wonAverage ? (
+                              <span className="text-amber-700">
+                                {((categoryComparison.current / categoryComparison.wonAverage - 1) * 100).toFixed(1)}% above
+                              </span>
+                            ) : (
+                              <span className="text-emerald-700">
+                                {((1 - categoryComparison.current / categoryComparison.wonAverage) * 100).toFixed(1)}% below
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                        <p className="text-2xl font-bold text-emerald-900 tabular-nums">
+                          {categoryComparison.wonAverage.toFixed(2)} {selectedMetric === "laborHoursPerTon" ? "MH/T" : "$/T"}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* All Average */}
+                    {categoryComparison.allCount > 0 && (
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-5">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-3 h-3 rounded-full bg-slate-600"></div>
+                          <span className="text-sm font-semibold text-slate-900">All Average</span>
+                          <span className="text-xs text-slate-500">({categoryComparison.allCount})</span>
+                        </div>
+                        <div className="flex items-center gap-2 mb-2">
+                          {categoryComparison.current > categoryComparison.allAverage ? (
+                            <TrendingUp className="w-4 h-4 text-amber-600" />
+                          ) : (
+                            <TrendingDown className="w-4 h-4 text-emerald-600" />
+                          )}
+                          <span className="text-xs text-slate-600">
+                            {categoryComparison.current > categoryComparison.allAverage ? (
+                              <span className="text-amber-700">
+                                {((categoryComparison.current / categoryComparison.allAverage - 1) * 100).toFixed(1)}% above
+                              </span>
+                            ) : (
+                              <span className="text-emerald-700">
+                                {((1 - categoryComparison.current / categoryComparison.allAverage) * 100).toFixed(1)}% below
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                        <p className="text-2xl font-bold text-slate-900 tabular-nums">
+                          {categoryComparison.allAverage.toFixed(2)} {selectedMetric === "laborHoursPerTon" ? "MH/T" : "$/T"}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Insight */}
+                  <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm text-slate-700">
+                      <strong className="text-slate-900">Live Control Panel:</strong> This comparison updates in real-time as projects are estimated. 
+                      Use won/lost averages to identify competitive positioning and adjust estimates accordingly.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
         </CardContent>
       </Card>
-    </>
   );
 }
 

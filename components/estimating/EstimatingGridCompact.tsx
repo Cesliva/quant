@@ -1,8 +1,7 @@
 "use client";
 
-import { ChevronDown, ChevronRight, Edit, Trash2, Copy, X, Check, Info } from "lucide-react";
+import { ChevronDown, Edit, Trash2, Copy, X, Check, Info } from "lucide-react";
 import { EstimatingLine } from "./EstimatingGrid";
-import EstimatingRowDetail from "./EstimatingRowDetail";
 import { getShapesByType, SHAPE_TYPES } from "@/lib/utils/aiscShapes";
 import { useState, useRef, useEffect } from "react";
 import { getMaterialGradeInfo, getPlateGradeInfo } from "@/lib/utils/steelGradeInfo";
@@ -43,8 +42,6 @@ interface EstimatingGridCompactProps {
     hardwareCost: number;
     totalCost: number;
   };
-  expandedRowId: string | null;
-  onExpandedRowChange: (rowId: string | null) => void;
   sortBy?: string;
   sortDirection?: "asc" | "desc";
   onSortChange?: (field: string) => void;
@@ -164,8 +161,6 @@ export default function EstimatingGridCompact({
   onDuplicate,
   onChange,
   totals,
-  expandedRowId,
-  onExpandedRowChange,
   sortBy,
   sortDirection,
   onSortChange,
@@ -196,24 +191,6 @@ export default function EstimatingGridCompact({
     }
   }, [sizeDropdownOpen]);
 
-  const handleCollapse = (lineId: string) => {
-    onExpandedRowChange(null);
-    // Scroll the row into view when collapsing - ensures consistent view whether collapsing from top or bottom
-    setTimeout(() => {
-      const rowElement = document.getElementById(`line-${lineId}`);
-      if (rowElement) {
-        rowElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    }, 100);
-  };
-
-  const toggleRow = (lineId: string) => {
-    if (expandedRowId === lineId) {
-      handleCollapse(lineId);
-    } else {
-      onExpandedRowChange(lineId);
-    }
-  };
 
   const getPlateThicknessDisplay = (thickness?: number | string) => {
     if (typeof thickness === "number") {
@@ -307,16 +284,13 @@ export default function EstimatingGridCompact({
       <table className="w-full text-sm">
         <thead className="bg-gradient-to-b from-gray-50/50 to-gray-50/30 border-b border-gray-200/60">
           <tr>
-            <th className="sticky left-0 z-10 bg-gradient-to-b from-gray-50/50 to-gray-50/30 border-r border-gray-200/40 px-4 py-4 text-left">
-              <span className="w-4 inline-block"></span>
-            </th>
-            <th className="sticky left-12 z-10 bg-gradient-to-b from-gray-50/50 to-gray-50/30 border-r border-gray-200/40 px-4 py-4 text-left font-medium text-xs text-gray-600 tracking-wide">
+            <th className="sticky left-0 z-10 bg-gradient-to-b from-gray-50/50 to-gray-50/30 border-r border-gray-200/40 px-4 py-4 text-left font-medium text-xs text-gray-600 tracking-wide">
               Line ID
             </th>
-            <th className="sticky left-24 z-10 bg-gradient-to-b from-gray-50/50 to-gray-50/30 border-r border-gray-200/40 px-4 py-4 text-left font-medium text-xs text-gray-600 tracking-wide">
+            <th className="sticky left-20 z-10 bg-gradient-to-b from-gray-50/50 to-gray-50/30 border-r border-gray-200/40 px-4 py-4 text-left font-medium text-xs text-gray-600 tracking-wide">
               Drawing
             </th>
-            <th className="sticky left-40 z-10 bg-gradient-to-b from-gray-50/50 to-gray-50/30 border-r border-gray-200/40 px-4 py-4 text-left font-medium text-xs text-gray-600 tracking-wide">
+            <th className="sticky left-32 z-10 bg-gradient-to-b from-gray-50/50 to-gray-50/30 border-r border-gray-200/40 px-4 py-4 text-left font-medium text-xs text-gray-600 tracking-wide">
               Detail
             </th>
             <th className="px-5 py-4 text-left font-medium text-xs text-gray-600 tracking-wide">Elevation</th>
@@ -369,13 +343,12 @@ export default function EstimatingGridCompact({
         <tbody className="divide-y divide-gray-100/60">
           {lines.length === 0 ? (
             <tr>
-              <td colSpan={14} className="px-4 py-8 text-center text-gray-500">
+              <td colSpan={13} className="px-4 py-8 text-center text-gray-500">
                 No lines yet. Click &quot;Add Line&quot; to get started.
               </td>
             </tr>
           ) : (
             lines.map((line) => {
-              const isExpanded = expandedRowId === line.id;
               const isEditing = editingId === line.id;
               // Merge editingLine with line for display when editing
               const displayLine = isEditing ? { ...line, ...editingLine } : line;
@@ -392,35 +365,15 @@ export default function EstimatingGridCompact({
                 : "-";
 
               return (
-                <>
-                  <tr
-                    id={`line-${line.id}`}
-                    key={line.id}
-                    className={`hover:bg-gray-50/50 transition-all duration-150 ${
-                      line.status === "Void" ? "opacity-40" : ""
-                    } ${isExpanded ? "bg-blue-50/50" : ""} ${
-                      isSmallPart ? "bg-blue-50/20" : ""
-                    }`}
-                  >
-                    {/* Expand/Collapse Button */}
-                    <td className={`sticky left-0 z-10 border-r border-gray-200/40 px-4 py-3 ${
-                      isSmallPart ? "bg-blue-50/20" : "bg-white"
-                    }`}>
-                      <button
-                        onClick={() => toggleRow(line.id || "")}
-                        className="p-1.5 hover:bg-gray-100 rounded-lg transition-all duration-150 active:scale-95"
-                        title={isExpanded ? "Collapse details" : "Expand details"}
-                      >
-                        {isExpanded ? (
-                          <ChevronDown className="w-4 h-4 text-gray-500" />
-                        ) : (
-                          <ChevronRight className="w-4 h-4 text-gray-500" />
-                        )}
-                      </button>
-                    </td>
-
+                <tr
+                  id={`line-${line.id}`}
+                  key={line.id}
+                  className={`hover:bg-gray-50/50 transition-all duration-150 ${
+                    line.status === "Void" ? "opacity-40" : ""
+                  } ${isSmallPart ? "bg-blue-50/20" : ""}`}
+                >
                     {/* Line ID */}
-                    <td className={`sticky left-12 z-10 border-r border-gray-200/40 px-4 py-3 font-medium text-gray-900 ${
+                    <td className={`sticky left-0 z-10 border-r border-gray-200/40 px-4 py-3 font-medium text-gray-900 ${
                       isSmallPart ? "bg-blue-50/20" : "bg-white"
                     }`}>
                       {isSmallPart && (
@@ -430,17 +383,57 @@ export default function EstimatingGridCompact({
                     </td>
 
                     {/* Drawing Number */}
-                    <td className={`sticky left-24 z-10 border-r border-gray-200/40 px-4 py-3 text-gray-700 ${
+                    <td className={`sticky left-20 z-10 border-r border-gray-200/40 px-4 py-3 text-gray-700 ${
                       isSmallPart ? "bg-blue-50/20" : "bg-white"
                     }`}>
-                      {line.drawingNumber || "-"}
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          value={displayLine.drawingNumber || ""}
+                          onChange={(e) => onChange("drawingNumber", e.target.value, line)}
+                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="Drawing #"
+                        />
+                      ) : (
+                        line.drawingNumber || "-"
+                      )}
                     </td>
 
                     {/* Detail Number */}
-                    <td className={`sticky left-40 z-10 border-r border-gray-200/40 px-4 py-3 text-gray-700 ${
+                    <td className={`sticky left-32 z-10 border-r border-gray-200/40 px-4 py-3 text-gray-700 ${
                       isSmallPart ? "bg-blue-50/20" : "bg-white"
                     }`}>
-                      {line.detailNumber || "-"}
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          value={displayLine.detailNumber || ""}
+                          onChange={(e) => onChange("detailNumber", e.target.value, line)}
+                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="Detail #"
+                        />
+                      ) : (
+                        line.detailNumber || "-"
+                      )}
+                    </td>
+
+                    {/* Item Description - moved here for better flow */}
+                    <td className="px-5 py-3 text-gray-700 min-w-[200px]">
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          value={displayLine.itemDescription || ""}
+                          onChange={(e) => onChange("itemDescription", e.target.value, line)}
+                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="Item description"
+                          id={`field-${line.id}-itemDescription`}
+                          data-field="itemDescription"
+                          data-line-id={line.id}
+                        />
+                      ) : (
+                        <span className="truncate block max-w-[200px]" title={line.itemDescription || ""}>
+                          {line.itemDescription || "-"}
+                        </span>
+                      )}
                     </td>
 
                     {/* Elevation */}
@@ -452,6 +445,9 @@ export default function EstimatingGridCompact({
                           onChange={(e) => onChange("elevation", e.target.value, line)}
                           className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                           placeholder="Elevation"
+                          id={`field-${line.id}-elevation`}
+                          data-field="elevation"
+                          data-line-id={line.id}
                         />
                       ) : (
                         displayLine.elevation || "-"
@@ -774,6 +770,23 @@ export default function EstimatingGridCompact({
                       ${(displayLine.totalCost || 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}
                     </td>
 
+                    {/* Item Description */}
+                    <td className="px-5 py-3 text-gray-700 min-w-[200px]">
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          value={displayLine.itemDescription || ""}
+                          onChange={(e) => onChange("itemDescription", e.target.value, line)}
+                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="Item description"
+                        />
+                      ) : (
+                        <span className="truncate block max-w-[200px]" title={line.itemDescription || ""}>
+                          {line.itemDescription || "-"}
+                        </span>
+                      )}
+                    </td>
+
                     {/* Hashtags */}
                     <td className="px-5 py-3 text-gray-700">{getHashtagsDisplay(displayLine.hashtags)}</td>
 
@@ -785,14 +798,14 @@ export default function EstimatingGridCompact({
                             <button
                               onClick={onSave}
                               className="p-1.5 text-green-600 hover:bg-green-50 rounded transition-colors"
-                              title="Save"
+                              title="Save (Enter)"
                             >
                               <Check className="w-4 h-4" />
                             </button>
                             <button
                               onClick={onCancel}
                               className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
-                              title="Cancel"
+                              title="Cancel (Esc)"
                             >
                               <X className="w-4 h-4" />
                             </button>
@@ -803,7 +816,7 @@ export default function EstimatingGridCompact({
                               <button
                                 onClick={() => onEdit(line)}
                                 className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                                title="Edit"
+                                title="Edit (Click row or press E)"
                               >
                                 <Edit className="w-4 h-4" />
                               </button>
@@ -827,32 +840,6 @@ export default function EstimatingGridCompact({
                       </div>
                     </td>
                   </tr>
-
-                  {/* Expanded Detail Panel */}
-                  {isExpanded && (
-                    <tr key={`${line.id}-detail`}>
-                      <td colSpan={14} className="px-0 py-0 bg-gray-50 border-b-2 border-gray-300">
-                        <EstimatingRowDetail
-                          line={line}
-                          editingId={editingId}
-                          editingLine={editingLine}
-                          isManualMode={isManualMode}
-                          defaultMaterialRate={defaultMaterialRate}
-                          defaultLaborRate={defaultLaborRate}
-                          defaultCoatingRate={defaultCoatingRate}
-                          companySettings={companySettings}
-                          projectSettings={projectSettings}
-                          lines={allLines}
-                          onEdit={onEdit}
-                          onSave={onSave}
-                          onCancel={onCancel}
-                          onChange={onChange}
-                          onCollapse={() => handleCollapse(line.id || "")}
-                        />
-                      </td>
-                    </tr>
-                  )}
-                </>
               );
             })
           )}
@@ -860,7 +847,7 @@ export default function EstimatingGridCompact({
           {/* Totals Row */}
           {lines.length > 0 && (
             <tr className="bg-gray-100 font-semibold border-t-2 border-gray-300">
-              <td colSpan={4} className="sticky left-0 z-10 bg-gray-100 border-r-2 border-gray-300 px-3 py-3 text-right">
+              <td colSpan={3} className="sticky left-0 z-10 bg-gray-100 border-r-2 border-gray-300 px-3 py-3 text-right">
                 TOTALS:
               </td>
               <td colSpan={4} className="px-4 py-3 border-r border-gray-200"></td>
