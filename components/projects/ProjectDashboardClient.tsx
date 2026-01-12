@@ -930,7 +930,7 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
                 >
                   <XCircle className="w-5 h-5" />
                 </Button>
-              </div>
+        </div>
               <div className="p-6">
                 <ProjectSettingsPanel companyId={validCompanyId || companyId} projectId={projectId} compact={false} />
               </div>

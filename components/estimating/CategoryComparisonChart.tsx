@@ -938,30 +938,30 @@ export default function CategoryComparisonChart({
 
             <div className="mt-2 space-y-1">
               <div className="flex items-center gap-3 text-xs mb-2 flex-wrap">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 px-2 py-1 rounded-md bg-blue-50 border border-blue-200">
                   <div className="w-4 h-4 rounded bg-blue-500 opacity-80"></div>
-                  <span className="text-gray-700">Current Project</span>
+                  <span className="text-blue-900 font-medium">Current Project</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded bg-blue-500 opacity-30"></div>
-                  <span className="text-gray-700">Company Average</span>
+                <div className="flex items-center gap-2 px-2 py-1 rounded-md bg-slate-50 border border-slate-200">
+                  <div className="w-4 h-4 rounded bg-slate-400 opacity-60"></div>
+                  <span className="text-slate-700 font-medium">Company Average</span>
                 </div>
                 {(wonLostAverageData.won.size > 0 || wonLostAverageData.lost.size > 0) && (
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded bg-black opacity-80"></div>
-                    <span className="text-gray-700">Won/Lost Average</span>
+                  <div className="flex items-center gap-2 px-2 py-1 rounded-md bg-gray-100 border border-gray-300">
+                    <div className="w-4 h-4 rounded bg-gray-800 opacity-90"></div>
+                    <span className="text-gray-800 font-medium">Won/Lost Average</span>
                   </div>
                 )}
               </div>
 
               {selectedMetric === "laborHoursPerTon" && coachSummary && (
-                <div className="mb-2 rounded-md border border-gray-200 bg-white p-2 text-xs text-gray-700 flex items-center justify-between gap-3">
+                <div className="mb-2 rounded-md border border-blue-200 bg-blue-50 p-2 text-xs text-blue-900 flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <span className="font-medium text-gray-900">Bid Coach signal:</span>{" "}
+                    <span className="font-medium text-blue-900">Bid Coach signal:</span>{" "}
                     Suggested add{" "}
-                    <span className="font-semibold text-gray-900">{coachSummary.totalHours.toFixed(0)}</span>{" "}
+                    <span className="font-semibold text-blue-900">{coachSummary.totalHours.toFixed(0)}</span>{" "}
                     hrs ({coachSummary.totalCost >= 0 ? "$" : "-$"}
-                    <span className="font-semibold text-gray-900">
+                    <span className="font-semibold text-blue-900">
                       {Math.abs(coachSummary.totalCost).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                     </span>
                     ) to align with history.
@@ -969,52 +969,73 @@ export default function CategoryComparisonChart({
                 </div>
               )}
                   <div className="grid grid-cols-1 gap-1.5 max-h-48 overflow-y-auto">
-                    {comparisonData.map((item) => (
-                      <div
-                        key={item.category}
-                        className="flex items-center justify-between p-2 rounded bg-gray-50 hover:bg-gray-100 transition-colors"
-                      >
-                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                          <div
-                            className="w-3 h-3 rounded flex-shrink-0"
-                            style={{ backgroundColor: item.color }}
-                          />
-                          <span className="text-sm font-medium text-gray-900 truncate">
-                            {item.label}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-3 text-xs">
-                          <span className="text-gray-600 w-16 text-right">
-                            {item.current.toFixed(2)}
-                          </span>
-                          <span className="text-gray-400">vs</span>
-                          <span className="text-gray-500 w-16 text-right">
-                            {item.average.toFixed(2)}
-                          </span>
-                          <div className="flex items-center gap-1 w-20 justify-end">
-                            {item.deviation > 5 ? (
-                              <TrendingUp className="w-4 h-4 text-red-500" />
-                            ) : item.deviation < -5 ? (
-                              <TrendingDown className="w-4 h-4 text-green-500" />
-                            ) : (
-                              <Minus className="w-4 h-4 text-gray-400" />
-                            )}
-                            <span
-                              className={`font-medium ${
-                                item.deviation > 5
-                                  ? "text-red-600"
-                                  : item.deviation < -5
-                                    ? "text-green-600"
-                                    : "text-gray-600"
-                              }`}
-                            >
-                              {item.deviation > 0 ? "+" : ""}
-                              {item.deviation.toFixed(1)}%
+                    {comparisonData.map((item) => {
+                      // Convert hex color to RGB for background tint
+                      const hexToRgb = (hex: string) => {
+                        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+                        return result
+                          ? {
+                              r: parseInt(result[1], 16),
+                              g: parseInt(result[2], 16),
+                              b: parseInt(result[3], 16),
+                            }
+                          : { r: 148, g: 163, b: 184 }; // fallback to slate-400
+                      };
+                      const rgb = hexToRgb(item.color);
+                      const bgColor = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.1)`;
+                      const borderColor = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.2)`;
+                      
+                      return (
+                        <div
+                          key={item.category}
+                          className="flex items-center justify-between p-2 rounded transition-colors border"
+                          style={{
+                            backgroundColor: bgColor,
+                            borderColor: borderColor,
+                          }}
+                        >
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <div
+                              className="w-3 h-3 rounded flex-shrink-0"
+                              style={{ backgroundColor: item.color }}
+                            />
+                            <span className="text-sm font-medium text-gray-900 truncate">
+                              {item.label}
                             </span>
                           </div>
+                          <div className="flex items-center gap-3 text-xs">
+                            <span className="text-gray-600 w-16 text-right">
+                              {item.current.toFixed(2)}
+                            </span>
+                            <span className="text-gray-400">vs</span>
+                            <span className="text-gray-500 w-16 text-right">
+                              {item.average.toFixed(2)}
+                            </span>
+                            <div className="flex items-center gap-1 w-20 justify-end">
+                              {item.deviation > 5 ? (
+                                <TrendingUp className="w-4 h-4 text-red-500" />
+                              ) : item.deviation < -5 ? (
+                                <TrendingDown className="w-4 h-4 text-green-500" />
+                              ) : (
+                                <Minus className="w-4 h-4 text-gray-400" />
+                              )}
+                              <span
+                                className={`font-medium ${
+                                  item.deviation > 5
+                                    ? "text-red-600"
+                                    : item.deviation < -5
+                                      ? "text-green-600"
+                                      : "text-gray-600"
+                                }`}
+                              >
+                                {item.deviation > 0 ? "+" : ""}
+                                {item.deviation.toFixed(1)}%
+                              </span>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
               <div className="mt-4 pt-4 border-t border-gray-200 text-xs text-gray-600">
                 <div className="flex items-center justify-between">
@@ -1105,9 +1126,15 @@ export default function CategoryComparisonChart({
                 <>
                   {/* Summary */}
                   {coachSummary && (
-                    <div className="rounded-md border border-gray-200 bg-gray-50 p-2.5 text-xs">
-                      <div className="font-medium text-gray-900 mb-1">Suggested Adjustment</div>
-                      <div className="text-gray-700">
+                    <div className={`rounded-md border p-2.5 text-xs ${
+                      coachMode === "protect" 
+                        ? "border-blue-200 bg-blue-50 text-blue-900" 
+                        : "border-purple-200 bg-purple-50 text-purple-900"
+                    }`}>
+                      <div className={`font-medium mb-1 ${
+                        coachMode === "protect" ? "text-blue-900" : "text-purple-900"
+                      }`}>Suggested Adjustment</div>
+                      <div className={coachMode === "protect" ? "text-blue-800" : "text-purple-800"}>
                         Add <span className="font-semibold">{coachSummary.totalHours.toFixed(0)}</span> hours ({coachSummary.totalCost >= 0 ? "$" : "-$"}
                         <span className="font-semibold">
                           {Math.abs(coachSummary.totalCost).toLocaleString(undefined, { maximumFractionDigits: 0 })}
@@ -1150,55 +1177,85 @@ export default function CategoryComparisonChart({
 
                   {/* Recommendations List */}
                   <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                    {coachRecommendations.map((r) => (
-                      <div key={r.id} className="rounded-md border border-gray-200 p-2.5 bg-white hover:bg-gray-50 transition-colors">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0 flex-1">
-                            <label className="flex items-start gap-2 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                className="mt-0.5"
-                                checked={selectedCoachCategories[r.categoryKey] !== false}
-                                onChange={(e) =>
-                                  setSelectedCoachCategories((prev) => ({
-                                    ...prev,
-                                    [r.categoryKey]: e.target.checked,
-                                  }))
-                                }
-                              />
-                              <div className="flex-1 min-w-0">
-                                <span className="text-xs font-semibold text-gray-900 truncate block">
-                                  {r.label}
-                                </span>
-                                <div className="text-[11px] text-gray-600 mt-0.5">
-                                  +{r.deltaPerTon.toFixed(2)} MH/Ton to {r.targetLabel}
+                    {coachRecommendations.map((r) => {
+                      const categoryColor = LABOR_COLORS[r.categoryKey] || "#94a3b8";
+                      const hexToRgb = (hex: string) => {
+                        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+                        return result
+                          ? {
+                              r: parseInt(result[1], 16),
+                              g: parseInt(result[2], 16),
+                              b: parseInt(result[3], 16),
+                            }
+                          : { r: 148, g: 163, b: 184 };
+                      };
+                      const rgb = hexToRgb(categoryColor);
+                      const bgColor = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.08)`;
+                      const borderColor = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.25)`;
+                      
+                      return (
+                        <div 
+                          key={r.id} 
+                          className="rounded-md border p-2.5 transition-colors"
+                          style={{
+                            backgroundColor: bgColor,
+                            borderColor: borderColor,
+                          }}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <label className="flex items-start gap-2 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  className="mt-0.5"
+                                  checked={selectedCoachCategories[r.categoryKey] !== false}
+                                  onChange={(e) =>
+                                    setSelectedCoachCategories((prev) => ({
+                                      ...prev,
+                                      [r.categoryKey]: e.target.checked,
+                                    }))
+                                  }
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <div
+                                      className="w-2.5 h-2.5 rounded flex-shrink-0"
+                                      style={{ backgroundColor: categoryColor }}
+                                    />
+                                    <span className="text-xs font-semibold text-gray-900 truncate block">
+                                      {r.label}
+                                    </span>
+                                  </div>
+                                  <div className="text-[11px] text-gray-600 mt-0.5">
+                                    +{r.deltaPerTon.toFixed(2)} MH/Ton to {r.targetLabel}
+                                  </div>
                                 </div>
+                              </label>
+                              <div className="mt-1.5 flex items-center gap-2">
+                                <span
+                                  className={`text-[10px] px-1.5 py-0.5 rounded border ${
+                                    r.confidence === "high"
+                                      ? "bg-green-50 border-green-200 text-green-700"
+                                      : r.confidence === "medium"
+                                        ? "bg-amber-50 border-amber-200 text-amber-700"
+                                        : "bg-gray-50 border-gray-200 text-gray-700"
+                                  }`}
+                                >
+                                  {r.confidence}
+                                </span>
+                                <span className="text-[11px] text-gray-600">
+                                  ~{r.totalDeltaHours.toFixed(0)} hrs ({r.estCostImpact >= 0 ? "$" : "-$"}
+                                  {Math.abs(r.estCostImpact).toLocaleString(undefined, { maximumFractionDigits: 0 })})
+                                </span>
                               </div>
-                            </label>
-                            <div className="mt-1.5 flex items-center gap-2">
-                              <span
-                                className={`text-[10px] px-1.5 py-0.5 rounded border ${
-                                  r.confidence === "high"
-                                    ? "bg-green-50 border-green-200 text-green-700"
-                                    : r.confidence === "medium"
-                                      ? "bg-amber-50 border-amber-200 text-amber-700"
-                                      : "bg-gray-50 border-gray-200 text-gray-700"
-                                }`}
-                              >
-                                {r.confidence}
-                              </span>
-                              <span className="text-[11px] text-gray-600">
-                                ~{r.totalDeltaHours.toFixed(0)} hrs ({r.estCostImpact >= 0 ? "$" : "-$"}
-                                {Math.abs(r.estCostImpact).toLocaleString(undefined, { maximumFractionDigits: 0 })})
-                              </span>
-                            </div>
-                            <div className="mt-1 text-[11px] text-gray-500">
-                              {r.rationale}
+                              <div className="mt-1 text-[11px] text-gray-500">
+                                {r.rationale}
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   {/* Apply Button */}

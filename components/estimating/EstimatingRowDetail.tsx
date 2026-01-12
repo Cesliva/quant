@@ -632,18 +632,17 @@ export default function EstimatingRowDetail({
   }
 
   return (
-    <div className="p-6 space-y-6 relative">
+    <div className="p-4 md:p-6 space-y-4 md:space-y-6 relative max-w-full overflow-x-hidden">
       {/* Top Collapse Button */}
       {onCollapse && (
-        <div className="sticky top-0 z-20 -mt-6 -mx-6 mb-4 pb-2 bg-gradient-to-b from-white via-gray-50/80 to-transparent">
+        <div className="sticky top-0 z-20 -mt-6 -mx-6 mb-4 pb-2 bg-gradient-to-b from-white via-white/95 to-transparent">
           <button
             onClick={onCollapse}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-b-xl shadow-lg hover:shadow-xl transition-all duration-200 font-semibold text-sm border-2 border-blue-500"
-            title="Click to collapse and roll up this detail view"
+            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 text-gray-600 hover:text-gray-800 bg-gray-50/80 hover:bg-gray-100/90 rounded-lg transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-md border border-gray-200/60"
+            title="Collapse detail view"
           >
-            <ChevronUp className="w-5 h-5" />
-            <span>Roll Up Detail View</span>
-            <ChevronUp className="w-5 h-5" />
+            <ChevronUp className="w-4 h-4" />
+            <span>Collapse</span>
           </button>
         </div>
       )}
@@ -671,7 +670,7 @@ export default function EstimatingRowDetail({
       <div className="space-y-6">
         {/* Identification Section - Full Width */}
         <div className="space-y-4">
-          <h4 className="font-semibold text-gray-900 border-b border-gray-200 pb-2">Identification</h4>
+          <h4 className="font-semibold text-gray-700 bg-gray-50/80 rounded-lg px-4 py-2.5 mb-4 shadow-sm border border-gray-200/60">Identification</h4>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -1015,7 +1014,7 @@ export default function EstimatingRowDetail({
             (isEditing ? editingLine.miscMethod : line.miscMethod) === "DETAILED") && (
 
             <div className="space-y-4">
-              <h4 className="font-semibold text-gray-900 border-b border-gray-200 pb-2">
+              <h4 className="font-semibold text-gray-700 bg-gray-50/80 rounded-lg px-4 py-2.5 mb-4 shadow-sm border border-gray-200/60">
                 Material {((isEditing ? editingLine.workType : line.workType) === "MISC") && "(Detailed Mode)"}
               </h4>
             <div className="grid grid-cols-2 gap-4">
@@ -1115,7 +1114,7 @@ export default function EstimatingRowDetail({
                 
                 {/* Condensed Summary Fields */}
                 <div className="mt-4 pt-4 border-t border-gray-200">
-                  <div className="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">Calculated Values</div>
+                  <div className="text-sm font-semibold text-gray-700 bg-gray-50/80 rounded-lg px-4 py-2.5 mb-3 shadow-sm border border-gray-200/60 uppercase tracking-wide">Calculated Values</div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="bg-gray-50 rounded-lg p-2">
                       <div className="text-[10px] text-gray-500 mb-0.5">Weight per Foot</div>
@@ -1149,9 +1148,9 @@ export default function EstimatingRowDetail({
                   <button
                     type="button"
                     onClick={() => setHardwareExpanded(!hardwareExpanded)}
-                    className="flex items-center justify-between w-full mb-2 p-2 hover:bg-gray-50 rounded-lg transition-colors"
+                    className="flex items-center justify-between w-full mb-3 bg-gray-50/80 rounded-lg px-4 py-2.5 shadow-sm border border-gray-200/60 hover:bg-gray-100/90 transition-all"
                   >
-                    <h4 className="font-semibold text-gray-900 flex items-center gap-2">
+                    <h4 className="font-semibold text-gray-700 flex items-center gap-2">
                       <Wrench className="w-4 h-4 text-orange-600" />
                       Hardware
                     </h4>
@@ -1484,7 +1483,7 @@ export default function EstimatingRowDetail({
         {/* Material Section - Plate */}
         {materialType === "Plate" && (
           <div className="space-y-4">
-            <h4 className="font-semibold text-gray-900 border-b border-gray-200 pb-2">Plate Material</h4>
+            <h4 className="font-semibold text-gray-700 bg-gray-50/80 rounded-lg px-4 py-2.5 mb-4 shadow-sm border border-gray-200/60">Plate Material</h4>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -1599,9 +1598,9 @@ export default function EstimatingRowDetail({
               <button
                 type="button"
                 onClick={() => setHardwareExpanded(!hardwareExpanded)}
-                className="flex items-center justify-between w-full mb-2 p-2 hover:bg-gray-50 rounded-lg transition-colors"
+                className="flex items-center justify-between w-full mb-3 bg-gray-50/80 rounded-lg px-4 py-2.5 shadow-sm border border-gray-200/60 hover:bg-gray-100/90 transition-all"
               >
-                <h4 className="font-semibold text-gray-900 flex items-center gap-2">
+                <h4 className="font-semibold text-gray-700 flex items-center gap-2">
                   <Wrench className="w-4 h-4 text-orange-600" />
                   Hardware
                 </h4>
@@ -1787,7 +1786,7 @@ export default function EstimatingRowDetail({
 
         {/* Coating Section */}
         <div className="space-y-4">
-          <h4 className="font-semibold text-gray-900 border-b border-gray-200 pb-2">Coating</h4>
+          <h4 className="font-semibold text-gray-700 bg-gray-50/80 rounded-lg px-4 py-2.5 mb-4 shadow-sm border border-gray-200/60">Coating</h4>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
               <span className="text-blue-600 font-bold">{getNumberFromField("sspcPrep")}.</span> SSPC Surface Prep
@@ -1805,7 +1804,7 @@ export default function EstimatingRowDetail({
         {/* Labor Section */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h4 className="font-semibold text-gray-900 border-b border-gray-200 pb-2 flex-1">Labor Breakdown</h4>
+            <h4 className="font-semibold text-gray-700 bg-gray-50/80 rounded-lg px-4 py-2.5 mb-4 shadow-sm border border-gray-200/60 flex-1">Labor Breakdown</h4>
           </div>
           
           {/* Instructions */}
@@ -2127,7 +2126,7 @@ export default function EstimatingRowDetail({
 
         {/* Cost Section */}
         <div className="space-y-4">
-          <h4 className="font-semibold text-gray-900 border-b border-gray-200 pb-2">Cost Breakdown</h4>
+          <h4 className="font-semibold text-gray-700 bg-gray-50/80 rounded-lg px-4 py-2.5 mb-4 shadow-sm border border-gray-200/60">Cost Breakdown</h4>
           <div className="grid grid-cols-2 gap-4">
             {/* Material Rate */}
             <div>
@@ -2382,7 +2381,7 @@ export default function EstimatingRowDetail({
 
         {/* Admin Section */}
         <div className="space-y-4">
-          <h4 className="font-semibold text-gray-900 border-b border-gray-200 pb-2">Admin & Notes</h4>
+          <h4 className="font-semibold text-gray-700 bg-gray-50/80 rounded-lg px-4 py-2.5 mb-4 shadow-sm border border-gray-200/60">Admin & Notes</h4>
           <div className="space-y-4">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -2493,15 +2492,14 @@ export default function EstimatingRowDetail({
 
       {/* Bottom Collapse Button */}
       {onCollapse && (
-        <div className="sticky bottom-0 z-20 -mb-6 -mx-6 mt-4 pt-2 bg-gradient-to-t from-white via-gray-50/80 to-transparent">
+        <div className="sticky bottom-0 z-20 -mb-6 -mx-6 mt-4 pt-2 bg-gradient-to-t from-white via-white/95 to-transparent">
           <button
             onClick={onCollapse}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-t-xl shadow-lg hover:shadow-xl transition-all duration-200 font-semibold text-sm border-2 border-blue-500"
-            title="Click to collapse and roll up this detail view"
+            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 text-gray-600 hover:text-gray-800 bg-gray-50/80 hover:bg-gray-100/90 rounded-lg transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-md border border-gray-200/60"
+            title="Collapse detail view"
           >
-            <ChevronDown className="w-5 h-5" />
-            <span>Roll Up Detail View</span>
-            <ChevronDown className="w-5 h-5" />
+            <ChevronDown className="w-4 h-4" />
+            <span>Collapse</span>
           </button>
         </div>
       )}

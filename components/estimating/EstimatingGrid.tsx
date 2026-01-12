@@ -320,6 +320,25 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
     // Show last 5 entries
     return allDisplayLines.slice(-5);
   }, [allDisplayLines, showAllLines]);
+
+  // Auto-scroll to bottom when showing last 5 entries (default view)
+  const gridContainerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!showAllLines && allDisplayLines.length > 5 && displayLines.length === 5) {
+      // Small delay to ensure DOM is updated with the last 5 entries
+      const timeoutId = setTimeout(() => {
+        if (gridContainerRef.current) {
+          // Find the scrollable container inside EstimatingGridCompact
+          const scrollableArea = gridContainerRef.current.querySelector('div[class*="overflow-y-auto"]') as HTMLElement;
+          if (scrollableArea) {
+            // Scroll to bottom to show the last 5 entries
+            scrollableArea.scrollTop = scrollableArea.scrollHeight;
+          }
+        }
+      }, 150);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [showAllLines, allDisplayLines.length, displayLines.length]);
   
   // Handle sort change
   const handleSortChange = (field: string) => {
@@ -1346,9 +1365,9 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
       ];
 
   return (
-    <div className="space-y-6">
-      {/* Apple-style Action Bar */}
-      <div className="flex items-center justify-between">
+    <div className="flex flex-col h-full min-h-0">
+      {/* Apple-style Action Bar - Compact */}
+      <div className="flex items-center justify-between flex-shrink-0 mb-3">
         <div className="flex items-center gap-2">
           {/* CSV Actions Group */}
           <div className="flex items-center gap-1.5 px-2 py-1.5 bg-gray-50/80 rounded-2xl border border-gray-200/60 backdrop-blur-sm">
@@ -1456,7 +1475,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
         </div>
       </div>
 
-      <Card>
+      <Card ref={gridContainerRef} className="flex flex-col">
         <EstimatingGridCompact
           lines={displayLines}
           allLines={lines}

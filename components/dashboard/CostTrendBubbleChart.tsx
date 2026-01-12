@@ -1177,8 +1177,26 @@ export default function CostTrendBubbleChart({
         
         {/* Modal Popup (appears on click) */}
         {selectedCategory && categoryComparison && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedCategory(null)}>
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div 
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" 
+            onClick={(e) => {
+              // Only close if clicking directly on the backdrop, not on child elements
+              if (e.target === e.currentTarget) {
+                setSelectedCategory(null);
+              }
+            }}
+            onMouseDown={(e) => {
+              // Prevent closing on mouse down events
+              if (e.target === e.currentTarget) {
+                e.preventDefault();
+              }
+            }}
+          >
+            <div 
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto" 
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
               <div className="p-6">
                 <div className="flex items-center justify-between mb-6">
                   <div>

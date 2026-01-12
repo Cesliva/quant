@@ -685,39 +685,39 @@ export default function EstimatorHealthPanel({
       </div>
 
       {/* Key metrics - 3 clean cards */}
-      <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-slate-50 rounded-xl p-5 border border-slate-100">
-          <div className="text-sm font-medium text-slate-500">Estimate Total</div>
-          <div className="mt-2 text-3xl font-semibold text-slate-900 tabular-nums">{formatMoney(model.totalCost)}</div>
-          <div className="mt-1 text-sm text-slate-500">{formatNumber(model.totalHours, 0)} labor hours</div>
+      <div className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
+        <div className="rounded-3xl p-4 md:p-6 text-white border border-white/10 shadow-[0_4px_6px_-1px_rgb(0,0,0,0.2),0_2px_4px_-2px_rgb(0,0,0,0.2),0_12px_24px_0_rgb(0,0,0,0.15)] hover:shadow-[0_8px_12px_-2px_rgb(0,0,0,0.25),0_4px_6px_-3px_rgb(0,0,0,0.25),0_16px_32px_0_rgb(0,0,0,0.2)] transition-all duration-300 hover:-translate-y-1 bg-blue-500">
+          <p className="uppercase text-xs tracking-[0.18em] opacity-80 mb-2">Estimate Total</p>
+          <p className="text-4xl md:text-5xl font-semibold leading-none mb-2 tabular-nums">{formatMoney(model.totalCost).replace("$", "$").split(".")[0]}</p>
+          <p className="text-sm opacity-85">{formatNumber(model.totalHours, 0)} labor hours</p>
         </div>
 
-        <div className="bg-slate-50 rounded-xl p-5 border border-slate-100">
-          <div className="text-sm font-medium text-slate-500">Cost per Ton</div>
-          <div className="mt-2 text-3xl font-semibold text-slate-900 tabular-nums">{formatMoney(model.costPerTon)}</div>
-          <div className="mt-1 text-sm text-slate-500">
+        <div className="rounded-3xl p-4 md:p-6 text-white border border-white/10 shadow-[0_4px_6px_-1px_rgb(0,0,0,0.2),0_2px_4px_-2px_rgb(0,0,0,0.2),0_12px_24px_0_rgb(0,0,0,0.15)] hover:shadow-[0_8px_12px_-2px_rgb(0,0,0,0.25),0_4px_6px_-3px_rgb(0,0,0,0.25),0_16px_32px_0_rgb(0,0,0,0.2)] transition-all duration-300 hover:-translate-y-1 bg-emerald-500">
+          <p className="uppercase text-xs tracking-[0.18em] opacity-80 mb-2">Cost per Ton</p>
+          <p className="text-4xl md:text-5xl font-semibold leading-none mb-2 tabular-nums">{formatMoney(model.costPerTon).replace("$", "$").split(".")[0]}</p>
+          <p className="text-sm opacity-85">
             {model.costPerTon > model.baseline.costPerTon.p50 ? (
-              <span className="text-amber-600">↑ {((model.costPerTon / model.baseline.costPerTon.p50 - 1) * 100).toFixed(0)}% above baseline</span>
+              <span>↑ {((model.costPerTon / model.baseline.costPerTon.p50 - 1) * 100).toFixed(0)}% above baseline</span>
             ) : model.costPerTon < model.baseline.costPerTon.p50 ? (
-              <span className="text-emerald-600">↓ {((1 - model.costPerTon / model.baseline.costPerTon.p50) * 100).toFixed(0)}% below baseline</span>
+              <span>↓ {((1 - model.costPerTon / model.baseline.costPerTon.p50) * 100).toFixed(0)}% below baseline</span>
             ) : (
               <span>At baseline median</span>
             )}
-          </div>
+          </p>
         </div>
 
-        <div className="bg-slate-50 rounded-xl p-5 border border-slate-100">
-          <div className="text-sm font-medium text-slate-500">Hours per Ton</div>
-          <div className="mt-2 text-3xl font-semibold text-slate-900 tabular-nums">{formatNumber(model.hoursPerTon, 1)}</div>
-          <div className="mt-1 text-sm text-slate-500">
+        <div className="rounded-3xl p-4 md:p-6 text-white border border-white/10 shadow-[0_4px_6px_-1px_rgb(0,0,0,0.2),0_2px_4px_-2px_rgb(0,0,0,0.2),0_12px_24px_0_rgb(0,0,0,0.15)] hover:shadow-[0_8px_12px_-2px_rgb(0,0,0,0.25),0_4px_6px_-3px_rgb(0,0,0,0.25),0_16px_32px_0_rgb(0,0,0,0.2)] transition-all duration-300 hover:-translate-y-1 bg-orange-500">
+          <p className="uppercase text-xs tracking-[0.18em] opacity-80 mb-2">Hours per Ton</p>
+          <p className="text-4xl md:text-5xl font-semibold leading-none mb-2 tabular-nums">{formatNumber(model.hoursPerTon, 1)}</p>
+          <p className="text-sm opacity-85">
             {model.hoursPerTon > model.baseline.hoursPerTon.p50 ? (
-              <span className="text-amber-600">↑ {((model.hoursPerTon / model.baseline.hoursPerTon.p50 - 1) * 100).toFixed(0)}% above baseline</span>
+              <span>↑ {((model.hoursPerTon / model.baseline.hoursPerTon.p50 - 1) * 100).toFixed(0)}% above baseline</span>
             ) : model.hoursPerTon < model.baseline.hoursPerTon.p50 ? (
-              <span className="text-emerald-600">↓ {((1 - model.hoursPerTon / model.baseline.hoursPerTon.p50) * 100).toFixed(0)}% below baseline</span>
+              <span>↓ {((1 - model.hoursPerTon / model.baseline.hoursPerTon.p50) * 100).toFixed(0)}% below baseline</span>
             ) : (
               <span>At baseline median</span>
             )}
-          </div>
+          </p>
         </div>
       </div>
 

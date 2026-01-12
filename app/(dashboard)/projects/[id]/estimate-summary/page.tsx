@@ -469,54 +469,40 @@ export default function EstimateSummaryPage() {
         </div>
 
         {/* KPI Cards - Real-time totals */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
-            <div className="p-5">
-              <div className="text-xs font-semibold uppercase tracking-wide text-blue-600 mb-1">
-                Total Project Cost
-              </div>
-              <div className="text-3xl font-bold text-blue-900 tabular-nums">
-                {formatMoney(totals.totalWithMarkup)}
-              </div>
-              <div className="text-sm text-blue-700 mt-2">
-                Including overhead & profit
-              </div>
-            </div>
-          </Card>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-4 md:mb-6">
+          <div className="rounded-3xl p-4 md:p-6 text-white border border-white/10 shadow-[0_4px_6px_-1px_rgb(0,0,0,0.2),0_2px_4px_-2px_rgb(0,0,0,0.2),0_12px_24px_0_rgb(0,0,0,0.15)] hover:shadow-[0_8px_12px_-2px_rgb(0,0,0,0.25),0_4px_6px_-3px_rgb(0,0,0,0.25),0_16px_32px_0_rgb(0,0,0,0.2)] transition-all duration-300 hover:-translate-y-1 bg-blue-500">
+            <p className="uppercase text-xs tracking-[0.18em] opacity-80 mb-2">Total Project Cost</p>
+            <p className="text-4xl md:text-5xl font-semibold leading-none mb-2 tabular-nums">
+              {formatMoney(totals.totalWithMarkup).replace("$", "$").split(".")[0]}
+            </p>
+            <p className="text-sm opacity-85">Including overhead & profit</p>
+          </div>
 
-          <Card className="bg-gradient-to-br from-emerald-50 to-emerald-100 border-emerald-200">
-            <div className="p-5">
-              <div className="text-xs font-semibold uppercase tracking-wide text-emerald-600 mb-1">
-                Cost per Ton
-              </div>
-              <div className="text-3xl font-bold text-emerald-900 tabular-nums">
-                {formatMoney(totals.costPerTon)}
-              </div>
-              <div className="text-sm text-emerald-700 mt-2">
-                {formatNumber(totals.weight / 2000, 1)} tons total
-              </div>
-            </div>
-          </Card>
+          <div className="rounded-3xl p-4 md:p-6 text-white border border-white/10 shadow-[0_4px_6px_-1px_rgb(0,0,0,0.2),0_2px_4px_-2px_rgb(0,0,0,0.2),0_12px_24px_0_rgb(0,0,0,0.15)] hover:shadow-[0_8px_12px_-2px_rgb(0,0,0,0.25),0_4px_6px_-3px_rgb(0,0,0,0.25),0_16px_32px_0_rgb(0,0,0,0.2)] transition-all duration-300 hover:-translate-y-1 bg-emerald-500">
+            <p className="uppercase text-xs tracking-[0.18em] opacity-80 mb-2">Cost per Ton</p>
+            <p className="text-4xl md:text-5xl font-semibold leading-none mb-2 tabular-nums">
+              {formatMoney(totals.costPerTon).replace("$", "$").split(".")[0]}
+            </p>
+            <p className="text-sm opacity-85">{formatNumber(totals.weight / 2000, 1)} tons total</p>
+          </div>
 
-          <Card className="bg-gradient-to-br from-amber-50 to-amber-100 border-amber-200">
-            <div className="p-5">
-              <div className="text-xs font-semibold uppercase tracking-wide text-amber-600 mb-1">
-                Hours per Ton
-              </div>
-              <div className="text-3xl font-bold text-amber-900 tabular-nums">
-                {formatNumber(totals.hoursPerTon, 1)}
-              </div>
-              <div className="text-sm text-amber-700 mt-2">
-                {formatNumber(totals.laborHours, 0)} total hours
-              </div>
-            </div>
-          </Card>
+          <div className="rounded-3xl p-4 md:p-6 text-white border border-white/10 shadow-[0_4px_6px_-1px_rgb(0,0,0,0.2),0_2px_4px_-2px_rgb(0,0,0,0.2),0_12px_24px_0_rgb(0,0,0,0.15)] hover:shadow-[0_8px_12px_-2px_rgb(0,0,0,0.25),0_4px_6px_-3px_rgb(0,0,0,0.25),0_16px_32px_0_rgb(0,0,0,0.2)] transition-all duration-300 hover:-translate-y-1 bg-orange-500">
+            <p className="uppercase text-xs tracking-[0.18em] opacity-80 mb-2">Hours per Ton</p>
+            <p className="text-4xl md:text-5xl font-semibold leading-none mb-2 tabular-nums">
+              {formatNumber(totals.hoursPerTon, 1)}
+            </p>
+            <p className="text-sm opacity-85">{formatNumber(totals.laborHours, 0)} total hours</p>
+          </div>
 
-          <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
-            <div className="p-5">
-              <div className="text-xs font-semibold uppercase tracking-wide text-purple-600 mb-1">
-                Profit Margin
-              </div>
+          <div className="rounded-3xl p-4 md:p-6 text-white border border-white/10 shadow-[0_4px_6px_-1px_rgb(0,0,0,0.2),0_2px_4px_-2px_rgb(0,0,0,0.2),0_12px_24px_0_rgb(0,0,0,0.15)] hover:shadow-[0_8px_12px_-2px_rgb(0,0,0,0.25),0_4px_6px_-3px_rgb(0,0,0,0.25),0_16px_32px_0_rgb(0,0,0,0.2)] transition-all duration-300 hover:-translate-y-1 bg-purple-500">
+            <p className="uppercase text-xs tracking-[0.18em] opacity-80 mb-2">Profit Margin</p>
+            <p className="text-4xl md:text-5xl font-semibold leading-none mb-2 tabular-nums">
+              {totals.totalWithMarkup > 0 
+                ? formatNumber((totals.profit / totals.totalWithMarkup) * 100, 1)
+                : "0.0"}%
+            </p>
+            <p className="text-sm opacity-85">{formatMoney(totals.profit)} profit</p>
+          </div>
               <div className="text-3xl font-bold text-purple-900 tabular-nums">
                 {totals.totalWithMarkup > 0 
                   ? formatNumber((totals.profit / totals.totalWithMarkup) * 100, 1)
