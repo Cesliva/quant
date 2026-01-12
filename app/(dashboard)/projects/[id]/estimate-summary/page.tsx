@@ -503,16 +503,6 @@ export default function EstimateSummaryPage() {
             </p>
             <p className="text-sm opacity-85">{formatMoney(totals.profit)} profit</p>
           </div>
-              <div className="text-3xl font-bold text-purple-900 tabular-nums">
-                {totals.totalWithMarkup > 0 
-                  ? formatNumber((totals.profit / totals.totalWithMarkup) * 100, 1)
-                  : "0.0"}%
-              </div>
-              <div className="text-sm text-purple-700 mt-2">
-                {formatMoney(totals.profit)} profit
-              </div>
-            </div>
-          </Card>
         </div>
 
         {/* Adjustable Parameters */}
