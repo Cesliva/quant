@@ -21,6 +21,7 @@ import { useCompanyId } from "@/lib/hooks/useCompanyId";
 import { UserPresence } from "@/components/collaboration/UserPresence";
 import { logActivity } from "@/lib/utils/activityLogger";
 import ProposalSeedsCard from "@/components/estimating/ProposalSeedsCard";
+import ProjectBubbleChart from "@/components/estimating/ProjectBubbleChart";
 
 export default function EstimatingPage() {
   const params = useParams();
@@ -35,6 +36,7 @@ export default function EstimatingPage() {
   const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
   const [selectedLineId, setSelectedLineId] = useState<string | null>(lineIdFromUrl || null);
   const [addLineHandler, setAddLineHandler] = useState<(() => void) | null>(null);
+  const [selectedMetric, setSelectedMetric] = useState<"laborHoursPerTon" | "costPerTon">("laborHoursPerTon");
 
   // Load company settings
   useEffect(() => {
@@ -170,6 +172,20 @@ export default function EstimatingPage() {
           lines={lines}
         />
       </div>
+
+      {/* Real-time Bubble Chart Feedback */}
+      {lines.length > 0 && (
+        <div className="flex-shrink-0 mt-6">
+          <ProjectBubbleChart
+            lines={lines}
+            companyId={companyId}
+            projectName={projectName}
+            currentProjectId={projectId}
+            selectedMetric={selectedMetric}
+            onMetricChange={setSelectedMetric}
+          />
+        </div>
+      )}
       </div>
     </div>
   );

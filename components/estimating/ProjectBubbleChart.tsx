@@ -844,6 +844,16 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
       return projectStatusMap.get(p.projectId) === "lost";
     });
 
+    // Calculate lost percentage (percentage of all projects that are lost)
+    const totalProjectsWithStatus = allProjects.filter(p => {
+      if (currentProjectId && p.id === currentProjectId) return false;
+      const status = projectStatusMap.get(p.id);
+      return status === "won" || status === "lost";
+    }).length;
+    const lostPercentage = totalProjectsWithStatus > 0 
+      ? (lostProjects.length / totalProjectsWithStatus) * 100 
+      : 0;
+
     return {
       category: selectedCategory,
       label: LABOR_CATEGORIES.find(c => c.key === selectedCategory)?.label || selectedCategory,
@@ -854,6 +864,7 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
       allCount: allProjectsCount,
       wonCount: wonProjects.length,
       lostCount: lostProjects.length,
+      lostPercentage: lostPercentage,
     };
   }, [selectedCategory, bubbleData, averageData, wonLostAverageData, allProjectLines, allProjects, currentProjectId]);
 
@@ -1148,7 +1159,7 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     {/* Current Project */}
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-5">
                       <div className="flex items-center gap-2 mb-2">
@@ -1193,6 +1204,51 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
                       </div>
                     )}
 
+                    {/* Lost Average */}
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-5">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-3 h-3 rounded-full bg-red-600"></div>
+                        <span className="text-sm font-semibold text-slate-900">Lost Average</span>
+                        {categoryComparison.lostCount > 0 ? (
+                          <span className="text-xs text-slate-500">({categoryComparison.lostCount})</span>
+                        ) : (
+                          <span className="text-xs text-slate-400">(No data)</span>
+                        )}
+                      </div>
+                      {categoryComparison.lostCount > 0 && categoryComparison.lostAverage > 0 ? (
+                        <>
+                          <div className="flex items-center gap-2 mb-2">
+                            {categoryComparison.current > categoryComparison.lostAverage ? (
+                              <TrendingUp className="w-4 h-4 text-red-600" />
+                            ) : (
+                              <TrendingDown className="w-4 h-4 text-emerald-600" />
+                            )}
+                            <span className="text-xs text-slate-600">
+                              {categoryComparison.current > categoryComparison.lostAverage ? (
+                                <span className="text-red-700 font-medium">
+                                  {((categoryComparison.current / categoryComparison.lostAverage - 1) * 100).toFixed(1)}% above
+                                </span>
+                              ) : (
+                                <span className="text-emerald-700">
+                                  {((1 - categoryComparison.current / categoryComparison.lostAverage) * 100).toFixed(1)}% below
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                          <p className="text-2xl font-bold text-red-900 tabular-nums">
+                            {categoryComparison.lostAverage.toFixed(2)} {selectedMetric === "laborHoursPerTon" ? "MH/T" : "$/T"}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-sm text-slate-400 italic">No lost projects data available</p>
+                      )}
+                      <div className="mt-2 pt-2 border-t border-red-200">
+                        <p className="text-xs text-red-700">
+                          <span className="font-semibold">Lost Rate:</span> {categoryComparison.lostPercentage.toFixed(1)}% of projects
+                        </p>
+                      </div>
+                    </div>
+
                     {/* All Average */}
                     {categoryComparison.allCount > 0 && (
                       <div className="bg-slate-50 border border-slate-200 rounded-lg p-5">
@@ -1228,10 +1284,16 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
 
                   {/* Insight */}
                   <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
-                    <p className="text-sm text-slate-700">
+                    <p className="text-sm text-slate-700 mb-2">
                       <strong className="text-slate-900">Live Control Panel:</strong> This comparison updates in real-time as projects are estimated. 
                       Use won/lost averages to identify competitive positioning and adjust estimates accordingly.
                     </p>
+                    {categoryComparison.lostCount > 0 && (
+                      <p className="text-sm text-slate-700">
+                        <strong className="text-slate-900">Lost Rate Warning:</strong> {categoryComparison.lostPercentage.toFixed(1)}% of historical projects were lost. 
+                        If your current estimate is approaching or exceeding the lost average, consider adjusting to improve win probability.
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
