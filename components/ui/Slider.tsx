@@ -66,7 +66,7 @@ export function Slider({
   return (
     <div
       ref={sliderRef}
-      className={`relative h-2 bg-slate-200 rounded-full cursor-pointer ${className} ${
+      className={`relative h-2 bg-slate-200 rounded-full cursor-pointer select-none ${className} ${
         disabled ? "opacity-50 cursor-not-allowed" : ""
       }`}
       onMouseDown={handleMouseDown}

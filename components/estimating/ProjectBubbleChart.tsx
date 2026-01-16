@@ -137,11 +137,12 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
     const unsubscribe = subscribeToCollection<any>(
       projectsPath,
       (projectData) => {
-        // Filter for projects that have been submitted (won, active, submitted, or have approvedBudget)
+        // Filter for projects that have been submitted (won, lost, active, submitted, or have approvedBudget)
         const submittedProjects = projectData.filter(
           (p: any) => 
             !p.archived && 
             (p.status === "won" || 
+             p.status === "lost" ||
              p.status === "active" || 
              p.status === "submitted" || 
              p.approvedBudget ||
@@ -873,13 +874,13 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
         <CardHeader className="mb-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 flex-1 min-w-0">
-              <CardTitle className="text-lg flex items-center gap-2 min-w-0">
-                <BarChart3 className="w-4 h-4 flex-shrink-0" />
-                <span className="truncate">
+              <CardTitle className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2 min-w-0 flex-wrap">
+                <BarChart3 className="w-5 h-5 flex-shrink-0 text-slate-900" />
+                <span className="break-words">
                   {selectedMetric === "laborHoursPerTon" ? LABOR_FINGERPRINT_NAME : "Cost Distribution"}
                 </span>
                 {projectName && (
-                  <span className="text-xs font-normal text-gray-500 ml-1 hidden sm:inline">
+                  <span className="text-sm font-medium text-slate-600 ml-2 hidden sm:inline">
                     - {projectName}
                   </span>
                 )}
@@ -1147,7 +1148,7 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
                   <div className="flex items-center justify-between mb-6">
                     <div>
                       <h3 className="text-xl font-semibold text-slate-900">{categoryComparison.label}</h3>
-                      <p className="text-xs text-slate-500 mt-1">
+                      <p className="text-sm text-slate-600 mt-1">
                         Live comparison across all projects
                       </p>
                     </div>
@@ -1178,7 +1179,7 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
                         <div className="flex items-center gap-2 mb-2">
                           <div className="w-3 h-3 rounded-full bg-emerald-600"></div>
                           <span className="text-sm font-semibold text-slate-900">Won Average</span>
-                          <span className="text-xs text-slate-500">({categoryComparison.wonCount})</span>
+                          <span className="text-xs text-slate-600">({categoryComparison.wonCount})</span>
                         </div>
                         <div className="flex items-center gap-2 mb-2">
                           {categoryComparison.current > categoryComparison.wonAverage ? (
@@ -1210,7 +1211,7 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
                         <div className="w-3 h-3 rounded-full bg-red-600"></div>
                         <span className="text-sm font-semibold text-slate-900">Lost Average</span>
                         {categoryComparison.lostCount > 0 ? (
-                          <span className="text-xs text-slate-500">({categoryComparison.lostCount})</span>
+                          <span className="text-xs text-slate-600">({categoryComparison.lostCount})</span>
                         ) : (
                           <span className="text-xs text-slate-400">(No data)</span>
                         )}
@@ -1255,7 +1256,7 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
                         <div className="flex items-center gap-2 mb-2">
                           <div className="w-3 h-3 rounded-full bg-slate-600"></div>
                           <span className="text-sm font-semibold text-slate-900">All Average</span>
-                          <span className="text-xs text-slate-500">({categoryComparison.allCount})</span>
+                          <span className="text-xs text-slate-600">({categoryComparison.allCount})</span>
                         </div>
                         <div className="flex items-center gap-2 mb-2">
                           {categoryComparison.current > categoryComparison.allAverage ? (

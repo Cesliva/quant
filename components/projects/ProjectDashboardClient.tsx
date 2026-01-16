@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
@@ -12,27 +12,28 @@ import {
   FileCheck,
   FileEdit,
   FileText,
-  Calendar,
-  DollarSign,
   TrendingUp,
   Users,
   Building2,
   MapPin,
   Clock,
-  Target,
   Settings,
   Upload,
   CheckCircle2,
   XCircle,
   AlertCircle,
-  Archive,
   Sparkles,
-  Package,
   Scissors,
   Save,
   Plus,
   Trash2,
   Download,
+  Archive,
+  Info,
+  RotateCcw,
+  History,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import {
   getDocument,
@@ -52,9 +53,13 @@ import { syncProjectToWinLoss } from "@/lib/utils/syncWinLossRecord";
 import { uploadFileToStorage, deleteFileFromStorage } from "@/lib/firebase/storage";
 import { logActivity } from "@/lib/utils/activityLogger";
 import Input from "@/components/ui/Input";
-import EstimatorHealthPanel from "@/components/dashboard/EstimatorHealthPanel";
+import { Slider } from "@/components/ui/Slider";
 import ProjectBubbleChart from "@/components/estimating/ProjectBubbleChart";
 import CategoryComparisonChart from "@/components/estimating/CategoryComparisonChart";
+import BidStrategyPanel from "@/components/dashboard/BidStrategyPanel";
+import BuyoutQuotesTracker from "@/components/estimating/BuyoutQuotesTracker";
+import { useAuth } from "@/lib/hooks/useAuth";
+import { createDocument } from "@/lib/firebase/firestore";
 
 interface SpecDivision {
   id: string;
@@ -159,6 +164,35 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
   const [showProjectSettings, setShowProjectSettings] = useState(false);
   const [estimatingLines, setEstimatingLines] = useState<EstimatingLine[]>([]);
   const [selectedMetric, setSelectedMetric] = useState<"laborHoursPerTon" | "costPerTon">("laborHoursPerTon");
+  
+  // Adjustable parameters state
+  const [showAdjustableParams, setShowAdjustableParams] = useState(true);
+  const [showCostBreakdown, setShowCostBreakdown] = useState(false);
+  const [showAdjustmentHistory, setShowAdjustmentHistory] = useState(false);
+  const [parameters, setParameters] = useState({
+    laborEfficiency: {
+      weld: 1.0,
+      fit: 1.0,
+      cut: 1.0,
+      drillPunch: 1.0,
+      cope: 1.0,
+      paint: 1.0,
+      handleMove: 1.0,
+      prepClean: 1.0,
+      unload: 1.0,
+      loadShip: 1.0,
+      processPlate: 1.0,
+    },
+    laborRateMultiplier: 1.0,
+    materialRateMultiplier: 1.0,
+    coatingRateMultiplier: 1.0,
+    overheadPercentage: 10.0,
+    profitPercentage: 10.0,
+    materialWastePercentage: 5.0,
+    laborWastePercentage: 5.0,
+  });
+  const [adjustmentHistory, setAdjustmentHistory] = useState<any[]>([]);
+  const { user } = useAuth();
 
   // Track when companyId becomes valid (not "default")
   useEffect(() => {
@@ -354,6 +388,24 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
 
     return () => unsubscribe();
   }, [validCompanyId]);
+
+  // Load adjustment history
+  useEffect(() => {
+    if (!isFirebaseConfigured() || !validCompanyId || !projectId) return;
+
+    const adjustmentsPath = getProjectPath(validCompanyId, projectId, "estimateAdjustments");
+    const unsubscribe = subscribeToCollection<any>(adjustmentsPath, (adjustments) => {
+      const sorted = adjustments
+        .map((adj: any) => ({
+          ...adj,
+          timestamp: adj.timestamp?.toDate ? adj.timestamp.toDate() : new Date(adj.timestamp || Date.now()),
+        }))
+        .sort((a: any, b: any) => b.timestamp.getTime() - a.timestamp.getTime())
+        .slice(0, 50);
+      setAdjustmentHistory(sorted);
+    });
+    return unsubscribe;
+  }, [validCompanyId, projectId]);
 
   // Handle contact selection for Owner/Client
   const handleOwnerContactSelect = (contactId: string) => {
@@ -666,9 +718,200 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
     });
   };
 
+  // Calculate totals with adjustable parameters
+  const calculatedTotals = useMemo(() => {
+    const activeLines = estimatingLines.filter((line) => line.status !== "Void");
+    
+    let weight = 0;
+    let surfaceArea = 0;
+    let laborHours = 0;
+    let materialCost = 0;
+    let laborCost = 0;
+    let coatingCost = 0;
+    let hardwareCost = 0;
+
+    activeLines.forEach((line) => {
+      const lineWeight = line.materialType === "Material" 
+        ? (line.totalWeight || 0)
+        : (line.plateTotalWeight || 0);
+      weight += lineWeight;
+
+      const lineSurfaceArea = line.materialType === "Material"
+        ? (line.totalSurfaceArea || 0)
+        : (line.plateSurfaceArea || 0);
+      surfaceArea += lineSurfaceArea;
+
+      const baseMaterialCost = line.materialCost || 0;
+      materialCost += baseMaterialCost * parameters.materialRateMultiplier;
+
+      const baseCoatingCost = line.coatingCost || 0;
+      coatingCost += baseCoatingCost * parameters.coatingRateMultiplier;
+
+      hardwareCost += line.hardwareCost || 0;
+
+      const baseLaborHours = line.totalLabor || 0;
+      
+      let adjustedLaborHours = 0;
+      let hasBreakdown = false;
+      const laborFields = [
+        { field: 'laborUnload', multiplier: parameters.laborEfficiency.unload },
+        { field: 'laborCut', multiplier: parameters.laborEfficiency.cut },
+        { field: 'laborCope', multiplier: parameters.laborEfficiency.cope },
+        { field: 'laborProcessPlate', multiplier: parameters.laborEfficiency.processPlate },
+        { field: 'laborDrillPunch', multiplier: parameters.laborEfficiency.drillPunch },
+        { field: 'laborFit', multiplier: parameters.laborEfficiency.fit },
+        { field: 'laborWeld', multiplier: parameters.laborEfficiency.weld },
+        { field: 'laborPrepClean', multiplier: parameters.laborEfficiency.prepClean },
+        { field: 'laborPaint', multiplier: parameters.laborEfficiency.paint },
+        { field: 'laborHandleMove', multiplier: parameters.laborEfficiency.handleMove },
+        { field: 'laborLoadShip', multiplier: parameters.laborEfficiency.loadShip },
+      ];
+      
+      laborFields.forEach(({ field, multiplier }) => {
+        const hours = (line as any)[field] || 0;
+        if (hours > 0) hasBreakdown = true;
+        adjustedLaborHours += hours * multiplier;
+      });
+
+      if (!hasBreakdown && baseLaborHours > 0) {
+        const avgEfficiency = Object.values(parameters.laborEfficiency).reduce((a, b) => a + b, 0) / Object.values(parameters.laborEfficiency).length;
+        adjustedLaborHours = baseLaborHours * avgEfficiency;
+      }
+
+      laborHours += Math.max(0, adjustedLaborHours);
+
+      const laborRate = line.laborRate || 0;
+      laborCost += adjustedLaborHours * laborRate * parameters.laborRateMultiplier;
+    });
+
+    const directCost = materialCost + laborCost + coatingCost + hardwareCost;
+    const materialWaste = directCost * (parameters.materialWastePercentage / 100);
+    const laborWaste = laborCost * (parameters.laborWastePercentage / 100);
+    const costBeforeOverhead = directCost + materialWaste + laborWaste;
+    const overhead = costBeforeOverhead * (parameters.overheadPercentage / 100);
+    const costBeforeProfit = costBeforeOverhead + overhead;
+    const profit = costBeforeProfit * (parameters.profitPercentage / 100);
+    const totalWithMarkup = costBeforeProfit + profit;
+
+    const tons = weight / 2000;
+    const costPerTon = tons > 0 ? totalWithMarkup / tons : 0;
+    const hoursPerTon = tons > 0 ? laborHours / tons : 0;
+
+    return {
+      weight,
+      surfaceArea,
+      laborHours,
+      materialCost,
+      laborCost,
+      coatingCost,
+      hardwareCost,
+      directCost,
+      materialWaste,
+      laborWaste,
+      overhead,
+      profit,
+      totalWithMarkup,
+      costPerTon,
+      hoursPerTon,
+    };
+  }, [estimatingLines, parameters]);
+
+  // Update parameter with logging
+  const updateParameter = useCallback((
+    path: string,
+    value: number,
+    reason?: string
+  ) => {
+    setParameters((prev) => {
+      const keys = path.split(".");
+      const oldValue = keys.reduce((obj: any, key) => obj?.[key], prev) as number;
+      
+      const newParams = { ...prev };
+      let current: any = newParams;
+      for (let i = 0; i < keys.length - 1; i++) {
+        current[keys[i]] = { ...current[keys[i]] };
+        current = current[keys[i]];
+      }
+      current[keys[keys.length - 1]] = value;
+
+      // Log adjustment
+      if (user && isFirebaseConfigured()) {
+        const logEntry = {
+          id: `adj-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          timestamp: new Date(),
+          userId: user.uid,
+          userName: user.displayName || user.email || "Unknown",
+          parameter: path,
+          oldValue,
+          newValue: value,
+          reason,
+          impact: {
+            costChange: calculatedTotals.totalWithMarkup - (calculatedTotals.totalWithMarkup / (value / oldValue)),
+            hoursChange: calculatedTotals.laborHours - (calculatedTotals.laborHours / (value / oldValue)),
+            costPerTonChange: calculatedTotals.costPerTon - (calculatedTotals.costPerTon / (value / oldValue)),
+          },
+        };
+        setAdjustmentHistory((prev) => [logEntry, ...prev.slice(0, 49)]);
+        
+        // Save to Firestore
+        const logPath = getProjectPath(validCompanyId || companyId, projectId, "estimateAdjustments");
+        createDocument(logPath, {
+          ...logEntry,
+          timestamp: logEntry.timestamp.toISOString(),
+        }).catch(console.error);
+      }
+
+      return newParams;
+    });
+  }, [user, validCompanyId, companyId, projectId, calculatedTotals]);
+
+  // Reset parameters
+  const resetParameters = useCallback(() => {
+    if (confirm("Reset all adjustments to defaults? This cannot be undone.")) {
+      setParameters({
+        laborEfficiency: {
+          weld: 1.0,
+          fit: 1.0,
+          cut: 1.0,
+          drillPunch: 1.0,
+          cope: 1.0,
+          paint: 1.0,
+          handleMove: 1.0,
+          prepClean: 1.0,
+          unload: 1.0,
+          loadShip: 1.0,
+          processPlate: 1.0,
+        },
+        laborRateMultiplier: 1.0,
+        materialRateMultiplier: 1.0,
+        coatingRateMultiplier: 1.0,
+        overheadPercentage: 10.0,
+        profitPercentage: 10.0,
+        materialWastePercentage: 5.0,
+        laborWastePercentage: 5.0,
+      });
+    }
+  }, []);
+
+  const formatMoney = (value: number) => {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(value);
+  };
+
+  const formatNumber = (value: number, decimals: number = 1) => {
+    return new Intl.NumberFormat("en-US", {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    }).format(value);
+  };
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading project...</p>
@@ -679,17 +922,15 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
 
   if (!project) {
     return (
-      <div className="max-w-7xl mx-auto p-6">
-        <div className="text-center py-12">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Project Not Found</h1>
-          <p className="text-gray-600 mb-6">The project you're looking for doesn't exist.</p>
-          <Link href="/">
-            <Button variant="outline">
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Company Dashboard
-            </Button>
-          </Link>
-        </div>
+      <div className="text-center py-12">
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">Project Not Found</h1>
+        <p className="text-gray-600 mb-6">The project you're looking for doesn't exist.</p>
+        <Link href="/">
+          <Button variant="outline">
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Company Dashboard
+          </Button>
+        </Link>
       </div>
     );
   }
@@ -707,13 +948,6 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
       description: "Build your estimate",
       color: "bg-blue-500 hover:bg-blue-600",
     },
-    {
-      name: "Interactive Summary",
-      href: `/projects/${projectId}/estimate-summary`,
-      icon: TrendingUp,
-      description: "Adjust parameters & see impact",
-      color: "bg-indigo-500 hover:bg-indigo-600",
-    },
     // {
     //   name: "Misc Metals AI",
     //   href: `/misc-metals?projectId=${projectId}`,
@@ -730,7 +964,7 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
       color: "bg-teal-500 hover:bg-teal-600",
     },
     {
-      name: "Structural Steel Estimate Summary",
+      name: "Estimate Reports",
       href: `/projects/${projectId}/reports`,
       icon: FileText,
       description: "Finalize estimate before proposal",
@@ -757,70 +991,69 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
   const secondaryActions: any[] = [];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 py-6 md:py-8 text-slate-800">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4 md:mb-6">
-          <div>
-            <div className="flex items-center gap-3 mb-2">
-              <h1 className="text-4xl font-semibold tracking-tight text-slate-900">{project.projectName || "Untitled Project"}</h1>
-              <span
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold border flex items-center gap-1.5 ${statusConfig.color}`}
-              >
-                <StatusIcon className="w-3.5 h-3.5" />
-                {statusConfig.label}
-              </span>
-            </div>
-            <p className="text-slate-500">
-              {project.projectNumber && <span className="font-mono mr-3">{project.projectNumber}</span>}
-              {project.owner && (
-                <span className="flex items-center gap-1.5 inline-flex mr-3">
-                  <Users className="w-4 h-4" />
-                  {project.owner}
-                </span>
-              )}
-              {project.generalContractor && (
-                <span className="flex items-center gap-1.5 inline-flex mr-3">
-                  <Building2 className="w-4 h-4" />
-                  {project.generalContractor}
-                </span>
-              )}
-              {project.location && (
-                <span className="flex items-center gap-1.5 inline-flex">
-                  <MapPin className="w-4 h-4" />
-                  {project.location}
-                </span>
-              )}
-            </p>
+    <>
+      {/* Header */}
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4 md:mb-6">
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+            <h1 className="text-4xl font-semibold tracking-tight text-slate-900">{project.projectName || "Untitled Project"}</h1>
+            <span
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold border flex items-center gap-1.5 ${statusConfig.color}`}
+            >
+              <StatusIcon className="w-3.5 h-3.5" />
+              {statusConfig.label}
+            </span>
           </div>
-          <div className="flex items-center gap-3">
-            {isEditMode ? (
-              <>
-                {saveStatus === "saved" && (
-                  <span className="text-sm text-green-600 font-medium">Saved</span>
-                )}
-                {saveStatus === "saving" && (
-                  <span className="text-sm text-blue-600 font-medium">Saving...</span>
-                )}
-                {saveStatus === "unsaved" && (
-                  <span className="text-sm text-orange-600 font-medium">Unsaved changes</span>
-                )}
-                <Button
-                  onClick={handleSave}
-                  disabled={isSaving}
-                  className="px-5 py-2.5 rounded-2xl bg-blue-600 text-white text-sm font-medium shadow-[0_1px_2px_0_rgb(0,0,0,0.05),0_2px_4px_0_rgb(0,0,0,0.03)] hover:shadow-[0_2px_4px_0_rgb(0,0,0,0.08),0_4px_8px_0_rgb(0,0,0,0.05)] hover:bg-blue-700 transition-all duration-200"
-                >
-                  <Save className="w-4 h-4 mr-2" />
-                  {isSaving ? "Saving..." : "Save Changes"}
-                </Button>
-                <Button
-                  onClick={() => {
-                    if (saveStatus === "unsaved" && !confirm("Discard unsaved changes?")) {
-                      return;
-                    }
-                    setIsEditMode(false);
-                    // Reload to reset any unsaved changes
-                    loadProject();
+          <p className="text-slate-500">
+            {project.projectNumber && <span className="font-mono mr-3">{project.projectNumber}</span>}
+            {project.owner && (
+              <span className="flex items-center gap-1.5 inline-flex mr-3">
+                <Users className="w-4 h-4" />
+                {project.owner}
+              </span>
+            )}
+            {project.generalContractor && (
+              <span className="flex items-center gap-1.5 inline-flex mr-3">
+                <Building2 className="w-4 h-4" />
+                {project.generalContractor}
+              </span>
+            )}
+            {project.location && (
+              <span className="flex items-center gap-1.5 inline-flex">
+                <MapPin className="w-4 h-4" />
+                {project.location}
+              </span>
+            )}
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          {isEditMode ? (
+            <>
+              {saveStatus === "saved" && (
+                <span className="text-sm text-green-600 font-medium">Saved</span>
+              )}
+              {saveStatus === "saving" && (
+                <span className="text-sm text-blue-600 font-medium">Saving...</span>
+              )}
+              {saveStatus === "unsaved" && (
+                <span className="text-sm text-orange-600 font-medium">Unsaved changes</span>
+              )}
+              <Button
+                onClick={handleSave}
+                disabled={isSaving}
+                className="px-5 py-2.5 rounded-2xl bg-blue-600 text-white text-sm font-medium shadow-[0_1px_2px_0_rgb(0,0,0,0.05),0_2px_4px_0_rgb(0,0,0,0.03)] hover:shadow-[0_2px_4px_0_rgb(0,0,0,0.08),0_4px_8px_0_rgb(0,0,0,0.05)] hover:bg-blue-700 transition-all duration-200"
+              >
+                <Save className="w-4 h-4 mr-2" />
+                {isSaving ? "Saving..." : "Save Changes"}
+              </Button>
+              <Button
+                onClick={() => {
+                  if (saveStatus === "unsaved" && !confirm("Discard unsaved changes?")) {
+                    return;
+                  }
+                  setIsEditMode(false);
+                  // Reload to reset any unsaved changes
+                  loadProject();
                   }}
                   className="px-5 py-2.5 rounded-2xl border border-slate-200/80 bg-white text-slate-700 text-sm font-medium"
                 >
@@ -932,7 +1165,15 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
                 </Button>
         </div>
               <div className="p-6">
-                <ProjectSettingsPanel companyId={validCompanyId || companyId} projectId={projectId} compact={false} />
+                {showProjectSettings && (
+                  <ProjectSettingsPanel 
+                    key={`settings-${projectId}`}
+                    companyId={validCompanyId || companyId} 
+                    projectId={projectId} 
+                    compact={false} 
+                    forceExpanded={true} 
+                  />
+                )}
               </div>
             </div>
           </div>
@@ -944,7 +1185,7 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
             {/* Basic Information */}
             <Card className="bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1)]">
               <CardHeader>
-                <CardTitle>Basic Information</CardTitle>
+                <CardTitle className="text-xl font-bold text-slate-900 tracking-tight mb-1">Basic Information</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1045,7 +1286,7 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
             {/* Client & Contractor Information */}
             <Card className="bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1)]">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+                <CardTitle className="text-xl font-bold text-slate-900 tracking-tight mb-1 flex items-center gap-2">
                   <Users className="w-5 h-5" />
                   Client & Contractor Information
                 </CardTitle>
@@ -1156,7 +1397,7 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
             {/* Dates & Deadlines */}
             <Card className="bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1)]">
               <CardHeader>
-                <CardTitle>Dates & Deadlines</CardTitle>
+                <CardTitle className="text-xl font-bold text-slate-900 tracking-tight mb-1">Dates & Deadlines</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -1255,7 +1496,7 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
             {/* Project Details */}
             <Card className="bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1)]">
               <CardHeader>
-                <CardTitle>Project Details</CardTitle>
+                <CardTitle className="text-xl font-bold text-slate-900 tracking-tight mb-1">Project Details</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -1400,226 +1641,41 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
           </div>
         </div>
 
-        {/* Graph Row - Project Visualizations */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 lg:gap-5 mb-4 md:mb-6">
-          {/* Project Timeline Card */}
-          <div className="bg-white p-3 md:p-4 rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300">
-            <p className="text-sm font-semibold mb-1">Project Timeline</p>
-            <p className="text-xs text-slate-400 mb-3">Key dates and milestones</p>
-            <div className="space-y-3">
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Calendar className="w-4 h-4 text-blue-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-slate-900">Bid Due</p>
-                  <p className="text-xs text-slate-600">{formatDate(project.bidDueDate)}</p>
-                  {daysUntilBid !== null && (
-                    <span className={`inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                      isUrgent ? "bg-orange-100 text-orange-700" : "bg-slate-100 text-slate-700"
-                    }`}>
-                      {daysUntilBid === 0 ? "Today" : daysUntilBid < 0 ? `${Math.abs(daysUntilBid)}d overdue` : `${daysUntilBid}d left`}
-                    </span>
-                  )}
-                </div>
-              </div>
-              {project.decisionDate && (
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center flex-shrink-0">
-                    <Clock className="w-4 h-4 text-yellow-600" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-slate-900">Decision</p>
-                    <p className="text-xs text-slate-600">{formatDate(project.decisionDate)}</p>
-                  </div>
-                </div>
-              )}
-              {project.deliveryDate && (
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
-                    <CheckCircle2 className="w-4 h-4 text-green-600" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-slate-900">Delivery</p>
-                    <p className="text-xs text-slate-600">{formatDate(project.deliveryDate)}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
 
-          {/* Win Probability Card */}
-          <div className="bg-white p-3 md:p-4 rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300">
-            <p className="text-sm font-semibold mb-1">Win Probability</p>
-            <p className="text-xs text-slate-400 mb-3">Based on project factors</p>
-            <div className="relative w-48 h-32 mx-auto">
-              <svg className="w-full h-full" viewBox="0 0 200 100" preserveAspectRatio="xMidYMid meet">
-                {(() => {
-                  const winProb = project.probabilityOfWin || 0;
-                  const getColor = (percentage: number) => {
-                    if (percentage < 30) return "#ef4444";
-                    if (percentage < 50) return "#f97316";
-                    if (percentage < 70) return "#f59e0b";
-                    return "#22c55e";
-                  };
-                  const arcColor = getColor(winProb);
-                  
-                  return (
-                    <path
-                      d="M 20 80 A 80 80 0 0 1 180 80"
-                      fill="none"
-                      stroke={arcColor}
-                      strokeWidth="8"
-                      strokeLinecap="round"
-                      className="transition-all duration-500"
-                    />
-                  );
-                })()}
-                {(() => {
-                  const winProb = project.probabilityOfWin || 0;
-                  const rotationAngle = -90 + (winProb / 100) * 180;
-                  const getColor = (percentage: number) => {
-                    if (percentage < 30) return "#ef4444";
-                    if (percentage < 50) return "#f97316";
-                    if (percentage < 70) return "#f59e0b";
-                    return "#22c55e";
-                  };
-                  const needleColor = getColor(winProb);
-                  
-                  return (
-                    <g
-                      transform={`translate(100, 80) rotate(${rotationAngle}) translate(-100, -80)`}
-                      className="transition-transform duration-500"
-                    >
-                      <line
-                        x1="100"
-                        y1="80"
-                        x2="100"
-                        y2="20"
-                        stroke={needleColor}
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                      />
-                      <circle
-                        cx="100"
-                        cy="80"
-                        r="4"
-                        fill={needleColor}
-                      />
-                    </g>
-                  );
-                })()}
-                <text
-                  x="100"
-                  y="75"
-                  textAnchor="middle"
-                  className="text-2xl font-semibold fill-slate-700"
-                  fontSize="24"
-                  fontWeight="600"
-                >
-                  {Number(project.probabilityOfWin || 0).toFixed(0)}%
-                </text>
-              </svg>
-              <div className="absolute bottom-0 left-0 right-0 flex justify-between px-2">
-                <span className="text-[10px] text-slate-400">Low</span>
-                <span className="text-[10px] text-slate-400">High</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Project Lifecycle Card */}
-          <div className="bg-white p-3 md:p-4 rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300">
-            <p className="text-sm font-semibold mb-1">Project Lifecycle</p>
-            <p className="text-xs text-slate-400 mb-3">Change project status</p>
-            <div className="flex flex-wrap gap-2">
-              {["draft", "active", "submitted", "won", "lost"].map((status) => {
-                const config = getStatusConfig(status);
-                const isCurrent = project.status === status;
-                return (
-                  <Button
-                    key={status}
-                    onClick={async () => {
-                      const activeCompanyId = validCompanyId || companyId;
-                      if (!isFirebaseConfigured() || !activeCompanyId || !projectId) {
-                        alert("Unable to update status. Please check your connection.");
-                        return;
-                      }
-
-                      try {
-                        const oldStatus = project.status;
-                        await updateDocument(`companies/${activeCompanyId}/projects`, projectId, {
-                          status: status,
-                        });
-                        
-                        if (status === "won" || status === "lost") {
-                          await syncProjectToWinLoss(activeCompanyId, {
-                            ...project,
-                            id: projectId,
-                            status: status,
-                          }, oldStatus);
-                        }
-                      } catch (error: any) {
-                        console.error("Failed to update project status:", error);
-                        alert(`Failed to update status: ${error?.message || "Please try again."}`);
-                      }
-                    }}
-                    disabled={isCurrent}
-                    className={isCurrent 
-                      ? "px-3 py-1.5 rounded-xl bg-blue-500 text-white text-xs font-medium"
-                      : "px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs font-medium hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                    }
-                  >
-                    {config.label}
-                  </Button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        {/* Lower Row - Quick Actions & Tools */}
-        <div className="mb-4 md:mb-6">
-          {/* Quick Actions - Full width */}
-          <div className="bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300 p-3 md:p-4">
-            <div className="mb-3">
-              <p className="text-sm font-semibold">Quick Actions</p>
-              <p className="text-xs text-slate-400">Essential tools for this project</p>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+        {/* Quick Actions - Minimalist */}
+        <div className="mb-6">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+            <h2 className="text-xl font-bold text-slate-900 tracking-tight mb-4">Quick Actions</h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               {quickActions.map((action) => {
                 const Icon = action.icon;
                 const AiIcon = (action as any).aiIcon;
                 return (
                   <Link key={action.name} href={action.href}>
-                    <div className="p-3 rounded-2xl border border-slate-100 hover:bg-slate-50 transition-all cursor-pointer group">
-                      <div className={`w-10 h-10 ${action.color} rounded-lg flex items-center justify-center mb-2 group-hover:scale-110 transition-transform relative`}>
+                    <div className="p-3 rounded-xl border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-all cursor-pointer group">
+                      <div className={`w-10 h-10 ${action.color} rounded-lg flex items-center justify-center mb-2 group-hover:scale-105 transition-transform relative`}>
                         <Icon className="w-5 h-5 text-white" />
                         {AiIcon && (
                           <AiIcon className="w-3 h-3 text-yellow-300 absolute -top-0.5 -right-0.5 drop-shadow-lg" />
                         )}
                       </div>
-                      <h3 className="text-xs font-semibold text-slate-900 line-clamp-2 mb-0.5">
+                      <h3 className="text-sm font-semibold text-slate-900 line-clamp-2">
                         {action.name}
                       </h3>
-                      <p className="text-[10px] text-slate-600 line-clamp-2">{action.description}</p>
                     </div>
                   </Link>
                 );
               })}
-              {/* Project Files Card */}
               <div
                 onClick={() => setShowProjectFiles(!showProjectFiles)}
-                className="p-3 rounded-2xl border border-slate-100 hover:bg-slate-50 transition-all cursor-pointer group"
+                className="p-3 rounded-xl border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-all cursor-pointer group"
               >
-                <div className="w-10 h-10 bg-indigo-500 hover:bg-indigo-600 rounded-lg flex items-center justify-center mb-2 group-hover:scale-110 transition-transform relative">
+                <div className="w-10 h-10 bg-indigo-500 rounded-lg flex items-center justify-center mb-2 group-hover:scale-105 transition-transform relative">
                   <Upload className="w-5 h-5 text-white" />
                 </div>
-                <h3 className="text-xs font-semibold text-slate-900 line-clamp-2 mb-0.5">
+                <h3 className="text-sm font-semibold text-slate-900 line-clamp-2">
                   Project Files
                 </h3>
-                <p className="text-[10px] text-slate-600 line-clamp-2">
-                  {project?.projectFiles?.length || 0} file{project?.projectFiles?.length !== 1 ? "s" : ""} uploaded
-                </p>
               </div>
             </div>
           </div>
@@ -1627,12 +1683,12 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
 
         {/* Project Files Section - Expandable from Quick Actions */}
         {showProjectFiles && (
-          <Card className="bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1)] mb-6">
+          <Card className="bg-white rounded-2xl border border-slate-200 shadow-sm mb-6">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Project Files</CardTitle>
-                  <p className="text-sm text-gray-600 mt-1">
+                  <CardTitle className="text-2xl font-bold text-slate-900 tracking-tight mb-1">Project Files</CardTitle>
+                  <p className="text-sm text-slate-600 mt-1">
                     Upload specifications, drawings, and quotes
                   </p>
                 </div>
@@ -1777,36 +1833,171 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
           </Card>
         )}
 
-        {/* Estimator Health Panel */}
-        <EstimatorHealthPanel
-          project={project}
-          estimatingStats={estimatingStats}
-          estimatingLines={estimatingLines}
-          companyId={validCompanyId || companyId}
-          projectId={projectId}
-        />
-
         {/* Historical Comparison Charts */}
         {estimatingLines.length > 0 && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <ProjectBubbleChart 
-              lines={estimatingLines} 
-              companyId={validCompanyId || companyId}
-              projectName={project?.projectName || ""}
-              currentProjectId={projectId}
-              selectedMetric={selectedMetric}
-              onMetricChange={setSelectedMetric}
-            />
-            <CategoryComparisonChart
+          <>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <ProjectBubbleChart 
+                lines={estimatingLines} 
+                companyId={validCompanyId || companyId}
+                projectName={project?.projectName || ""}
+                currentProjectId={projectId}
+                selectedMetric={selectedMetric}
+                onMetricChange={setSelectedMetric}
+              />
+              <div className="space-y-6">
+                <CategoryComparisonChart
+                  lines={estimatingLines}
+                  companyId={validCompanyId || companyId}
+                  currentProjectId={projectId}
+                  selectedMetric={selectedMetric}
+                />
+                
+                {/* Buyout Quotes Tracker */}
+                <BuyoutQuotesTracker 
+                  companyId={validCompanyId || companyId} 
+                  projectId={projectId} 
+                />
+              </div>
+            </div>
+
+            {/* Bid Strategy Panel */}
+            <BidStrategyPanel
               lines={estimatingLines}
+              project={project}
+              estimatingStats={{
+                totalCost: calculatedTotals.totalWithMarkup,
+                totalLabor: calculatedTotals.laborHours,
+                totalWeight: calculatedTotals.weight,
+              }}
               companyId={validCompanyId || companyId}
-              currentProjectId={projectId}
-              selectedMetric={selectedMetric}
+              projectId={projectId}
             />
-          </div>
+
+            {/* Adjustable Parameters are now integrated into Bid Strategy Panel above */}
+
+            {/* Cost Breakdown */}
+            <Card className="bg-white rounded-2xl border border-slate-200 shadow-sm">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-2xl font-bold text-slate-900 tracking-tight mb-1">
+                    Cost Breakdown
+                  </CardTitle>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowCostBreakdown(!showCostBreakdown)}
+                  >
+                    {showCostBreakdown ? (
+                      <ChevronUp className="w-4 h-4" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4" />
+                    )}
+                  </Button>
+                </div>
+              </CardHeader>
+              {showCostBreakdown && (
+                <CardContent>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-slate-50 rounded-lg p-4">
+                      <div className="text-xs text-slate-600 mb-1">Direct Cost</div>
+                      <div className="text-xl font-semibold text-slate-900 tabular-nums">
+                        {formatMoney(calculatedTotals.directCost)}
+                      </div>
+                    </div>
+                    <div className="bg-slate-50 rounded-lg p-4">
+                      <div className="text-xs text-slate-600 mb-1">Material Waste</div>
+                      <div className="text-xl font-semibold text-slate-900 tabular-nums">
+                        {formatMoney(calculatedTotals.materialWaste)}
+                      </div>
+                    </div>
+                    <div className="bg-slate-50 rounded-lg p-4">
+                      <div className="text-xs text-slate-600 mb-1">Labor Waste</div>
+                      <div className="text-xl font-semibold text-slate-900 tabular-nums">
+                        {formatMoney(calculatedTotals.laborWaste)}
+                      </div>
+                    </div>
+                    <div className="bg-slate-50 rounded-lg p-4">
+                      <div className="text-xs text-slate-600 mb-1">Overhead</div>
+                      <div className="text-xl font-semibold text-slate-900 tabular-nums">
+                        {formatMoney(calculatedTotals.overhead)}
+                      </div>
+                    </div>
+                    <div className="bg-slate-50 rounded-lg p-4">
+                      <div className="text-xs text-slate-600 mb-1">Profit</div>
+                      <div className="text-xl font-semibold text-slate-900 tabular-nums">
+                        {formatMoney(calculatedTotals.profit)}
+                      </div>
+                    </div>
+                    <div className="bg-slate-50 rounded-lg p-4">
+                      <div className="text-xs text-slate-600 mb-1">Total w/ Markup</div>
+                      <div className="text-xl font-semibold text-slate-900 tabular-nums">
+                        {formatMoney(calculatedTotals.totalWithMarkup)}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              )}
+            </Card>
+
+            {/* Adjustment History */}
+            {adjustmentHistory.length > 0 && (
+              <Card className="bg-white rounded-2xl border border-slate-200 shadow-sm">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-2xl font-bold text-slate-900 tracking-tight mb-1 flex items-center gap-2">
+                      <History className="w-6 h-6 text-slate-900" />
+                      Adjustment History ({adjustmentHistory.length})
+                    </CardTitle>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowAdjustmentHistory(!showAdjustmentHistory)}
+                    >
+                      {showAdjustmentHistory ? (
+                        <ChevronUp className="w-4 h-4" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4" />
+                      )}
+                    </Button>
+                  </div>
+                </CardHeader>
+                {showAdjustmentHistory && (
+                  <CardContent>
+                    <div className="space-y-2 max-h-96 overflow-y-auto">
+                      {adjustmentHistory.map((log) => (
+                        <div
+                          key={log.id}
+                          className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200"
+                        >
+                          <div className="flex-1">
+                            <div className="text-sm font-medium text-slate-900">
+                              {log.userName} adjusted {log.parameter}
+                            </div>
+                            <div className="text-xs text-slate-500 mt-1">
+                              {new Date(log.timestamp).toLocaleString()}
+                              {log.reason && ` • ${log.reason}`}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-sm font-semibold text-slate-900">
+                              {formatNumber(log.oldValue, 2)} → {formatNumber(log.newValue, 2)}
+                            </div>
+                            <div className="text-xs text-slate-500">
+                              {log.impact.costChange >= 0 ? "+" : ""}
+                              {formatMoney(log.impact.costChange)}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                )}
+              </Card>
+            )}
+          </>
         )}
-      </div>
-    </div>
+    </>
   );
 }
 

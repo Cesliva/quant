@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { EstimatingLine } from "@/components/estimating/EstimatingGrid";
-import { TrendingUp, TrendingDown, AlertTriangle, Lightbulb, Target, Zap, ArrowRight } from "lucide-react";
+import { TrendingUp, TrendingDown, AlertTriangle, Lightbulb, Target, Zap, ArrowRight, Info, RotateCcw, Settings } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { Slider } from "@/components/ui/Slider";
 
@@ -29,6 +29,29 @@ interface StrategyAdjustments {
   materialRate: number; // 0.9 to 1.1 (10% discount to 10% premium)
   overhead: number; // percentage
   profit: number; // percentage
+}
+
+interface DetailedParameters {
+  laborEfficiency: {
+    weld: number;
+    fit: number;
+    cut: number;
+    drillPunch: number;
+    cope: number;
+    paint: number;
+    handleMove: number;
+    prepClean: number;
+    unload: number;
+    loadShip: number;
+    processPlate: number;
+  };
+  laborRateMultiplier: number;
+  materialRateMultiplier: number;
+  coatingRateMultiplier: number;
+  overheadPercentage: number;
+  profitPercentage: number;
+  materialWastePercentage: number;
+  laborWastePercentage: number;
 }
 
 interface Recommendation {
@@ -61,6 +84,60 @@ export default function BidStrategyPanel({
     profit: 10.0,
   });
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [detailedParameters, setDetailedParameters] = useState<DetailedParameters>({
+    laborEfficiency: {
+      weld: 1.0,
+      fit: 1.0,
+      cut: 1.0,
+      drillPunch: 1.0,
+      cope: 1.0,
+      paint: 1.0,
+      handleMove: 1.0,
+      prepClean: 1.0,
+      unload: 1.0,
+      loadShip: 1.0,
+      processPlate: 1.0,
+    },
+    laborRateMultiplier: 1.0,
+    materialRateMultiplier: 1.0,
+    coatingRateMultiplier: 1.0,
+    overheadPercentage: 10.0,
+    profitPercentage: 10.0,
+    materialWastePercentage: 5.0,
+    laborWastePercentage: 5.0,
+  });
+
+  const formatNumber = (value: number, decimals: number = 1) => {
+    return new Intl.NumberFormat("en-US", {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    }).format(value);
+  };
+
+  const resetDetailedParameters = () => {
+    setDetailedParameters({
+      laborEfficiency: {
+        weld: 1.0,
+        fit: 1.0,
+        cut: 1.0,
+        drillPunch: 1.0,
+        cope: 1.0,
+        paint: 1.0,
+        handleMove: 1.0,
+        prepClean: 1.0,
+        unload: 1.0,
+        loadShip: 1.0,
+        processPlate: 1.0,
+      },
+      laborRateMultiplier: 1.0,
+      materialRateMultiplier: 1.0,
+      coatingRateMultiplier: 1.0,
+      overheadPercentage: 10.0,
+      profitPercentage: 10.0,
+      materialWastePercentage: 5.0,
+      laborWastePercentage: 5.0,
+    });
+  };
 
   // Calculate current metrics
   const currentMetrics = useMemo(() => {
@@ -305,6 +382,170 @@ export default function BidStrategyPanel({
             </>
           )}
         </div>
+
+        {/* Advanced Adjustable Parameters */}
+        {showAdvanced && (
+          <div className="mt-6 pt-6 border-t border-slate-200">
+            <div className="mb-4">
+              <div className="flex items-start gap-3 mb-3">
+                <div className="p-2 bg-blue-100/50 rounded-lg">
+                  <Settings className="w-5 h-5 text-blue-600" />
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-lg font-semibold text-slate-900 mb-1 flex items-center gap-2">
+                    Fine-Tune Parameters
+                    <span className="px-2 py-0.5 text-xs font-semibold text-blue-700 bg-blue-100/70 rounded-md border border-blue-200/50">
+                      Live Preview
+                    </span>
+                  </h4>
+                  <p className="text-sm text-slate-600 leading-relaxed">
+                    Adjust individual operations and rates to match your shop's capabilities and market conditions. 
+                    Changes update your estimate in real time, giving you precise control over every aspect of the bid.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={resetDetailedParameters}
+                  className="gap-2"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  Reset
+                </Button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Labor Efficiency by Operation */}
+              <div className="bg-white rounded-xl p-5 border border-slate-200">
+                <div className="flex items-center gap-2 mb-4">
+                  <h5 className="text-base font-semibold text-slate-900">Labor Efficiency by Operation</h5>
+                  <div className="group relative">
+                    <Info className="w-4 h-4 text-slate-400 cursor-help" />
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-64 bg-slate-900 text-white text-xs rounded-lg p-2 z-10 pointer-events-none">
+                      Adjust efficiency multipliers for each operation. &lt;1.0 = faster, &gt;1.0 = slower.
+                      <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1">
+                        <div className="w-2 h-2 bg-slate-900 rotate-45" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <p className="text-sm text-slate-600 mb-4">
+                  Match your shop's actual performance by operation type
+                </p>
+                <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2">
+                  {Object.entries(detailedParameters.laborEfficiency).map(([key, value]) => (
+                    <div key={key} className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-sm font-medium text-slate-700 capitalize">
+                          {key.replace(/([A-Z])/g, " $1").trim()}
+                        </label>
+                        <span className="text-sm font-semibold text-slate-900 tabular-nums">
+                          {formatNumber(value, 2)}x
+                        </span>
+                      </div>
+                      <Slider
+                        value={[value]}
+                        onValueChange={([newValue]) => {
+                          setDetailedParameters(prev => ({
+                            ...prev,
+                            laborEfficiency: {
+                              ...prev.laborEfficiency,
+                              [key]: newValue,
+                            },
+                          }));
+                        }}
+                        min={0.5}
+                        max={2.0}
+                        step={0.05}
+                        className="w-full"
+                      />
+                      <div className="flex items-center justify-between text-xs text-slate-500">
+                        <span>50% (faster)</span>
+                        <span>100% (baseline)</span>
+                        <span>200% (slower)</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Rates & Markup */}
+              <div className="bg-white rounded-xl p-5 border border-slate-200">
+                <h5 className="text-base font-semibold text-slate-900 mb-4">Rates & Markup</h5>
+                <p className="text-sm text-slate-600 mb-4">
+                  Adjust labor/material rates and markup percentages
+                </p>
+                <div className="space-y-6">
+                  {/* Rate Multipliers */}
+                  <div className="space-y-4">
+                    <h6 className="text-sm font-semibold text-slate-700">Rate Multipliers</h6>
+                    {[
+                      { key: "laborRateMultiplier", label: "Labor Rate", min: 0.5, max: 2.0 },
+                      { key: "materialRateMultiplier", label: "Material Rate", min: 0.5, max: 2.0 },
+                      { key: "coatingRateMultiplier", label: "Coating Rate", min: 0.5, max: 2.0 },
+                    ].map(({ key, label, min, max }) => (
+                      <div key={key} className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-sm font-medium text-slate-700">{label}</label>
+                          <span className="text-sm font-semibold text-slate-900 tabular-nums">
+                            {formatNumber(detailedParameters[key as keyof DetailedParameters] * 100, 0)}%
+                          </span>
+                        </div>
+                        <Slider
+                          value={[detailedParameters[key as keyof DetailedParameters] as number]}
+                          onValueChange={([newValue]) => {
+                            setDetailedParameters(prev => ({
+                              ...prev,
+                              [key]: newValue,
+                            }));
+                          }}
+                          min={min}
+                          max={max}
+                          step={0.01}
+                          className="w-full"
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Markup Percentages */}
+                  <div className="space-y-4 border-t border-slate-200 pt-4">
+                    <h6 className="text-sm font-semibold text-slate-700">Markup Percentages</h6>
+                    {[
+                      { key: "overheadPercentage", label: "Overhead", min: 0, max: 30 },
+                      { key: "profitPercentage", label: "Profit", min: 0, max: 30 },
+                      { key: "materialWastePercentage", label: "Material Waste", min: 0, max: 20 },
+                      { key: "laborWastePercentage", label: "Labor Waste", min: 0, max: 20 },
+                    ].map(({ key, label, min, max }) => (
+                      <div key={key} className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-sm font-medium text-slate-700">{label}</label>
+                          <span className="text-sm font-semibold text-slate-900 tabular-nums">
+                            {formatNumber(detailedParameters[key as keyof DetailedParameters] as number, 1)}%
+                          </span>
+                        </div>
+                        <Slider
+                          value={[detailedParameters[key as keyof DetailedParameters] as number]}
+                          onValueChange={([newValue]) => {
+                            setDetailedParameters(prev => ({
+                              ...prev,
+                              [key]: newValue,
+                            }));
+                          }}
+                          min={min}
+                          max={max}
+                          step={0.1}
+                          className="w-full"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Impact Summary */}
         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200 mb-6">

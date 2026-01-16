@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
+import KpiCard from "@/components/dashboard/KpiCard";
+import KpiExpandedPanel, { ExpandedSection } from "@/components/dashboard/KpiExpandedPanel";
 import { 
   TrendingUp, 
   Calendar, 
@@ -16,6 +17,7 @@ import { subscribeToCollection, getDocument } from "@/lib/firebase/firestore";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
 import { loadCompanySettings, type CompanySettings } from "@/lib/utils/settingsLoader";
 import type { ExecutiveKPIMetrics } from "@/lib/types/executiveDashboard";
+import { cn } from "@/lib/utils/cn";
 
 interface Project {
   id: string;
@@ -79,6 +81,7 @@ export default function ExecutiveKPIs({
   const [winLossRecords, setWinLossRecords] = useState<WinLossRecord[]>([]);
   const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
   const [specReviews, setSpecReviews] = useState<Record<string, any>>({});
+  const [expandedKpiId, setExpandedKpiId] = useState<string | null>(null);
 
   // Load company settings
   useEffect(() => {
@@ -314,6 +317,10 @@ export default function ExecutiveKPIs({
     return `${value.toFixed(1)}%`;
   };
 
+  const handleKpiToggle = (id: string) => {
+    setExpandedKpiId(expandedKpiId === id ? null : id);
+  };
+
   if (isLoading) {
     return (
       <div className="mb-12">
@@ -351,19 +358,26 @@ export default function ExecutiveKPIs({
         </div>
       )}
       
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-        <div className="lg:col-span-8 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 2xl:gap-8 items-stretch">
+        <div className="lg:col-span-8 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6 2xl:gap-8">
         {/* A. Weighted Pipeline Value */}
-        <Card className="border-0 shadow-2xl bg-gradient-to-br from-blue-50 via-white to-blue-100/50 hover:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] hover:-translate-y-2 transition-all duration-300 group overflow-hidden relative min-w-0">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-blue-600"></div>
-          <CardHeader className="pb-5">
-            <CardTitle className="text-xs font-bold text-gray-800 uppercase tracking-widest flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-blue-500/10 rounded-lg">
-                  <TrendingUp className="h-5 w-5 text-blue-600" />
-                </div>
-                Weighted Pipeline
-              </div>
+        <div className={cn(
+          "transition-all duration-300",
+          expandedKpiId && expandedKpiId !== "weighted-pipeline" && "opacity-60 scale-[0.98] pointer-events-none"
+        )}>
+          <KpiCard
+            id="weighted-pipeline"
+            title="Weighted Pipeline"
+            icon={<TrendingUp className="h-5 w-5" />}
+            gradientFrom="blue-50"
+            gradientVia="white"
+            gradientTo="blue-100/50"
+            accentColor="blue-500"
+            iconBgColor="bg-blue-500/10"
+            iconColor="text-blue-600"
+            isExpanded={expandedKpiId === "weighted-pipeline"}
+            onToggle={handleKpiToggle}
+            tooltip={
               <div className="group/tooltip relative">
                 <Info className="h-4 w-4 text-gray-400 hover:text-gray-600 cursor-help transition-colors" />
                 <div className="absolute right-0 top-6 w-72 p-4 bg-gray-900 text-white text-sm rounded-xl shadow-2xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all duration-200 z-20">
@@ -377,9 +391,8 @@ export default function ExecutiveKPIs({
                   </p>
                 </div>
               </div>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
+            }
+          >
             {!hasActiveBids ? (
               <div className="text-center py-10">
                 <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center shadow-lg">
@@ -398,21 +411,51 @@ export default function ExecutiveKPIs({
                 </p>
               </>
             )}
-          </CardContent>
-        </Card>
+            expandedContent={hasActiveBids ? (
+              <KpiExpandedPanel>
+                <ExpandedSection>
+                  <p className="text-sm text-gray-600 leading-relaxed mb-3">
+                    This represents your realistic expected revenue based on the probability of winning each active bid. 
+                    It's calculated by multiplying each project's estimated value by its win probability, then summing all active bids.
+                  </p>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center py-2 border-b border-gray-200/50">
+                      <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Total Active Bids</span>
+                      <span className="text-sm font-bold text-gray-900">
+                        {activeProjects.filter((p) => p.status === "active" && !p.archived).length}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center py-2 border-b border-gray-200/50">
+                      <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Weighted Value</span>
+                      <span className="text-sm font-bold text-gray-900">
+                        {formatCurrency(metrics.weightedPipelineValue)}
+                      </span>
+                    </div>
+                  </div>
+                </ExpandedSection>
+              </KpiExpandedPanel>
+            ) : undefined}
+          </KpiCard>
+        </div>
 
         {/* B. Backlog Months Secured */}
-        <Card className="border-0 shadow-2xl bg-gradient-to-br from-green-50 via-white to-emerald-100/50 hover:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] hover:-translate-y-2 transition-all duration-300 overflow-hidden relative min-w-0">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-green-500 to-emerald-600"></div>
-          <CardHeader className="pb-5">
-            <CardTitle className="text-xs font-bold text-gray-800 uppercase tracking-widest flex items-center gap-2.5">
-              <div className="p-2 bg-green-500/10 rounded-lg">
-                <Calendar className="h-5 w-5 text-green-600" />
-              </div>
-              Backlog Months
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
+        <div className={cn(
+          "transition-all duration-300",
+          expandedKpiId && expandedKpiId !== "backlog-months" && "opacity-60 scale-[0.98] pointer-events-none"
+        )}>
+          <KpiCard
+            id="backlog-months"
+            title="Backlog Months"
+            icon={<Calendar className="h-5 w-5" />}
+            gradientFrom="green-50"
+            gradientVia="white"
+            gradientTo="emerald-100/50"
+            accentColor="green-500"
+            iconBgColor="bg-green-500/10"
+            iconColor="text-green-600"
+            isExpanded={expandedKpiId === "backlog-months"}
+            onToggle={handleKpiToggle}
+          >
             {!hasBacklog && !companySettings?.shopCapacityHoursPerWeek ? (
               <div className="text-center py-10">
                 <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-green-400 to-emerald-600 flex items-center justify-center shadow-lg">
@@ -436,21 +479,57 @@ export default function ExecutiveKPIs({
                 </p>
               </>
             )}
-          </CardContent>
-        </Card>
+            expandedContent={hasBacklog && companySettings?.shopCapacityHoursPerWeek ? (
+              <KpiExpandedPanel>
+                <ExpandedSection>
+                  <p className="text-sm text-gray-600 leading-relaxed mb-3">
+                    This shows how many months of work you have secured based on your shop's weekly capacity. 
+                    It's calculated by dividing total remaining shop hours by your monthly capacity.
+                  </p>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center py-2 border-b border-gray-200/50">
+                      <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Shop Capacity</span>
+                      <span className="text-sm font-bold text-gray-900">
+                        {companySettings.shopCapacityHoursPerWeek} hrs/week
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center py-2 border-b border-gray-200/50">
+                      <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Monthly Capacity</span>
+                      <span className="text-sm font-bold text-gray-900">
+                        {(companySettings.shopCapacityHoursPerWeek * 4.345).toFixed(0)} hrs/month
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center py-2 border-b border-gray-200/50">
+                      <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Backlog Secured</span>
+                      <span className="text-sm font-bold text-gray-900">
+                        {metrics.backlogMonthsSecured.toFixed(1)} months
+                      </span>
+                    </div>
+                  </div>
+                </ExpandedSection>
+              </KpiExpandedPanel>
+            ) : undefined}
+          </KpiCard>
+        </div>
 
         {/* C. Win Rate (Last 90 Days) */}
-        <Card className="border-0 shadow-2xl bg-gradient-to-br from-purple-50 via-white to-violet-100/50 hover:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] hover:-translate-y-2 transition-all duration-300 overflow-hidden relative min-w-0">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-500 to-violet-600"></div>
-          <CardHeader className="pb-5">
-            <CardTitle className="text-xs font-bold text-gray-800 uppercase tracking-widest flex items-center gap-2.5">
-              <div className="p-2 bg-purple-500/10 rounded-lg">
-                <Target className="h-5 w-5 text-purple-600" />
-              </div>
-              Win Rate (90d)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
+        <div className={cn(
+          "transition-all duration-300",
+          expandedKpiId && expandedKpiId !== "win-rate" && "opacity-60 scale-[0.98] pointer-events-none"
+        )}>
+          <KpiCard
+            id="win-rate"
+            title="Win Rate (90d)"
+            icon={<Target className="h-5 w-5" />}
+            gradientFrom="purple-50"
+            gradientVia="white"
+            gradientTo="violet-100/50"
+            accentColor="purple-500"
+            iconBgColor="bg-purple-500/10"
+            iconColor="text-purple-600"
+            isExpanded={expandedKpiId === "win-rate"}
+            onToggle={handleKpiToggle}
+          >
             {!hasWinLossData ? (
               <div className="text-center py-10">
                 <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-purple-400 to-violet-600 flex items-center justify-center shadow-lg">
@@ -469,21 +548,74 @@ export default function ExecutiveKPIs({
                 </p>
               </>
             )}
-          </CardContent>
-        </Card>
+            expandedContent={hasWinLossData ? (() => {
+              const ninetyDaysAgo = new Date();
+              ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+              const recentRecords = winLossRecords.filter((r) => {
+                const decisionDate = r.decisionDate ? new Date(r.decisionDate) : null;
+                return decisionDate && decisionDate >= ninetyDaysAgo;
+              });
+              const recentWins = recentRecords.filter((r) => r.status === "won").length;
+              const recentLosses = recentRecords.filter((r) => r.status === "lost").length;
+              
+              return (
+                <KpiExpandedPanel>
+                  <ExpandedSection>
+                    <p className="text-sm text-gray-600 leading-relaxed mb-3">
+                      Your win rate over the last 90 days shows the percentage of bids you've won out of all bids decided in that period. 
+                      This metric helps track recent performance trends.
+                    </p>
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center py-2 border-b border-gray-200/50">
+                        <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Total Decisions</span>
+                        <span className="text-sm font-bold text-gray-900">
+                          {recentRecords.length}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center py-2 border-b border-gray-200/50">
+                        <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Wins</span>
+                        <span className="text-sm font-bold text-green-600">
+                          {recentWins}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center py-2 border-b border-gray-200/50">
+                        <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Losses</span>
+                        <span className="text-sm font-bold text-red-600">
+                          {recentLosses}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center py-2">
+                        <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Win Rate</span>
+                        <span className="text-sm font-bold text-gray-900">
+                          {formatPercent(metrics.winRate90Days)}
+                        </span>
+                      </div>
+                    </div>
+                  </ExpandedSection>
+                </KpiExpandedPanel>
+              );
+            })() : undefined}
+          </KpiCard>
+        </div>
 
         {/* D. Margin Trend */}
-        <Card className="border-0 shadow-2xl bg-gradient-to-br from-amber-50 via-white to-yellow-100/50 hover:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] hover:-translate-y-2 transition-all duration-300 overflow-hidden relative min-w-0">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-500 to-yellow-600"></div>
-          <CardHeader className="pb-5">
-            <CardTitle className="text-xs font-bold text-gray-800 uppercase tracking-widest flex items-center gap-2.5">
-              <div className="p-2 bg-amber-500/10 rounded-lg">
-                <DollarSign className="h-5 w-5 text-amber-600" />
-              </div>
-              Margin Trend
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
+        <div className={cn(
+          "transition-all duration-300",
+          expandedKpiId && expandedKpiId !== "margin-trend" && "opacity-60 scale-[0.98] pointer-events-none"
+        )}>
+          <KpiCard
+            id="margin-trend"
+            title="Margin Trend"
+            icon={<DollarSign className="h-5 w-5" />}
+            gradientFrom="amber-50"
+            gradientVia="white"
+            gradientTo="yellow-100/50"
+            accentColor="amber-500"
+            iconBgColor="bg-amber-500/10"
+            iconColor="text-amber-600"
+            isExpanded={expandedKpiId === "margin-trend"}
+            onToggle={handleKpiToggle}
+          >
             {!hasWinLossData ? (
               <div className="text-center py-10">
                 <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-amber-400 to-yellow-600 flex items-center justify-center shadow-lg">
@@ -518,21 +650,72 @@ export default function ExecutiveKPIs({
                 </div>
               </>
             )}
-          </CardContent>
-        </Card>
+            expandedContent={hasWinLossData ? (() => {
+              const awardedProjects = winLossRecords.filter((r) => r.status === "won");
+              const lostProjects = winLossRecords.filter((r) => r.status === "lost");
+              
+              return (
+                <KpiExpandedPanel>
+                  <ExpandedSection>
+                    <p className="text-sm text-gray-600 leading-relaxed mb-3">
+                      This compares the average margin on projects you've won versus those you've lost. 
+                      A positive difference suggests you're winning work at better margins than you're losing.
+                    </p>
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center py-2 border-b border-gray-200/50">
+                        <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Avg. Awarded Margin</span>
+                        <span className="text-sm font-bold text-green-600">
+                          {formatPercent(metrics.marginTrend.awarded)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center py-2 border-b border-gray-200/50">
+                        <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Avg. Lost Margin</span>
+                        <span className="text-sm font-bold text-red-600">
+                          {formatPercent(metrics.marginTrend.lost)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center py-2 border-b border-gray-200/50">
+                        <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Difference</span>
+                        <span className={cn(
+                          "text-sm font-bold",
+                          metrics.marginTrend.difference > 0 ? "text-green-600" : 
+                          metrics.marginTrend.difference < 0 ? "text-red-600" : "text-gray-600"
+                        )}>
+                          {metrics.marginTrend.difference > 0 ? "+" : ""}{formatPercent(metrics.marginTrend.difference)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center py-2">
+                        <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Awarded Projects</span>
+                        <span className="text-sm font-bold text-gray-900">
+                          {awardedProjects.length}
+                        </span>
+                      </div>
+                    </div>
+                  </ExpandedSection>
+                </KpiExpandedPanel>
+              );
+            })() : undefined}
+          </KpiCard>
+        </div>
 
         {/* E. Risk Exposure Index */}
-        <Card className="border-0 shadow-2xl bg-gradient-to-br from-red-50 via-white to-rose-100/50 hover:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] hover:-translate-y-2 transition-all duration-300 overflow-hidden relative min-w-0">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 to-rose-600"></div>
-          <CardHeader className="pb-5">
-            <CardTitle className="text-xs font-bold text-gray-800 uppercase tracking-widest flex items-center gap-2.5">
-              <div className="p-2 bg-red-500/10 rounded-lg">
-                <AlertTriangle className="h-5 w-5 text-red-600" />
-              </div>
-              Risk Exposure
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
+        <div className={cn(
+          "transition-all duration-300",
+          expandedKpiId && expandedKpiId !== "risk-exposure" && "opacity-60 scale-[0.98] pointer-events-none"
+        )}>
+          <KpiCard
+            id="risk-exposure"
+            title="Risk Exposure"
+            icon={<AlertTriangle className="h-5 w-5" />}
+            gradientFrom="red-50"
+            gradientVia="white"
+            gradientTo="rose-100/50"
+            accentColor="red-500"
+            iconBgColor="bg-red-500/10"
+            iconColor="text-red-600"
+            isExpanded={expandedKpiId === "risk-exposure"}
+            onToggle={handleKpiToggle}
+          >
             {!hasRiskData ? (
               <div className="text-center py-10">
                 <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-red-400 to-rose-600 flex items-center justify-center shadow-lg">
@@ -574,8 +757,44 @@ export default function ExecutiveKPIs({
                 </div>
               </>
             )}
-          </CardContent>
-        </Card>
+            expandedContent={hasRiskData ? (
+              <KpiExpandedPanel>
+                <ExpandedSection>
+                  <p className="text-sm text-gray-600 leading-relaxed mb-3">
+                    This shows the number of active bids with spec reviews, categorized by their highest risk grade. 
+                    Risk is assessed based on spec review grades (A/B = Low, C = Medium, D/F = High).
+                  </p>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center py-2 border-b border-gray-200/50">
+                      <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Total Projects Reviewed</span>
+                      <span className="text-sm font-bold text-gray-900">
+                        {metrics.riskExposureIndex.total}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center py-2 border-b border-gray-200/50">
+                      <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">High Risk</span>
+                      <span className="text-sm font-bold text-red-600">
+                        {metrics.riskExposureIndex.high}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center py-2 border-b border-gray-200/50">
+                      <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Medium Risk</span>
+                      <span className="text-sm font-bold text-yellow-600">
+                        {metrics.riskExposureIndex.medium}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center py-2">
+                      <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Low Risk</span>
+                      <span className="text-sm font-bold text-green-600">
+                        {metrics.riskExposureIndex.low}
+                      </span>
+                    </div>
+                  </div>
+                </ExpandedSection>
+              </KpiExpandedPanel>
+            ) : undefined}
+          </KpiCard>
+        </div>
         {extraCards}
         </div>
         {rightColumn && (

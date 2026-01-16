@@ -22,6 +22,7 @@ import { PRODUCT_SYSTEM_NAME } from "@/lib/branding";
 import { Bid } from "@/lib/bids/types";
 import { calculateBidForecast } from "@/lib/bids/forecast";
 import { SEEDED_BIDS } from "@/lib/bids/seed";
+import DashboardShell from "@/components/layout/DashboardShell";
 
 interface Project {
   id: string;
@@ -709,38 +710,37 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 py-6 md:py-8 text-slate-800">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4 md:mb-6">
-        <div>
-          <div className="flex items-center gap-3 mb-1">
-            <h1 className="text-4xl font-semibold tracking-tight">Company Dashboard</h1>
-            <span className="px-2.5 py-1 text-xs font-medium text-slate-600 bg-slate-100 rounded-md border border-slate-200">
-              {PRODUCT_SYSTEM_NAME}
-            </span>
-          </div>
-          <p className="text-slate-500">
-            {userFirstName ? `Welcome back ${userFirstName}` : "Welcome back"} ·{" "}
-            {new Date().toLocaleDateString("en-US", {
-              weekday: "long",
-              month: "long",
-              day: "numeric",
-            })}
-          </p>
+    <DashboardShell>
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4 md:mb-6">
+      <div>
+        <div className="flex items-center gap-3 mb-1">
+          <h1 className="text-4xl font-semibold tracking-tight">Company Dashboard</h1>
+          <span className="px-2.5 py-1 text-xs font-medium text-slate-600 bg-slate-100 rounded-md border border-slate-200">
+            {PRODUCT_SYSTEM_NAME}
+          </span>
         </div>
-        <div className="flex gap-3">
-          <Link href="/settings">
-            <Button className="px-5 py-2.5 rounded-2xl border border-slate-200/80 bg-white text-slate-700 text-sm font-medium shadow-[0_1px_2px_0_rgb(0,0,0,0.05),0_2px_4px_0_rgb(0,0,0,0.03)] hover:shadow-[0_2px_4px_0_rgb(0,0,0,0.08),0_4px_8px_0_rgb(0,0,0,0.05)] hover:bg-slate-50 hover:border-slate-300 transition-all duration-200">
-              Company Settings
-            </Button>
-          </Link>
-          <Link href="/projects/new">
-            <Button className="px-5 py-2.5 rounded-2xl bg-blue-500 text-white text-sm font-medium shadow-[0_2px_4px_0_rgb(59,130,246,0.3),0_4px_8px_0_rgb(59,130,246,0.2)] hover:shadow-[0_4px_8px_0_rgb(59,130,246,0.4),0_8px_16px_0_rgb(59,130,246,0.25)] hover:bg-blue-600 transition-all duration-200">
-              + New Project
-            </Button>
-          </Link>
-        </div>
+        <p className="text-slate-500">
+          {userFirstName ? `Welcome back ${userFirstName}` : "Welcome back"} ·{" "}
+          {new Date().toLocaleDateString("en-US", {
+            weekday: "long",
+            month: "long",
+            day: "numeric",
+          })}
+        </p>
       </div>
+      <div className="flex gap-3">
+        <Link href="/settings">
+          <Button className="px-5 py-2.5 rounded-2xl border border-slate-200/80 bg-white text-slate-700 text-sm font-medium shadow-[0_1px_2px_0_rgb(0,0,0,0.05),0_2px_4px_0_rgb(0,0,0,0.03)] hover:shadow-[0_2px_4px_0_rgb(0,0,0,0.08),0_4px_8px_0_rgb(0,0,0,0.05)] hover:bg-slate-50 hover:border-slate-300 transition-all duration-200">
+            Company Settings
+          </Button>
+        </Link>
+        <Link href="/projects/new">
+          <Button className="px-5 py-2.5 rounded-2xl bg-blue-500 text-white text-sm font-medium shadow-[0_2px_4px_0_rgb(59,130,246,0.3),0_4px_8px_0_rgb(59,130,246,0.2)] hover:shadow-[0_4px_8px_0_rgb(59,130,246,0.4),0_8px_16px_0_rgb(59,130,246,0.25)] hover:bg-blue-600 transition-all duration-200">
+            + New Project
+          </Button>
+        </Link>
+      </div>
+    </div>
 
         {/* Top Row */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-4 md:mb-6">
@@ -1375,14 +1375,12 @@ export default function DashboardPage() {
         <CostTrendAnalysis companyId={companyId} />
       )}
 
-      </div>
-
       {/* Bid Forecast Modal */}
       <BidForecastModal
         bids={bids}
         isOpen={showBidForecastModal}
         onClose={() => setShowBidForecastModal(false)}
       />
-    </div>
+    </DashboardShell>
   );
 }

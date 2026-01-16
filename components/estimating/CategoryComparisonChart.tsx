@@ -70,21 +70,6 @@ interface ComparisonData {
   color: string;
 }
 
-type CoachMode = "protect" | "win";
-
-type CoachRecommendation = {
-  id: string;
-  categoryKey: string;
-  label: string;
-  targetLabel: string; // e.g. "Won/Lost Avg" / "Company Avg"
-  currentValue: number; // metric per ton
-  targetValue: number; // metric per ton
-  deltaPerTon: number; // positive means add
-  totalDeltaHours: number; // for laborHoursPerTon only
-  estCostImpact: number; // for laborHoursPerTon only
-  confidence: "high" | "medium" | "low";
-  rationale: string;
-};
 
 const formatMoney = (value: number) => {
   return new Intl.NumberFormat("en-US", {
@@ -105,10 +90,6 @@ export default function CategoryComparisonChart({
   const [allProjects, setAllProjects] = useState<Array<{ id: string; projectName?: string; status?: string; archived?: boolean }>>([]);
   const [allProjectLines, setAllProjectLines] = useState<ProjectData[]>([]);
   const svgRef = useRef<SVGSVGElement>(null);
-  const [coachMode, setCoachMode] = useState<CoachMode>("protect");
-  const [isApplying, setIsApplying] = useState(false);
-  const [applyError, setApplyError] = useState<string | null>(null);
-  const [selectedCoachCategories, setSelectedCoachCategories] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (companyId) {
@@ -220,7 +201,7 @@ export default function CategoryComparisonChart({
       
       // Add Allowance category (from allowance lines)
       const allowanceHours = activeLines
-        .filter(line => line.category === "Allowances" || line.subCategory === "Bid Coach")
+        .filter(line => line.category === "Allowances")
         .reduce((sum, line) => sum + (line.totalLabor || 0), 0);
       const allowanceMHPT = totalWeight > 0 ? (allowanceHours / (totalWeight / 2000)) : 0;
       if (allowanceMHPT > 0) {
@@ -313,7 +294,7 @@ export default function CategoryComparisonChart({
       
       // Add Allowance category average
       const allowanceHours = allActiveLines
-        .filter(line => line.category === "Allowances" || line.subCategory === "Bid Coach")
+        .filter(line => line.category === "Allowances")
         .reduce((sum, line) => sum + (line.totalLabor || 0), 0);
       const avgAllowanceMHPT = totalWeight > 0 ? (allowanceHours / (totalWeight / 2000)) : 0;
       if (avgAllowanceMHPT > 0) {
@@ -409,7 +390,7 @@ export default function CategoryComparisonChart({
         
         // Add Allowance category average
         const allowanceHours = allActiveLines
-          .filter(line => line.category === "Allowances" || line.subCategory === "Bid Coach")
+          .filter(line => line.category === "Allowances")
           .reduce((sum, line) => sum + (line.totalLabor || 0), 0);
         const avgAllowanceMHPT = totalWeight > 0 ? (allowanceHours / (totalWeight / 2000)) : 0;
         if (avgAllowanceMHPT > 0) {
@@ -510,244 +491,6 @@ export default function CategoryComparisonChart({
       .filter((d) => d.current > 0 || d.average > 0)
       .sort((a, b) => Math.abs(b.deviation) - Math.abs(a.deviation)); // Sort by absolute deviation
   }, [currentData, averageData, selectedMetric]);
-
-  const coachRecommendations = useMemo<CoachRecommendation[]>(() => {
-    if (selectedMetric !== "laborHoursPerTon") return [];
-    if (!comparisonData || comparisonData.length === 0) return [];
-
-    const laborRateGuess = (() => {
-      const fromLines = lines.find((l) => typeof l.laborRate === "number" && (l.laborRate || 0) > 0)?.laborRate;
-      const fromSettings = companySettings?.laborRates?.find((r) => (r?.rate || 0) > 0)?.rate;
-      return fromLines || fromSettings || 45;
-    })();
-
-    const baseConfidence = (wonLostCounts.wonCount + wonLostCounts.lostCount) >= 10
-      ? "high"
-      : (wonLostCounts.wonCount + wonLostCounts.lostCount) >= 5
-        ? "medium"
-        : "low";
-
-    const makeTarget = (catKey: string) => {
-      const wonAvg = wonLostAverageData.won.get(catKey) || 0;
-      const lostAvg = wonLostAverageData.lost.get(catKey) || 0;
-      const winLossAvg =
-        wonAvg > 0 && lostAvg > 0 ? (wonAvg + lostAvg) / 2 : wonAvg > 0 ? wonAvg : lostAvg;
-
-      const companyAvg = averageData.get(catKey) || 0;
-      const current = currentData.get(catKey) || 0;
-
-      // Protect Margin: aim at win/loss avg if available, else company avg.
-      // Win Strategy: aim at a partial correction (still inside guardrails), using 50% of the gap to win/loss avg.
-      if (coachMode === "protect") {
-        if (winLossAvg > 0) return { target: winLossAvg, label: "Won/Lost Avg" };
-        if (companyAvg > 0) return { target: companyAvg, label: "Company Avg" };
-        // Fallback: if no historical data, suggest a small buffer (5% above current if current > 0)
-        return { target: current > 0 ? current * 1.05 : 0, label: "Suggested Buffer" };
-      }
-
-      // win mode
-      const hardTarget = winLossAvg > 0 ? winLossAvg : (companyAvg > 0 ? companyAvg : current * 1.1);
-      const partial = current + (hardTarget - current) * 0.5;
-      return { 
-        target: Math.max(partial, 0), 
-        label: winLossAvg > 0 ? "Mid to Won/Lost" : (companyAvg > 0 ? "Mid to Company" : "Suggested Adjustment")
-      };
-    };
-
-    const recs: CoachRecommendation[] = comparisonData
-      .filter((d) => {
-        // Include all labor categories (exclude Allowance from recommendations)
-        return LABOR_CATEGORIES.some((c) => c.key === d.category) && d.category !== "Allowance";
-      })
-      .map((d) => {
-        const current = d.current || 0;
-        const { target, label: targetLabel } = makeTarget(d.category);
-        
-        // Only recommend if there's a meaningful gap (current is below target)
-        const deltaPerTon = Math.max(target - current, 0);
-        const totalDeltaHours = currentTotalTons > 0 ? deltaPerTon * currentTotalTons : 0;
-        const estCostImpact = totalDeltaHours * laborRateGuess;
-
-        const pctBelow = target > 0 ? ((current - target) / target) * 100 : 0; // negative means below
-        const isMaterialGap = pctBelow < -5 && deltaPerTon > 0.01; // More lenient threshold
-
-        const confidence: CoachRecommendation["confidence"] =
-          baseConfidence === "low" && Math.abs(pctBelow) > 15 ? "medium" : baseConfidence;
-
-        const rationale =
-          isMaterialGap
-            ? `Current is ${Math.abs(pctBelow).toFixed(0)}% below ${targetLabel}. This often indicates under-carried hours for ${d.label}.`
-            : `Gap to ${targetLabel} is small; treat as a minor adjustment or leave as-is if you have known efficiencies.`;
-
-        return {
-          id: `rec-${d.category}`,
-          categoryKey: d.category,
-          label: d.label,
-          targetLabel,
-          currentValue: current,
-          targetValue: target,
-          deltaPerTon,
-          totalDeltaHours,
-          estCostImpact,
-          confidence,
-          rationale,
-        };
-      })
-      .filter((r) => {
-        // More lenient filter: show if there's any meaningful gap (> 0.01 MH/Ton) OR if current is significantly below target (>5%)
-        return r.deltaPerTon > 0.01 || (r.targetValue > 0 && ((r.currentValue - r.targetValue) / r.targetValue) < -0.05);
-      })
-      .sort((a, b) => {
-        // Sort by total hours impact, but prioritize material gaps
-        const aIsMaterial = Math.abs(((a.currentValue - a.targetValue) / a.targetValue) * 100) > 5;
-        const bIsMaterial = Math.abs(((b.currentValue - b.targetValue) / b.targetValue) * 100) > 5;
-        if (aIsMaterial && !bIsMaterial) return -1;
-        if (!aIsMaterial && bIsMaterial) return 1;
-        return b.totalDeltaHours - a.totalDeltaHours;
-      })
-      .slice(0, 6); // Show up to 6 recommendations instead of 4
-
-    return recs;
-  }, [
-    selectedMetric,
-    comparisonData,
-    lines,
-    companySettings,
-    currentData,
-    averageData,
-    wonLostAverageData,
-    currentTotalTons,
-    coachMode,
-    wonLostCounts.wonCount,
-    wonLostCounts.lostCount,
-  ]);
-
-  const coachStatus = useMemo(() => {
-    if (selectedMetric !== "laborHoursPerTon") return null;
-    if (coachRecommendations.length === 0) return { label: "No strong signal", tone: "neutral" as const };
-
-    const totalHours = coachRecommendations.reduce((s, r) => s + r.totalDeltaHours, 0);
-    if (totalHours >= 25) return { label: "Likely under-carried hours", tone: "warning" as const };
-    if (totalHours >= 10) return { label: "Slightly under baseline", tone: "neutral" as const };
-    return { label: "Within guardrails", tone: "good" as const };
-  }, [selectedMetric, coachRecommendations]);
-
-  const coachSummary = useMemo(() => {
-    if (selectedMetric !== "laborHoursPerTon") return null;
-    if (coachRecommendations.length === 0) return null;
-    const totalHours = coachRecommendations.reduce(
-      (s, r) => s + (selectedCoachCategories[r.categoryKey] === false ? 0 : r.totalDeltaHours),
-      0
-    );
-    const totalCost = coachRecommendations.reduce(
-      (s, r) => s + (selectedCoachCategories[r.categoryKey] === false ? 0 : r.estCostImpact),
-      0
-    );
-    return { totalHours, totalCost };
-  }, [selectedMetric, coachRecommendations, selectedCoachCategories]);
-
-  // Default-select all recommendations when they change
-  useEffect(() => {
-    if (selectedMetric !== "laborHoursPerTon") return;
-    if (coachRecommendations.length === 0) return;
-    setSelectedCoachCategories((prev) => {
-      const next = { ...prev };
-      // Ensure all current recs exist as keys (default true)
-      coachRecommendations.forEach((r) => {
-        if (next[r.categoryKey] === undefined) next[r.categoryKey] = true;
-      });
-      // Drop keys that no longer exist to keep it tidy
-      const validKeys = new Set(coachRecommendations.map((r) => r.categoryKey));
-      Object.keys(next).forEach((k) => {
-        if (!validKeys.has(k)) delete next[k];
-      });
-      return next;
-    });
-  }, [coachRecommendations, selectedMetric]);
-
-  const applyCoach = async () => {
-    if (selectedMetric !== "laborHoursPerTon") return;
-    if (!isFirebaseConfigured() || !companyId || !currentProjectId) {
-      setApplyError("Firebase not configured or missing project context.");
-      return;
-    }
-    const selectedRecs = coachRecommendations.filter((r) => selectedCoachCategories[r.categoryKey] !== false);
-    if (selectedRecs.length === 0) {
-      setApplyError("Select at least one recommendation to apply.");
-      return;
-    }
-
-    setApplyError(null);
-    setIsApplying(true);
-    try {
-      const laborRateGuess = (() => {
-        const fromLines = lines.find((l) => typeof l.laborRate === "number" && (l.laborRate || 0) > 0)?.laborRate;
-        const fromSettings = companySettings?.laborRates?.find((r) => (r?.rate || 0) > 0)?.rate;
-        return fromLines || fromSettings || 45;
-      })();
-
-      // Determine next lineId in L# format
-      const maxLineNum = lines.reduce((max, l) => {
-        const m = /^L(\d+)$/i.exec((l.lineId || "").trim());
-        if (!m) return max;
-        const n = Number(m[1]);
-        return Number.isFinite(n) ? Math.max(max, n) : max;
-      }, 0);
-      const nextLineId = `L${Math.max(maxLineNum + 1, lines.length + 1)}`;
-
-      // Calculate total allowance hours (sum of all selected recommendations)
-      const totalLabor = selectedRecs.reduce((sum, r) => sum + (r.totalDeltaHours || 0), 0);
-      const laborCost = totalLabor * laborRateGuess;
-
-      // Build breakdown description for notes
-      const breakdownParts = selectedRecs
-        .filter(r => r.totalDeltaHours > 0)
-        .map(r => `${r.label}: +${r.totalDeltaHours.toFixed(1)}h`)
-        .join(", ");
-
-      const allowanceLine: EstimatingLine = {
-        lineId: nextLineId,
-        drawingNumber: "",
-        detailNumber: "",
-        itemDescription: `Bid Coach Allowance (${coachMode === "protect" ? "Protect Margin" : "Win Strategy"})`,
-        elevation: "",
-        category: "Allowances",
-        subCategory: "Bid Coach",
-        workType: "MISC",
-        miscMethod: "DETAILED",
-        materialType: "Material",
-        qty: 1,
-        totalWeight: 0,
-        materialRate: 0,
-        materialCost: 0,
-        laborRate: laborRateGuess,
-        laborCost,
-        coatingRate: 0,
-        coatingCost: 0,
-        hardwareCost: 0,
-        totalLabor,
-        totalCost: laborCost,
-        status: "Active",
-        useStockRounding: false,
-        notes: `Auto-added by Bid Coach based on historical ${wonLostCounts.wonCount} won / ${wonLostCounts.lostCount} lost projects. Total allowance: ${totalLabor.toFixed(1)} hours (${formatMoney(laborCost)}). Breakdown: ${breakdownParts}. If unused when awarded, this becomes unrealized profit.`,
-      } as any;
-
-      const linesPath = getProjectPath(companyId, currentProjectId, "lines");
-      await createDocument(linesPath, allowanceLine as any);
-      
-      // Success notification
-      setApplyError(null);
-      
-      // Show success message
-      setTimeout(() => {
-        alert(`✅ Bid Coach allowance applied successfully!\n\n📊 Added ${totalLabor.toFixed(1)} hours (${formatMoney(laborCost)}) across selected categories.\n\n🔄 The charts and estimate summary will update automatically in a few seconds.\n\n💡 Check the "Allowances & Adjustments" section on the estimate summary page to see the new line.`);
-      }, 100);
-    } catch (e: any) {
-      setApplyError(e?.message || "Failed to apply Bid Coach adjustment.");
-    } finally {
-      setIsApplying(false);
-    }
-  };
 
   // Render chart
   useEffect(() => {
@@ -912,8 +655,8 @@ export default function CategoryComparisonChart({
   return (
     <Card className="p-4">
       <CardHeader className="mb-2">
-        <CardTitle className="text-lg flex items-center gap-2">
-          <TrendingUp className="w-4 h-4" />
+        <CardTitle className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+          <TrendingUp className="w-6 h-6 text-slate-900" />
           Category Comparison
         </CardTitle>
       </CardHeader>
@@ -954,20 +697,6 @@ export default function CategoryComparisonChart({
                 )}
               </div>
 
-              {selectedMetric === "laborHoursPerTon" && coachSummary && (
-                <div className="mb-2 rounded-md border border-blue-200 bg-blue-50 p-2 text-xs text-blue-900 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <span className="font-medium text-blue-900">Bid Coach signal:</span>{" "}
-                    Suggested add{" "}
-                    <span className="font-semibold text-blue-900">{coachSummary.totalHours.toFixed(0)}</span>{" "}
-                    hrs ({coachSummary.totalCost >= 0 ? "$" : "-$"}
-                    <span className="font-semibold text-blue-900">
-                      {Math.abs(coachSummary.totalCost).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                    </span>
-                    ) to align with history.
-                  </div>
-                </div>
-              )}
                   <div className="grid grid-cols-1 gap-1.5 max-h-48 overflow-y-auto">
                     {comparisonData.map((item) => {
                       // Convert hex color to RGB for background tint
@@ -1037,6 +766,7 @@ export default function CategoryComparisonChart({
                       );
                     })}
                   </div>
+
               <div className="mt-4 pt-4 border-t border-gray-200 text-xs text-gray-600">
                 <div className="flex items-center justify-between">
                   <span>Average Deviation:</span>
@@ -1047,256 +777,6 @@ export default function CategoryComparisonChart({
                 </div>
               </div>
 
-              {/* Bid Coach Section - At bottom of card */}
-              {selectedMetric === "laborHoursPerTon" && (
-                <div className="mt-6 pt-6 border-t border-gray-200">
-                  <div className="flex items-start justify-between gap-3 mb-4">
-                    <div>
-                      <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2">
-                        <TrendingUp className="w-4 h-4" />
-                        Bid Coach
-                      </h3>
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        Evidence-based recommendations from company + win/loss history.
-                      </p>
-                    </div>
-                    {coachStatus && (
-                      <span
-                        className={`text-[11px] px-2 py-0.5 rounded-full border ${
-                          coachStatus.tone === "warning"
-                            ? "bg-amber-50 text-amber-700 border-amber-200"
-                            : coachStatus.tone === "good"
-                              ? "bg-green-50 text-green-700 border-green-200"
-                              : "bg-gray-50 text-gray-700 border-gray-200"
-                        }`}
-                      >
-                        {coachStatus.label}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="space-y-4">
-              {/* Mode Toggle */}
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setCoachMode("protect")}
-                  className={`text-xs px-2.5 py-1 rounded-md border transition-colors ${
-                    coachMode === "protect"
-                      ? "bg-blue-50 border-blue-200 text-blue-700"
-                      : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
-                  }`}
-                >
-                  Protect Margin
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCoachMode("win")}
-                  className={`text-xs px-2.5 py-1 rounded-md border transition-colors ${
-                    coachMode === "win"
-                      ? "bg-purple-50 border-purple-200 text-purple-700"
-                      : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
-                  }`}
-                >
-                  Win Strategy
-                </button>
-              </div>
-
-              {/* History Sample */}
-              <div className="text-xs text-gray-600 flex items-center justify-between">
-                <span>History sample</span>
-                <span className="font-medium text-gray-900">
-                  {wonLostCounts.wonCount} won / {wonLostCounts.lostCount} lost
-                </span>
-              </div>
-
-              {/* Recommendations or Empty State */}
-              {selectedMetric !== "laborHoursPerTon" ? (
-                <div className="mt-3 text-xs text-gray-500">
-                  Bid Coach is optimized for <span className="font-medium">MH/Ton</span>. Switch the metric to see labor recommendations.
-                </div>
-              ) : coachRecommendations.length === 0 ? (
-                <div className="mt-3 text-xs text-gray-500 space-y-1">
-                  <div>No strong adjustment signals yet.</div>
-                  <div className="text-[11px] text-gray-400">
-                    This could mean: (1) Current values are already at or above historical baselines, (2) Not enough historical data, or (3) Labor breakdown fields need to be populated on estimate lines.
-                  </div>
-                </div>
-              ) : (
-                <>
-                  {/* Summary */}
-                  {coachSummary && (
-                    <div className={`rounded-md border p-2.5 text-xs ${
-                      coachMode === "protect" 
-                        ? "border-blue-200 bg-blue-50 text-blue-900" 
-                        : "border-purple-200 bg-purple-50 text-purple-900"
-                    }`}>
-                      <div className={`font-medium mb-1 ${
-                        coachMode === "protect" ? "text-blue-900" : "text-purple-900"
-                      }`}>Suggested Adjustment</div>
-                      <div className={coachMode === "protect" ? "text-blue-800" : "text-purple-800"}>
-                        Add <span className="font-semibold">{coachSummary.totalHours.toFixed(0)}</span> hours ({coachSummary.totalCost >= 0 ? "$" : "-$"}
-                        <span className="font-semibold">
-                          {Math.abs(coachSummary.totalCost).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                        </span>
-                        ) to align with {coachMode === "protect" ? "won/lost baseline" : "competitive baseline"}.
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Selection Controls */}
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="text-xs text-gray-600">
-                      Choose what to adjust
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const next: Record<string, boolean> = {};
-                          coachRecommendations.forEach((r) => (next[r.categoryKey] = true));
-                          setSelectedCoachCategories(next);
-                        }}
-                        className="text-[11px] px-2 py-1 rounded border border-gray-200 hover:bg-gray-50 text-gray-700 transition-colors"
-                      >
-                        Select all
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const next: Record<string, boolean> = {};
-                          coachRecommendations.forEach((r) => (next[r.categoryKey] = false));
-                          setSelectedCoachCategories(next);
-                        }}
-                        className="text-[11px] px-2 py-1 rounded border border-gray-200 hover:bg-gray-50 text-gray-700 transition-colors"
-                      >
-                        Select none
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Recommendations List */}
-                  <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                    {coachRecommendations.map((r) => {
-                      const categoryColor = LABOR_COLORS[r.categoryKey] || "#94a3b8";
-                      const hexToRgb = (hex: string) => {
-                        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-                        return result
-                          ? {
-                              r: parseInt(result[1], 16),
-                              g: parseInt(result[2], 16),
-                              b: parseInt(result[3], 16),
-                            }
-                          : { r: 148, g: 163, b: 184 };
-                      };
-                      const rgb = hexToRgb(categoryColor);
-                      const bgColor = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.08)`;
-                      const borderColor = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.25)`;
-                      
-                      return (
-                        <div 
-                          key={r.id} 
-                          className="rounded-md border p-2.5 transition-colors"
-                          style={{
-                            backgroundColor: bgColor,
-                            borderColor: borderColor,
-                          }}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0 flex-1">
-                              <label className="flex items-start gap-2 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  className="mt-0.5"
-                                  checked={selectedCoachCategories[r.categoryKey] !== false}
-                                  onChange={(e) =>
-                                    setSelectedCoachCategories((prev) => ({
-                                      ...prev,
-                                      [r.categoryKey]: e.target.checked,
-                                    }))
-                                  }
-                                />
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2">
-                                    <div
-                                      className="w-2.5 h-2.5 rounded flex-shrink-0"
-                                      style={{ backgroundColor: categoryColor }}
-                                    />
-                                    <span className="text-xs font-semibold text-gray-900 truncate block">
-                                      {r.label}
-                                    </span>
-                                  </div>
-                                  <div className="text-[11px] text-gray-600 mt-0.5">
-                                    +{r.deltaPerTon.toFixed(2)} MH/Ton to {r.targetLabel}
-                                  </div>
-                                </div>
-                              </label>
-                              <div className="mt-1.5 flex items-center gap-2">
-                                <span
-                                  className={`text-[10px] px-1.5 py-0.5 rounded border ${
-                                    r.confidence === "high"
-                                      ? "bg-green-50 border-green-200 text-green-700"
-                                      : r.confidence === "medium"
-                                        ? "bg-amber-50 border-amber-200 text-amber-700"
-                                        : "bg-gray-50 border-gray-200 text-gray-700"
-                                  }`}
-                                >
-                                  {r.confidence}
-                                </span>
-                                <span className="text-[11px] text-gray-600">
-                                  ~{r.totalDeltaHours.toFixed(0)} hrs ({r.estCostImpact >= 0 ? "$" : "-$"}
-                                  {Math.abs(r.estCostImpact).toLocaleString(undefined, { maximumFractionDigits: 0 })})
-                                </span>
-                              </div>
-                              <div className="mt-1 text-[11px] text-gray-500">
-                                {r.rationale}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Apply Button */}
-                  <div className="pt-3 border-t border-gray-200">
-                    {coachSummary && (
-                      <div className="mb-2 text-xs text-gray-600 flex items-center justify-between">
-                        <span>Selected impact</span>
-                        <span className="font-medium text-gray-900">
-                          +{coachSummary.totalHours.toFixed(0)} hrs ({coachSummary.totalCost >= 0 ? "$" : "-$"}
-                          {Math.abs(coachSummary.totalCost).toLocaleString(undefined, { maximumFractionDigits: 0 })})
-                        </span>
-                      </div>
-                    )}
-                    <Button
-                      onClick={applyCoach}
-                      disabled={
-                        isApplying ||
-                        !currentProjectId ||
-                        selectedMetric !== "laborHoursPerTon" ||
-                        coachRecommendations.length === 0 ||
-                        (coachRecommendations.length > 0 &&
-                          coachRecommendations.every((r) => selectedCoachCategories[r.categoryKey] === false))
-                      }
-                      className="w-full"
-                    >
-                      {isApplying ? "Applying…" : "Apply as allowance line"}
-                    </Button>
-                    {applyError && (
-                      <div className="mt-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded-md p-2">
-                        {applyError}
-                      </div>
-                    )}
-                    <div className="mt-2 text-[11px] text-gray-500">
-                      Applies by adding a "Bid Coach Allowance" line that adds hours into specific labor buckets (no weight added).
-                    </div>
-                  </div>
-                </>
-              )}
-                  </div>
-                </div>
-              )}
             </div>
           </>
         )}
