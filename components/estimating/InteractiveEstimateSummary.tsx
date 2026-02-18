@@ -17,6 +17,12 @@ import {
   calculateTotalCostWithMarkup,
   type CompanySettings,
 } from "@/lib/utils/settingsLoader";
+import {
+  calculateConsumables,
+  extractLaborHours,
+  estimateEquipmentHours,
+  determineJobType,
+} from "@/lib/utils/consumablesCalculator";
 
 interface InteractiveEstimateSummaryProps {
   lines: EstimatingLine[];
@@ -60,6 +66,7 @@ interface CalculatedTotals {
   laborCost: number;
   coatingCost: number;
   hardwareCost: number;
+  consumables: number;  // Consumables cost (labor + equipment driven)
   directCost: number;
   materialWaste: number;
   laborWaste: number;
@@ -207,8 +214,35 @@ export default function InteractiveEstimateSummary({
       laborCost += adjustedLaborHours * laborRate * parameters.laborRateMultiplier;
     });
 
-    // Direct cost
-    const directCost = materialCost + laborCost + coatingCost + hardwareCost;
+    // Calculate consumables (separate from labor cost)
+    const laborHoursForConsumables = extractLaborHours(
+      activeLines.map(line => ({
+        weld: line.laborWeld || 0,
+        fit: line.laborFit || 0,
+        cut: line.laborCut || 0,
+        processPlate: line.laborProcessPlate || 0,
+        cope: line.laborCope || 0,
+        drillPunch: line.laborDrillPunch || 0,
+        handleMove: line.laborHandleMove || 0,
+        loadShip: line.laborLoadShip || 0,
+        prepClean: line.laborPrepClean || 0,
+        paint: line.laborPaint || 0,
+        unload: line.laborUnload || 0,
+        allowance: 0,
+        totalLabor: line.totalLabor || 0,
+      }))
+    );
+    const equipmentHoursEstimate = estimateEquipmentHours(weight);
+    const consumablesResult = calculateConsumables(
+      laborHoursForConsumables,
+      equipmentHoursEstimate,
+      companySettings?.consumablesSettings,
+      'standard'
+    );
+    const consumables = consumablesResult.totalConsumables;
+
+    // Direct cost (now includes consumables)
+    const directCost = materialCost + laborCost + coatingCost + hardwareCost + consumables;
 
     // Waste
     const materialWaste = directCost * (parameters.materialWastePercentage / 100);
@@ -238,6 +272,7 @@ export default function InteractiveEstimateSummary({
       laborCost,
       coatingCost,
       hardwareCost,
+      consumables,
       directCost,
       materialWaste,
       laborWaste,
@@ -249,7 +284,7 @@ export default function InteractiveEstimateSummary({
       costPerPound,
       hoursPerPound,
     };
-  }, [lines, parameters]);
+  }, [lines, parameters, companySettings]);
 
   // Notify parent of totals change
   useEffect(() => {
@@ -383,7 +418,7 @@ export default function InteractiveEstimateSummary({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-semibold text-slate-900">Interactive Estimate Summary</h2>
+          <h2 className="text-2xl font-extrabold text-gray-900 tracking-normal">Interactive Estimate Summary</h2>
           <p className="text-sm text-slate-500 mt-1">
             Adjust parameters in real-time to see impact on totals and metrics
             {allowanceLines.length > 0 && (
@@ -492,7 +527,7 @@ export default function InteractiveEstimateSummary({
         <Card>
           <div className="p-6">
             <div className="flex items-center gap-2 mb-4">
-              <h3 className="text-lg font-semibold text-slate-900">Labor Efficiency</h3>
+              <h3 className="text-lg font-bold text-gray-900 tracking-normal">Labor Efficiency</h3>
               <div className="group relative">
                 <Info className="w-4 h-4 text-slate-400 cursor-help" />
                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-64 bg-slate-900 text-white text-xs rounded-lg p-2 z-10 pointer-events-none">
@@ -540,7 +575,7 @@ export default function InteractiveEstimateSummary({
         <Card>
           <div className="p-6">
             <div className="flex items-center gap-2 mb-4">
-              <h3 className="text-lg font-semibold text-slate-900">Rates & Markup</h3>
+              <h3 className="text-lg font-bold text-gray-900 tracking-normal">Rates & Markup</h3>
             </div>
             <p className="text-sm text-slate-500 mb-4">
               Adjust labor/material rates and markup percentages
@@ -548,7 +583,7 @@ export default function InteractiveEstimateSummary({
             <div className="space-y-6">
               {/* Rate Multipliers */}
               <div className="space-y-4">
-                <h4 className="text-sm font-semibold text-slate-700">Rate Multipliers</h4>
+                <h4 className="text-sm font-bold text-gray-900 tracking-normal">Rate Multipliers</h4>
                 {[
                   { key: "laborRateMultiplier", label: "Labor Rate", min: 0.5, max: 2.0 },
                   { key: "materialRateMultiplier", label: "Material Rate", min: 0.5, max: 2.0 },
@@ -575,7 +610,7 @@ export default function InteractiveEstimateSummary({
 
               {/* Markup Percentages */}
               <div className="space-y-4 border-t border-slate-200 pt-4">
-                <h4 className="text-sm font-semibold text-slate-700">Markup Percentages</h4>
+                <h4 className="text-sm font-bold text-gray-900 tracking-normal">Markup Percentages</h4>
                 {[
                   { key: "overheadPercentage", label: "Overhead", min: 0, max: 30 },
                   { key: "profitPercentage", label: "Profit", min: 0, max: 30 },
@@ -613,7 +648,7 @@ export default function InteractiveEstimateSummary({
             <Card className="border-slate-200 bg-slate-50/30">
               <div className="p-6">
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-lg font-semibold text-slate-900">Allowances & Adjustments</h3>
+                  <h3 className="text-lg font-bold text-gray-900 tracking-normal">Allowances & Adjustments</h3>
                   <span className="text-xs text-slate-500">No allowances yet</span>
                 </div>
                 <p className="text-sm text-slate-500">
@@ -628,7 +663,7 @@ export default function InteractiveEstimateSummary({
           <Card className="border-blue-200 bg-blue-50/30">
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-slate-900">Allowances & Adjustments</h3>
+                <h3 className="text-lg font-bold text-gray-900 tracking-normal">Allowances & Adjustments</h3>
                 <span className="text-xs font-medium text-blue-700 bg-blue-100 px-2 py-1 rounded">
                   {allowanceLines.length} {allowanceLines.length === 1 ? "line" : "lines"}
                 </span>
@@ -650,7 +685,7 @@ export default function InteractiveEstimateSummary({
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            <h4 className="text-sm font-semibold text-slate-900">
+                            <h4 className="text-sm font-bold text-gray-900 tracking-normal">
                               {line.itemDescription || "Allowance"}
                             </h4>
                             {isBidCoach && (
@@ -720,7 +755,7 @@ export default function InteractiveEstimateSummary({
       {/* Cost Breakdown */}
       <Card>
         <div className="p-6">
-          <h3 className="text-lg font-semibold text-slate-900 mb-4">Cost Breakdown</h3>
+          <h3 className="text-lg font-bold text-gray-900 tracking-normal mb-4">Cost Breakdown</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-slate-50 rounded-lg p-4">
               <div className="text-xs text-slate-500 mb-1">Direct Cost</div>
@@ -740,6 +775,14 @@ export default function InteractiveEstimateSummary({
                 {formatMoney(totals.laborWaste)}
               </div>
             </div>
+            {totals.consumables > 0 && (
+              <div className="bg-orange-50 rounded-lg p-4 border border-orange-100">
+                <div className="text-xs text-orange-700 mb-1">Consumables</div>
+                <div className="text-xl font-semibold text-orange-900 tabular-nums">
+                  {formatMoney(totals.consumables)}
+                </div>
+              </div>
+            )}
             <div className="bg-slate-50 rounded-lg p-4">
               <div className="text-xs text-slate-500 mb-1">Overhead</div>
               <div className="text-xl font-semibold text-slate-900 tabular-nums">
@@ -766,7 +809,7 @@ export default function InteractiveEstimateSummary({
       {showHistory && adjustmentHistory.length > 0 && (
         <Card>
           <div className="p-6">
-            <h3 className="text-lg font-semibold text-slate-900 mb-4">Adjustment History</h3>
+            <h3 className="text-lg font-bold text-gray-900 tracking-normal mb-4">Adjustment History</h3>
             <div className="space-y-2 max-h-96 overflow-y-auto">
               {adjustmentHistory.map((log) => (
                 <div

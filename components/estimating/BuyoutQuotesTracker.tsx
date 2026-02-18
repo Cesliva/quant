@@ -151,11 +151,11 @@ export default function BuyoutQuotesTracker({ companyId, projectId }: BuyoutQuot
 
   return (
     <Card className="p-4">
-      <CardHeader className="mb-3">
+      <CardHeader className="pb-4 pt-5 mb-4 border-b border-gray-200/70">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Package className="w-5 h-5 text-slate-900" />
-            <CardTitle className="text-xl font-bold text-slate-900 tracking-tight">
+            <CardTitle className="text-xl font-extrabold text-gray-900 tracking-normal">
               Buyout Quotes Tracker
             </CardTitle>
           </div>

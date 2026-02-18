@@ -104,7 +104,7 @@ export default function BidCalendarWidget({ companyId, className }: BidCalendarW
       <Card className={cn("border border-gray-200 shadow-lg hover:shadow-xl transition-all duration-300 bg-white h-full", className)}>
         <CardHeader className="pb-5">
           <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2 text-lg font-semibold">
+            <CardTitle className="flex items-center gap-2 text-lg font-bold text-gray-900 tracking-normal">
               <Calendar className="w-5 h-5 text-blue-600" />
               Bid-Production Schedule Snapshot
             </CardTitle>
@@ -182,7 +182,7 @@ export default function BidCalendarWidget({ companyId, className }: BidCalendarW
                 <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-blue-100 flex items-center justify-center">
                   <Calendar className="w-8 h-8 text-blue-400" />
                 </div>
-                <h3 className="text-base font-semibold text-gray-900 mb-2">No Upcoming Bids</h3>
+                <h3 className="text-base font-bold text-gray-900 tracking-normal mb-2">No Upcoming Bids</h3>
                 <p className="text-sm text-gray-500 mb-4">Schedule your first bid to get started</p>
                 <Button
                   variant="outline"

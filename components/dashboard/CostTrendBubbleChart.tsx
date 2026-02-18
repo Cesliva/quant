@@ -95,6 +95,8 @@ export default function CostTrendBubbleChart({
   const [showInfoTooltip, setShowInfoTooltip] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
   
   // Load company settings
   useEffect(() => {
@@ -294,7 +296,7 @@ export default function CostTrendBubbleChart({
       const laborCost = projectLines.reduce((sum, line) => sum + (line.laborCost || 0), 0);
       const coatingCost = projectLines.reduce((sum, line) => sum + (line.coatingCost || 0), 0);
       const hardwareCost = projectLines.reduce((sum, line) => sum + (line.hardwareCost || 0), 0);
-      const buyouts = 0; // TODO: Get from project settings
+      const buyouts = 0;
       
       const materialWasteFactor = companySettings?.markupSettings?.materialWasteFactor || 0;
       const laborWasteFactor = companySettings?.markupSettings?.laborWasteFactor || 0;
@@ -567,388 +569,319 @@ export default function CostTrendBubbleChart({
     };
   }, [selectedCategory, bubbleData, selectedProjectData, selectedProjectId, averageData, wonLostAverageData, allProjectLines, selectedMetric, availableProjects, projects]);
   
-  // Render D3 circle packing
+  // Render bubble chart using D3 with physics simulation (matching project-level style)
   useEffect(() => {
-    if (!svgRef.current || bubbleData.length === 0) return;
+    if (!svgRef.current || !containerRef.current) return;
+
+    const svg = d3.select(svgRef.current);
+    svg.selectAll("*").remove();
+
+    if (bubbleData.length === 0) {
+      return;
+    }
+
+    // Use fixed viewBox dimensions for consistent scaling
+    const viewBoxWidth = 800;
+    const viewBoxHeight = 600;
+    const centerX = viewBoxWidth / 2;
+    const centerY = viewBoxHeight / 2;
+
+    // Use selected project data if available, otherwise use company average (bubbleData)
+    const dataToRender = selectedProjectId && selectedProjectData 
+      ? selectedProjectData.map(d => ({
+          ...d,
+          percentage: 0, // Will be calculated below
+        }))
+      : bubbleData;
     
-    try {
-      const svg = d3.select(svgRef.current);
-      svg.selectAll("*").remove(); // Clear previous render
+    // Filter out zero values
+    const nonZeroData = dataToRender.filter(d => d.mhPerTon > 0);
     
-    const width = 600;
-    const height = 600;
-    const padding = 20;
+    if (nonZeroData.length === 0) {
+      return;
+    }
     
-    // Create hierarchy for D3 pack layout
-    // D3 pack expects a root node with children
-    const rootData = {
-      name: "root",
-      children: bubbleData.map(d => ({
-        name: d.category,
-        value: d.mhPerTon,
-        mhPerTon: d.mhPerTon, // Keep original value for text display
-        label: d.label,
-        color: d.color,
-        percentage: d.percentage,
-      }))
-    };
-    
-    const root = d3.hierarchy(rootData)
-      .sum((d: any) => d.value || 0)
-      .sort((a: any, b: any) => (b.value || 0) - (a.value || 0));
-    
-    // Create pack layout
-    const pack = d3.pack()
-      .size([width - padding * 2, height - padding * 2])
-      .padding(3);
-    
-    const packed = pack(root as any);
-    
-    // Store bubble positions for overlay
-    const bubblePositions = new Map<string, { x: number; y: number; r: number; avgValue: number }>();
-    packed.descendants().filter((d: any) => !d.children).forEach((d: any) => {
-      bubblePositions.set(d.data.name, {
-        x: d.x,
-        y: d.y,
-        r: d.r,
-        avgValue: d.data.value
+    // Calculate percentages for selected project data
+    if (selectedProjectId && selectedProjectData) {
+      const total = nonZeroData.reduce((sum, d) => sum + d.mhPerTon, 0);
+      nonZeroData.forEach(d => {
+        d.percentage = total > 0 ? (d.mhPerTon / total) * 100 : 0;
       });
+    }
+
+    // Calculate radius scale
+    const maxValue = Math.max(...nonZeroData.map(d => d.mhPerTon));
+    const minRadius = 15;
+    const maxRadius = 80;
+    const radiusScale = d3.scaleSqrt()
+      .domain([0, maxValue])
+      .range([minRadius, maxRadius]);
+
+    // Prepare nodes for force simulation
+    const nodes = nonZeroData.map((d, i) => {
+      const radius = radiusScale(d.mhPerTon);
+      // Start bubbles in a circle around center
+      const angle = (i / nonZeroData.length) * 2 * Math.PI;
+      const startRadius = 100;
+      return {
+        ...d,
+        radius,
+        x: centerX + Math.cos(angle) * startRadius,
+        y: centerY + Math.sin(angle) * startRadius,
+        vx: 0,
+        vy: 0,
+      };
     });
+
+    // Create force simulation with anti-gravity (floating effect)
+    const simulation = d3.forceSimulation(nodes as any)
+      .force("center", d3.forceCenter(centerX, centerY).strength(0.05))
+      .force("collision", d3.forceCollide().radius((d: any) => d.radius + 3).strength(0.9))
+      .force("charge", d3.forceManyBody().strength(-20))
+      .force("x", d3.forceX(centerX).strength(0.03))
+      .force("y", d3.forceY(centerY).strength(0.02))
+      .force("radial", d3.forceRadial((d: any) => {
+        const distanceFromCenter = Math.sqrt(
+          Math.pow(d.x - centerX, 2) + Math.pow(d.y - centerY, 2)
+        );
+        return Math.min(distanceFromCenter * 0.1, 50);
+      }, centerX, centerY).strength(0.02))
+      .alphaDecay(0.01)
+      .velocityDecay(0.3);
+
+    // Create container group for zoom
+    const g = svg.append("g").attr("class", "zoom-container");
     
-    // Create container group
-    const g = svg.append("g")
-      .attr("transform", `translate(${padding},${padding})`);
+    // Add zoom behavior
+    const zoom = d3.zoom<SVGSVGElement, unknown>()
+      .scaleExtent([0.5, 3])
+      .on("zoom", (event) => {
+        g.attr("transform", event.transform);
+      });
     
-    // Draw circles
-    const nodes = g.selectAll("g.node")
-      .data(packed.descendants().filter((d: any) => !d.children))
+    svg.call(zoom);
+
+    // Create bubble groups
+    const bubbles = g.selectAll("g.bubble")
+      .data(nodes)
       .enter()
       .append("g")
-      .attr("class", "node")
-      .attr("transform", (d: any) => `translate(${d.x},${d.y})`)
+      .attr("class", "bubble")
       .style("cursor", "pointer");
-    
-    // Add circles with physics-based spring animation
-    const circles = nodes.append("circle")
+
+    // Add circles with initial animation
+    const circles = bubbles.append("circle")
       .attr("r", 0)
-      .attr("fill", (d: any) => d.data.color || "#94a3b8")
-      .attr("stroke", "white")
+      .attr("fill", (d: any) => d.color)
+      .attr("opacity", 0.8)
+      .attr("stroke", "#fff")
       .attr("stroke-width", 2)
-      .attr("opacity", 0)
-      .style("filter", "drop-shadow(0 2px 4px rgba(0,0,0,0.1))");
-    
-    // Staggered spring animation for bubbles
-    circles.each(function(d: any, i: number) {
-      d3.select(this)
-        .transition()
-        .delay(i * 50) // Stagger each bubble
-        .duration(1200)
-        .ease(d3.easeElasticOut.period(0.4))
-        .attr("r", (d: any) => d.r)
-        .attr("opacity", 0.85);
-    });
-    
-    // Add text labels with fade-in animation
-    const labels = nodes.append("text")
-      .attr("text-anchor", "middle")
-      .attr("dominant-baseline", "middle")
-      .attr("fill", "white")
-      .attr("font-weight", "600")
-      .attr("opacity", 0)
-      .style("font-size", (d: any) => {
-        // Scale font size based on circle radius - ensure minimum readable size
-        // For smaller bubbles, use a larger multiplier to ensure visibility
-        const fontSize = d.r < 20 
-          ? Math.max(10, d.r * 0.4) // Larger multiplier for small bubbles
-          : Math.max(11, Math.min(16, d.r * 0.3));
-        return `${fontSize}px`;
-      })
-      .style("pointer-events", "none")
-      .style("text-shadow", "0 1px 3px rgba(0,0,0,0.7), 0 0 2px rgba(0,0,0,0.5)") // Stronger shadow for better visibility
-      .style("stroke", "rgba(0,0,0,0.3)") // Add stroke for contrast
-      .style("stroke-width", "0.5px")
-      .text((d: any) => d.data.label || d.data.name);
-    
-    // Animate labels with delay after circles
-    labels.each(function(d: any, i: number) {
-      d3.select(this)
-        .transition()
-        .delay(i * 50 + 400) // Start after circles begin animating
-        .duration(600)
-        .ease(d3.easeCubicOut)
-        .attr("opacity", 1);
-    });
-    
-    // Add value text below label
-    const values = nodes.append("text")
-      .attr("text-anchor", "middle")
-      .attr("dominant-baseline", "middle")
-      .attr("fill", "white")
-      .attr("font-weight", "500")
-      .attr("dy", (d: any) => d.r * 0.3)
-      .attr("opacity", 0)
-      .style("font-size", (d: any) => {
-        // Ensure value text is readable even on small bubbles
-        const fontSize = d.r < 20
-          ? Math.max(8, d.r * 0.25) // Larger multiplier for small bubbles
-          : Math.max(8, Math.min(12, d.r * 0.2));
-        return `${fontSize}px`;
-      })
-      .style("pointer-events", "none")
-      .style("text-shadow", "0 1px 2px rgba(0,0,0,0.7)") // Add shadow for better visibility
-      .style("stroke", "rgba(0,0,0,0.2)")
-      .style("stroke-width", "0.3px")
-      .text((d: any) => {
-        const value = d.data.mhPerTon !== undefined ? d.data.mhPerTon : d.data.value;
-        if (selectedMetric === "laborHoursPerTon") {
-          return `${value.toFixed(1)} MH/T`;
-        } else {
-          // Format cost per ton
-          if (value >= 1000) {
-            return `$${(value / 1000).toFixed(1)}K`;
+      .style("cursor", "pointer");
+
+    // Add hover interactions BEFORE transition
+    circles.on("mouseover", function(event, d: any) {
+        d3.select(this).attr("opacity", 1).attr("stroke-width", 3);
+        
+        // Show tooltip
+        if (tooltipRef.current) {
+          const tooltip = tooltipRef.current;
+          tooltip.style.display = "block";
+          
+          // Use clientX/clientY for viewport-relative positioning
+          const x = event.clientX;
+          const y = event.clientY;
+          const tooltipWidth = 200; // Approximate tooltip width
+          const tooltipHeight = 100; // Approximate tooltip height
+          const padding = 10;
+          
+          // Calculate position with viewport bounds checking
+          let left = x + padding;
+          let top = y - padding;
+          
+          // Keep tooltip within viewport horizontally
+          if (left + tooltipWidth > window.innerWidth) {
+            left = x - tooltipWidth - padding;
           }
-          return `$${value.toFixed(0)}`;
+          
+          // Keep tooltip within viewport vertically
+          if (top + tooltipHeight > window.innerHeight) {
+            top = y - tooltipHeight - padding;
+          }
+          if (top < 0) {
+            top = padding;
+          }
+          
+          tooltip.style.left = `${left}px`;
+          tooltip.style.top = `${top}px`;
+          tooltip.innerHTML = `
+            <div class="font-semibold">${d.label}</div>
+            <div>${d.mhPerTon.toFixed(2)} ${selectedMetric === "laborHoursPerTon" ? "MH/T" : "$/T"}</div>
+            <div class="text-xs text-gray-600">${d.percentage.toFixed(1)}% of total</div>
+            <div class="text-xs text-blue-400 mt-1">Click for detailed comparison</div>
+          `;
         }
-      });
-    
-    // Animate values
-    values.each(function(d: any, i: number) {
-      d3.select(this)
-        .transition()
-        .delay(i * 50 + 600) // Start after labels
-        .duration(600)
-        .ease(d3.easeCubicOut)
-        .attr("opacity", 1);
-    });
-    
-    // Add physics-based hover effects and tooltips
-    nodes
-      .on("mouseenter", function(event, d: any) {
-        const node = d3.select(this);
-        const circle = node.select("circle");
-        const currentR = (d as any).r;
-        
-        // Physics-based hover: bubble expands with spring effect
-        circle
-          .transition()
-          .duration(300)
-          .ease(d3.easeElasticOut.period(0.3))
-          .attr("r", currentR * 1.15) // Grow 15%
-          .attr("opacity", 1)
-          .attr("stroke-width", 4)
-          .style("filter", "drop-shadow(0 4px 12px rgba(0,0,0,0.25))");
-        
-        // Lift the entire node group slightly
-        node
-          .transition()
-          .duration(300)
-          .ease(d3.easeCubicOut)
-          .attr("transform", (d: any) => `translate(${d.x},${d.y - 5})`);
-        
-        // Scale text slightly
-        node.selectAll("text")
-          .transition()
-          .duration(300)
-          .ease(d3.easeCubicOut)
-          .style("font-size", (d: any) => {
-            const fontSize = Math.max(10, Math.min(18, currentR * 0.3));
-            return `${fontSize}px`;
-          });
-        
       })
-      .on("mouseleave", function(event, d: any) {
-        const node = d3.select(this);
-        const circle = node.select("circle");
-        const currentR = (d as any).r;
-        
-        // Spring back to original size
-        circle
-          .transition()
-          .duration(400)
-          .ease(d3.easeElasticOut.period(0.4))
-          .attr("r", currentR)
-          .attr("opacity", 0.85)
-          .attr("stroke-width", 2)
-          .style("filter", "drop-shadow(0 2px 4px rgba(0,0,0,0.1))");
-        
-        // Return node to original position
-        node
-          .transition()
-          .duration(400)
-          .ease(d3.easeCubicOut)
-          .attr("transform", (d: any) => `translate(${d.x},${d.y})`);
-        
-        // Return text to original size
-        node.selectAll("text")
-          .transition()
-          .duration(400)
-          .ease(d3.easeCubicOut)
-          .style("font-size", (d: any) => {
-            const fontSize = Math.max(10, Math.min(16, currentR * 0.25));
-            return `${fontSize}px`;
-          });
+      .on("mousemove", function(event) {
+        if (tooltipRef.current) {
+          const tooltip = tooltipRef.current;
+          
+          // Use clientX/clientY for viewport-relative positioning
+          const x = event.clientX;
+          const y = event.clientY;
+          const tooltipWidth = 200; // Approximate tooltip width
+          const tooltipHeight = 100; // Approximate tooltip height
+          const padding = 10;
+          
+          // Calculate position with viewport bounds checking
+          let left = x + padding;
+          let top = y - padding;
+          
+          // Keep tooltip within viewport horizontally
+          if (left + tooltipWidth > window.innerWidth) {
+            left = x - tooltipWidth - padding;
+          }
+          
+          // Keep tooltip within viewport vertically
+          if (top + tooltipHeight > window.innerHeight) {
+            top = y - tooltipHeight - padding;
+          }
+          if (top < 0) {
+            top = padding;
+          }
+          
+          tooltip.style.left = `${left}px`;
+          tooltip.style.top = `${top}px`;
+        }
+      })
+      .on("mouseout", function() {
+        d3.select(this).attr("opacity", 0.8).attr("stroke-width", 2);
+        if (tooltipRef.current) {
+          tooltipRef.current.style.display = "none";
+        }
       })
       .on("click", function(event, d: any) {
         event.stopPropagation();
-        setSelectedCategory(d.data.name);
+        setSelectedCategory(d.category);
       });
-    
-    // Draw overlay bubbles for selected project
-    if (selectedProjectData && bubblePositions.size > 0) {
-      const overlayGroup = g.append("g").attr("class", "overlay-bubbles");
+
+    // Now apply the transition
+    circles.transition()
+      .duration(800)
+      .ease(d3.easeElasticOut.period(0.5))
+      .attr("r", (d: any) => d.radius);
+
+    // Add average halo rings (matching project-level style)
+    // Show overlay circles for all categories that have average data
+    bubbles.each(function(d: any) {
+      const bubbleGroup = d3.select(this);
+      const category = d.category;
+      const avgValue = averageData.get(category) || 0;
+      const wonAvgValue = wonLostAverageData.won.get(category) || 0;
+      const lostAvgValue = wonLostAverageData.lost.get(category) || 0;
       
-      // Find max value for scaling
-      const maxAvgValue = Math.max(...Array.from(bubblePositions.values()).map(b => b.avgValue), 1);
-      const maxProjectValue = Math.max(...selectedProjectData.map(d => d.mhPerTon), 1);
-      const maxValue = Math.max(maxAvgValue, maxProjectValue);
-      
-      selectedProjectData.forEach((projectItem) => {
-        const position = bubblePositions.get(projectItem.category);
-        if (!position) return;
-        
-        // Calculate radius based on project value, scaled to match average bubble size
-        const projectValue = projectItem.mhPerTon;
-        const avgValue = position.avgValue;
-        const radiusRatio = projectValue / maxValue;
-        const avgRadiusRatio = avgValue / maxValue;
-        const baseRadius = position.r;
-        const projectRadius = baseRadius * (radiusRatio / Math.max(avgRadiusRatio, 0.1));
-        
-        // Clamp radius to reasonable bounds
-        const minRadius = baseRadius * 0.3;
-        const maxRadius = baseRadius * 2;
-        const clampedRadius = Math.max(minRadius, Math.min(maxRadius, projectRadius));
-        
-        // Calculate percentage deviation
-        const percentDiff = avgValue > 0 ? ((projectValue - avgValue) / avgValue) * 100 : 0;
-        const isAbove = projectValue > avgValue;
-        
-        // Determine stroke color based on deviation (red for concerning, amber for moderate)
-        let strokeColor = "#ef4444"; // Bright red
-        if (Math.abs(percentDiff) < 15) {
-          strokeColor = "#f59e0b"; // Amber for moderate deviation
-        }
-        if (Math.abs(percentDiff) < 5) {
-          strokeColor = "#10b981"; // Green for close to average
-        }
-        
-        // Draw red overlay circle
-        const overlayCircle = overlayGroup.append("circle")
-          .attr("cx", position.x)
-          .attr("cy", position.y)
-          .attr("r", 0)
-          .attr("fill", "none")
-          .attr("stroke", strokeColor)
-          .attr("stroke-width", 3)
-          .attr("opacity", 0.9)
-          .style("filter", `drop-shadow(0 0 4px ${strokeColor}80)`)
-          .attr("data-category", projectItem.category)
-          .attr("data-project-value", projectValue)
-          .attr("data-avg-value", avgValue)
-          .attr("data-percent-diff", percentDiff);
-        
-        // Physics-based spring animation for overlay circles
-        overlayCircle.transition()
-          .duration(800)
-          .ease(d3.easeElasticOut.period(0.5))
-          .attr("r", clampedRadius)
-          .attr("opacity", 0)
-          .transition()
-          .duration(300)
-          .attr("opacity", 0.9);
-        
-        // Add percentage deviation label if significant
-        if (Math.abs(percentDiff) > 5) {
-          const labelY = position.y + (isAbove ? -baseRadius - 20 : baseRadius + 20);
-          const labelText = `${isAbove ? '+' : ''}${percentDiff.toFixed(0)}%`;
-          
-          // Add background circle for label readability (append first so it's behind text)
-          const bgCircle = overlayGroup.append("circle")
-            .attr("cx", position.x)
-            .attr("cy", labelY)
-            .attr("r", 12)
-            .attr("fill", "white")
-            .attr("opacity", 0)
-            .style("pointer-events", "none");
-          
-          bgCircle.transition()
-            .duration(600)
-            .delay(300)
-            .attr("opacity", 0.9);
-          
-          // Add text label (append after circle so it's on top)
-          overlayGroup.append("text")
-            .attr("x", position.x)
-            .attr("y", labelY)
-            .attr("text-anchor", "middle")
-            .attr("dominant-baseline", "middle")
-            .attr("fill", strokeColor)
-            .attr("font-weight", "700")
-            .attr("font-size", "11px")
+      // Add red dashed halo for overall average (always show if data exists)
+      if (avgValue > 0) {
+        const avgRadius = radiusScale(avgValue);
+        if (avgRadius > 5) {
+          bubbleGroup.append("circle")
+            .attr("r", 0)
+            .attr("fill", "none")
+            .attr("stroke", "#ef4444")
+            .attr("stroke-width", 2)
+            .attr("stroke-dasharray", "5,5")
+            .attr("opacity", 0.7)
             .style("pointer-events", "none")
-            .attr("opacity", 0)
-            .text(labelText)
             .transition()
-            .duration(600)
-            .delay(300)
-            .attr("opacity", 1);
+            .duration(1000)
+            .delay(400)
+            .attr("r", avgRadius);
         }
-        
-        // Add physics-based hover tooltip for overlay bubbles
-        overlayCircle
-          .on("mouseenter", function(event) {
-            const circle = d3.select(this);
-            const currentR = parseFloat(circle.attr("r") || "0");
-            
-            // Physics-based expansion
-            circle
-              .transition()
-              .duration(300)
-              .ease(d3.easeElasticOut.period(0.3))
-              .attr("r", currentR * 1.2)
-              .attr("stroke-width", 5)
-              .attr("opacity", 1)
-              .style("filter", `drop-shadow(0 0 8px ${strokeColor}CC)`);
-            
-          })
-          .on("click", function(event) {
-            event.stopPropagation();
-            setSelectedCategory(projectItem.category);
-          })
-          .on("mouseleave", function() {
-            const circle = d3.select(this);
-            const currentR = parseFloat(circle.attr("r") || "0") / 1.2; // Get original radius
-            
-            // Spring back
-            circle
-              .transition()
-              .duration(400)
-              .ease(d3.easeElasticOut.period(0.4))
-              .attr("r", currentR)
-              .attr("stroke-width", 3)
-              .attr("opacity", 0.9)
-              .style("filter", `drop-shadow(0 0 4px ${strokeColor}80)`);
-            
-          })
-          .on("click", function(event) {
-            event.stopPropagation();
-            setSelectedCategory(projectItem.category);
-          });
-      });
-    }
-    
-    } catch (error) {
-      console.error("Error rendering bubble chart:", error);
-    }
-    
-    // Cleanup function
-    return () => {
-      if (svgRef.current) {
-        const svg = d3.select(svgRef.current);
-        svg.selectAll("*").remove();
       }
+      
+      // Add green dotted line for won projects average (always show if data exists)
+      if (wonAvgValue > 0) {
+        const wonRadius = radiusScale(wonAvgValue);
+        if (wonRadius > 5) {
+          bubbleGroup.append("circle")
+            .attr("r", 0)
+            .attr("fill", "none")
+            .attr("stroke", "#22c55e") // Green
+            .attr("stroke-width", 2)
+            .attr("stroke-dasharray", "4,4")
+            .attr("opacity", 0.7)
+            .style("pointer-events", "none")
+            .transition()
+            .duration(1000)
+            .delay(700)
+            .attr("r", wonRadius);
+        }
+      }
+      
+      // Add red dotted line for lost projects average (always show if data exists)
+      if (lostAvgValue > 0) {
+        const lostRadius = radiusScale(lostAvgValue);
+        if (lostRadius > 5) {
+          bubbleGroup.append("circle")
+            .attr("r", 0)
+            .attr("fill", "none")
+            .attr("stroke", "#ef4444") // Red
+            .attr("stroke-width", 2)
+            .attr("stroke-dasharray", "4,4")
+            .attr("opacity", 0.7)
+            .style("pointer-events", "none")
+            .transition()
+            .duration(1000)
+            .delay(800)
+            .attr("r", lostRadius);
+        }
+      }
+    });
+
+    // Add text labels
+    const labels = bubbles.append("g")
+      .attr("class", "label-group")
+      .style("pointer-events", "none");
+
+    labels.each(function(d: any) {
+      const labelGroup = d3.select(this);
+      const radius = d.radius;
+      const fontSize = Math.min(radius / 3, 14);
+      const valueFontSize = Math.min(radius / 4, 12);
+      
+      // Category label
+      labelGroup.append("text")
+        .attr("text-anchor", "middle")
+        .attr("dominant-baseline", "middle")
+        .attr("fill", "white")
+        .attr("font-weight", "600")
+        .attr("font-size", `${fontSize}px`)
+        .style("text-shadow", "0 1px 3px rgba(0,0,0,0.7), 0 0 2px rgba(0,0,0,0.5)")
+        .style("stroke", "rgba(0,0,0,0.3)")
+        .style("stroke-width", "0.5px")
+        .text(d.label);
+      
+      // Value text
+      labelGroup.append("text")
+        .attr("text-anchor", "middle")
+        .attr("dominant-baseline", "middle")
+        .attr("dy", fontSize + 4)
+        .attr("fill", "white")
+        .attr("font-weight", "500")
+        .attr("font-size", `${valueFontSize}px`)
+        .style("text-shadow", "0 1px 2px rgba(0,0,0,0.7)")
+        .text(`${d.mhPerTon.toFixed(1)} ${selectedMetric === "laborHoursPerTon" ? "MH/T" : "$/T"}`);
+    });
+
+    // Update positions on simulation tick
+    simulation.on("tick", () => {
+      bubbles.attr("transform", (d: any) => `translate(${d.x},${d.y})`);
+    });
+
+    // Cleanup
+    return () => {
+      simulation.stop();
     };
-  }, [bubbleData, selectedMetric, selectedProjectData, selectedProjectId]);
+  }, [bubbleData, selectedProjectId, selectedProjectData, selectedMetric, averageData, wonLostAverageData]);
   
   const getMetricLabel = (metric: "laborHoursPerTon" | "costPerTon"): string => {
     return metric === "laborHoursPerTon" ? "Man Hours per Ton" : "Cost per Ton";
@@ -957,8 +890,8 @@ export default function CostTrendBubbleChart({
   if (lines.length === 0) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+        <CardHeader className="pb-4 pt-5 mb-4 border-b border-gray-200/70">
+          <CardTitle className="flex items-center gap-2 font-bold text-gray-900 tracking-normal">
             <BarChart3 className="w-5 h-5" />
             Cost Trend Analysis
           </CardTitle>
@@ -978,11 +911,11 @@ export default function CostTrendBubbleChart({
   
   return (
     <Card className="p-4 md:p-6 rounded-2xl border border-slate-200/60 bg-white shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
-      <CardHeader className="pb-4">
+      <CardHeader className="pb-4 pt-5 mb-4 border-b border-gray-200/70">
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-2 flex-1 min-w-0">
-              <CardTitle className="text-xl font-semibold text-gray-900">
+              <CardTitle className="text-xl font-bold text-gray-900 tracking-normal">
                 Cost Trend Analysis
               </CardTitle>
               {/* Always-visible info button with rich tooltip */}
@@ -1016,12 +949,12 @@ export default function CostTrendBubbleChart({
                           <p>Represents {selectedMetric === "laborHoursPerTon" ? "man hours per ton (MH/T)" : "cost per ton ($/T)"} for each category. Larger bubbles indicate higher intensity.</p>
                         </div>
                         <div>
-                          <p className="font-medium text-gray-900 mb-1">Project comparison</p>
-                          <p>Select a project from the dropdown to see how it compares to the company average. Deviation indicators show if a category is above or below average.</p>
+                          <p className="font-medium text-gray-900 mb-1">Bubble size</p>
+                          <p>Represents {selectedMetric === "laborHoursPerTon" ? "man hours per ton (MH/T)" : "cost per ton ($/T)"} for each category. Larger bubbles indicate higher intensity.</p>
                         </div>
                         <div>
-                          <p className="font-medium text-gray-900 mb-1">Deviation colors</p>
-                          <p>Red = &gt;15% deviation, Amber = 5-15% deviation, Green = &lt;5% deviation from company average.</p>
+                          <p className="font-medium text-gray-900 mb-1">Overlay circles</p>
+                          <p>Gray dashed circles show company average. Dark gray solid circles show won/lost project averages. Use these as benchmarks to compare current values.</p>
                         </div>
                         <div>
                           <p className="font-medium text-gray-900 mb-1">Click to compare</p>
@@ -1085,7 +1018,7 @@ export default function CostTrendBubbleChart({
                   <p className="text-xs font-medium text-blue-900 mb-1.5">Quick tip</p>
                   <p className="text-xs text-blue-800 leading-relaxed mb-2">
                     Bubble size shows {selectedMetric === "laborHoursPerTon" ? "labor intensity" : "cost intensity"} per category. 
-                    Select a project to compare it against company averages and spot outliers.
+                    Overlay circles show company average and won/lost averages for comparison.
                   </p>
                   <button
                     onClick={handleDismissHelp}
@@ -1105,36 +1038,52 @@ export default function CostTrendBubbleChart({
             </div>
           )}
           
-          {selectedProjectId && (
-            <div className="flex items-center gap-3 text-xs text-gray-600 flex-wrap">
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 border-2 border-red-500 rounded-full bg-transparent"></div>
-                <span>Red = &gt;15% deviation</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 border-2 border-amber-500 rounded-full bg-transparent"></div>
-                <span>Amber = 5-15% deviation</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 border-2 border-green-500 rounded-full bg-transparent"></div>
-                <span>Green = &lt;5% deviation</span>
-              </div>
-            </div>
-          )}
         </div>
       </CardHeader>
       
       <CardContent className="space-y-6 relative">
         {/* Bubble Chart Visualization */}
         <div className="w-full flex justify-center" style={{ minHeight: "600px" }}>
-          <svg
-            ref={svgRef}
-            width={600}
-            height={600}
-            className="max-w-full h-auto"
-            viewBox="0 0 600 600"
-            preserveAspectRatio="xMidYMid meet"
-          />
+          <div ref={containerRef} className="relative w-full flex justify-center" style={{ minHeight: "600px" }}>
+            <svg
+              ref={svgRef}
+              className="max-w-full h-auto"
+              viewBox="0 0 800 600"
+              preserveAspectRatio="xMidYMid meet"
+            />
+            {/* Tooltip */}
+            <div
+              ref={tooltipRef}
+              className="fixed bg-white rounded-lg shadow-lg p-2 border border-gray-200 pointer-events-none z-50"
+              style={{ display: "none" }}
+            />
+            {/* Zoom/Pan instructions */}
+            <div className="absolute top-2 left-1/2 transform -translate-x-1/2 text-[10px] text-gray-500 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-lg shadow-sm border border-gray-200/50">
+              Scroll to zoom • Drag to pan
+            </div>
+            {/* Legend */}
+            {(averageData.size > 0 || wonLostAverageData.won.size > 0 || wonLostAverageData.lost.size > 0) && (
+              <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 text-[10px] text-gray-500 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-lg shadow-sm border border-gray-200/50">
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1">
+                    <div className="w-2 h-2 rounded-full border-2 border-red-500 border-dashed" />
+                    <span>All avg</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-2 h-2 rounded-full border-2 border-green-500 border-dashed" />
+                    <span>Won avg</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-2 h-2 rounded-full border-2 border-orange-500 border-dashed" />
+                    <span>Lost avg</span>
+                  </div>
+                </div>
+                <div className="text-[9px] text-gray-400 mt-1 text-center">
+                  Click bubbles to compare
+                </div>
+              </div>
+            )}
+          </div>
         </div>
         
         {/* Legend */}
@@ -1216,7 +1165,7 @@ export default function CostTrendBubbleChart({
               <div className="p-6">
                 <div className="flex items-center justify-between mb-6">
                   <div>
-                    <h3 className="text-xl font-semibold text-slate-900">{categoryComparison.label}</h3>
+                    <h3 className="text-xl font-bold text-gray-900 tracking-normal">{categoryComparison.label}</h3>
                     <p className="text-xs text-slate-500 mt-1">
                       Live comparison across all projects
                     </p>

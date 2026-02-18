@@ -168,8 +168,8 @@ export default function PerformanceMetrics({ companyId, className }: Performance
 
   return (
     <Card className={cn("border border-gray-200 shadow-lg hover:shadow-xl transition-all duration-300 bg-white h-full", className)}>
-      <CardHeader className="pb-5">
-        <CardTitle className="flex items-center gap-2 text-lg font-semibold">
+      <CardHeader className="pb-4 pt-5 mb-4 border-b border-gray-200/70">
+        <CardTitle className="flex items-center gap-2 text-lg font-bold text-gray-900 tracking-normal">
           <Target className="w-5 h-5 text-blue-600" />
           Bid Pipeline & Activity
         </CardTitle>
@@ -178,7 +178,7 @@ export default function PerformanceMetrics({ companyId, className }: Performance
         {/* Estimates Created Trend Chart */}
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h4 className="text-sm font-semibold text-gray-800">Estimates Created (6 Months)</h4>
+            <h4 className="text-sm font-bold text-gray-900 tracking-normal">Estimates Created (6 Months)</h4>
             <div className="flex items-center gap-2">
               <span className={`text-sm font-semibold ${metrics.estimatesChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                 {metrics.estimatesChange >= 0 ? '+' : ''}{metrics.estimatesChange.toFixed(1)}%

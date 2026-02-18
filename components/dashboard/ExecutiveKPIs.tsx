@@ -11,7 +11,6 @@ import {
   AlertTriangle,
   TrendingDown,
   TrendingUp as TrendingUpIcon,
-  Info
 } from "lucide-react";
 import { subscribeToCollection, getDocument } from "@/lib/firebase/firestore";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
@@ -377,21 +376,6 @@ export default function ExecutiveKPIs({
             iconColor="text-blue-600"
             isExpanded={expandedKpiId === "weighted-pipeline"}
             onToggle={handleKpiToggle}
-            tooltip={
-              <div className="group/tooltip relative">
-                <Info className="h-4 w-4 text-gray-400 hover:text-gray-600 cursor-help transition-colors" />
-                <div className="absolute right-0 top-6 w-72 p-4 bg-gray-900 text-white text-sm rounded-xl shadow-2xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all duration-200 z-20">
-                  <p className="font-semibold mb-2 text-base">Weighted Pipeline Value</p>
-                  <p className="text-gray-300 leading-relaxed text-xs">
-                    Realistic expected revenue based on probability of award. Calculated as: 
-                    <span className="font-mono text-blue-300"> (Project Value × Win Probability)</span> for each active bid.
-                  </p>
-                  <p className="text-gray-300 mt-2 leading-relaxed text-xs">
-                    Win probability is determined by: manual override, GC historical win rate, or project type win rate.
-                  </p>
-                </div>
-              </div>
-            }
           >
             {!hasActiveBids ? (
               <div className="text-center py-10">

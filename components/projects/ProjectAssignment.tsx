@@ -108,8 +108,8 @@ export function ProjectAssignment({ projectId }: ProjectAssignmentProps) {
   if (loading) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+        <CardHeader className="pb-4 pt-5 mb-4 border-b border-gray-200/70">
+          <CardTitle className="flex items-center gap-2 font-bold text-gray-900 tracking-normal">
             <Users className="w-5 h-5" />
             Project Assignment
           </CardTitle>
@@ -127,8 +127,8 @@ export function ProjectAssignment({ projectId }: ProjectAssignmentProps) {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+      <CardHeader className="pb-4 pt-5 mb-4 border-b border-gray-200/70">
+        <CardTitle className="flex items-center gap-2 font-bold text-gray-900 tracking-normal">
           <Users className="w-5 h-5" />
           Project Assignment
         </CardTitle>

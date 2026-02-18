@@ -5,6 +5,8 @@ import {
   Calendar,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   X,
   AlertTriangle,
   Info,
@@ -201,6 +203,8 @@ export default function BidProductionScheduleModal({
   const [dailyEdits, setDailyEdits] = useState<Record<string, string>>({});
   const [updatingOverrideKey, setUpdatingOverrideKey] = useState<string | null>(null);
   const [hoveredWeek, setHoveredWeek] = useState<number | null>(null);
+  // First 2 shop load cards expanded by default; rest rolled up to condense scrolling
+  const [expandedLoadKeys, setExpandedLoadKeys] = useState<Set<string>>(new Set());
 
   const today = useMemo(() => {
     const d = new Date();
@@ -503,6 +507,24 @@ export default function BidProductionScheduleModal({
     workingDaysKey,
     holidaysKey,
   ]);
+
+  // Keep first 2 shop load keys expanded when week loads change
+  const selectedWeekLoadKeys = useMemo(
+    () => selectedWeekLoads.map(({ load }) => load.key),
+    [selectedWeekLoads]
+  );
+  // Effective expanded set: first 2 by default; use state only if it has keys in the current week's list
+  const effectiveExpandedKeys = useMemo(() => {
+    const firstTwo = new Set(selectedWeekLoadKeys.slice(0, 2));
+    if (expandedLoadKeys.size === 0) return firstTwo;
+    const inCurrentWeek = [...expandedLoadKeys].filter((k) => selectedWeekLoadKeys.includes(k));
+    if (inCurrentWeek.length === 0) return firstTwo;
+    return new Set(inCurrentWeek);
+  }, [expandedLoadKeys, selectedWeekLoadKeys]);
+  // When the week's load list changes, reset to exactly first 2 expanded
+  useEffect(() => {
+    setExpandedLoadKeys(new Set(selectedWeekLoadKeys.slice(0, 2)));
+  }, [selectedWeekLoadKeys.join(",")]);
 
   const gapWeeksCurrent = weeklySummaries.filter(
     (week) =>
@@ -859,152 +881,160 @@ export default function BidProductionScheduleModal({
   }
 
   return (
-    <div className={asPage ? "min-h-screen bg-white" : "fixed inset-0 z-50 flex"}>
+    <div data-ui-version="apple-hig" className={asPage ? "min-h-screen bg-gray-100" : "fixed inset-0 z-50 flex"}>
       {!asPage && (
         <>
-          <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
         </>
       )}
-      <div className={asPage ? "w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6" : "relative w-full max-w-6xl h-full ml-auto bg-white shadow-2xl flex flex-col"}>
-        <div className={`flex items-center justify-between ${asPage ? "px-0 py-6 mb-6" : "px-6 py-4"} border-b border-gray-200`}>
+      <div className={asPage ? "w-full max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 py-8" : "relative w-full max-w-6xl h-full ml-auto bg-gray-100 shadow-2xl flex flex-col"}>
+        {/* Apple-style Header */}
+        <div className={`flex items-center justify-between ${asPage ? "px-0 py-8 mb-4" : "px-8 py-6"}`}>
           <div>
-            {!asPage && <p className="text-sm uppercase text-gray-500 tracking-wide">Executive Insight</p>}
-            <h2 className={`${asPage ? "text-4xl" : "text-2xl"} font-semibold text-gray-900`}>Bid & Production Schedule</h2>
-            <p className="text-xs text-gray-500">
-              Visualize awarded work against capacity to spot gaps or overloads before bidding.
+            {!asPage && <p className="text-sm font-medium text-gray-500 tracking-wide mb-1">Executive Insight</p>}
+            <h2 className={`${asPage ? "text-[34px]" : "text-[28px]"} font-semibold text-gray-900 tracking-tight`}>Bid & Production Schedule</h2>
+            <p className="text-[15px] text-gray-500 mt-1">
+              Visualize awarded work against capacity to spot gaps or overloads.
             </p>
           </div>
           {!asPage && (
-            <Button variant="ghost" onClick={onClose} className="text-gray-500 hover:text-gray-800">
-              <X className="w-5 h-5" />
+            <Button variant="ghost" onClick={onClose} className="text-gray-400 hover:text-gray-600 rounded-full p-2">
+              <X className="w-6 h-6" />
             </Button>
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card>
-              <CardContent className="p-4">
-                <p className="text-xs uppercase text-gray-500 mb-1">Weekly Capacity</p>
-                <p className="text-2xl font-semibold text-gray-900">
-                  {weeklyCapacity > 0 ? weeklyCapacity.toLocaleString() : "Unset"} hrs
-                </p>
-                <p className="text-xs text-gray-500">Configured in Company Settings</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <p className="text-xs uppercase text-gray-500 mb-1">This Month</p>
-                <p className="text-2xl font-semibold text-gray-900">{gapWeeksCurrent.length}</p>
-                <p className="text-xs text-gray-500">Under-loaded weeks ready for aggressive bids</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <p className="text-xs uppercase text-gray-500 mb-1">Overbooked Weeks</p>
-                <p className="text-2xl font-semibold text-gray-900">{overloadWeeks.length}</p>
-                <p className="text-xs text-gray-500">Consider protecting margin or shifting work</p>
-              </CardContent>
-            </Card>
+        <div className="flex-1 overflow-y-auto px-0 pb-8 space-y-6">
+          {/* Apple-style KPI Cards with subtle shadows */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div className="bg-white rounded-2xl shadow-sm p-6">
+              <p className="text-[13px] font-medium text-gray-500 uppercase tracking-wide">Weekly Capacity</p>
+              <p className="text-[32px] font-semibold text-gray-900 mt-1 tracking-tight">
+                {weeklyCapacity > 0 ? weeklyCapacity.toLocaleString() : "—"}
+              </p>
+              <p className="text-[13px] text-gray-400 mt-1">hours available</p>
+            </div>
+            <div className="bg-white rounded-2xl shadow-sm p-6">
+              <p className="text-[13px] font-medium text-gray-500 uppercase tracking-wide">Under-loaded</p>
+              <p className="text-[32px] font-semibold text-amber-500 mt-1 tracking-tight">{gapWeeksCurrent.length}</p>
+              <p className="text-[13px] text-gray-400 mt-1">weeks this month</p>
+            </div>
+            <div className="bg-white rounded-2xl shadow-sm p-6">
+              <p className="text-[13px] font-medium text-gray-500 uppercase tracking-wide">Overbooked</p>
+              <p className="text-[32px] font-semibold text-red-500 mt-1 tracking-tight">{overloadWeeks.length}</p>
+              <p className="text-[13px] text-gray-400 mt-1">weeks need attention</p>
+            </div>
           </div>
 
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <Calendar className="w-5 h-5" />
-                  Production Schedule
-                </CardTitle>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setCurrentDate(addMonths(currentDate, -1))}>
-                    <ChevronLeft className="w-4 h-4" />
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => {
+          {/* Apple-style Calendar Card */}
+          <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+            <div className="px-6 py-5 flex items-center justify-between">
+              <div>
+                <h3 className="text-[20px] font-semibold text-gray-900 tracking-tight">Production Schedule</h3>
+                <p className="text-[15px] text-gray-500 mt-0.5">
+                  {currentDate.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+                </p>
+              </div>
+              <div className="flex items-center gap-1">
+                <button 
+                  onClick={() => setCurrentDate(addMonths(currentDate, -1))}
+                  className="w-9 h-9 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-100 transition-colors"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <button 
+                  onClick={() => {
                     const now = new Date();
                     setCurrentDate(now);
                     setSelectedDate(formatDate(now));
-                  }}>
-                    Today
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => setCurrentDate(addMonths(currentDate, 1))}>
-                    <ChevronRight className="w-4 h-4" />
-                  </Button>
-                </div>
+                  }}
+                  className="px-4 py-1.5 rounded-full text-[13px] font-medium text-blue-600 hover:bg-blue-50 transition-colors"
+                >
+                  Today
+                </button>
+                <button 
+                  onClick={() => setCurrentDate(addMonths(currentDate, 1))}
+                  className="w-9 h-9 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-100 transition-colors"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
               </div>
-              <p className="text-sm text-gray-600">
-                {currentDate.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
-              </p>
-            </CardHeader>
-            <CardContent>
+            </div>
+            <div className="px-6 pb-6">
               {inferredDailyCapacity <= 0 && (
-                <div className="mb-4 p-3 rounded-lg bg-amber-50 text-amber-800 text-xs flex gap-2">
-                  <Info className="w-4 h-4 mt-0.5" />
-                  Set a daily or weekly capacity in Company Settings to unlock color-coded load warnings.
+                <div className="mb-4 p-4 rounded-xl bg-amber-50/80 text-amber-700 text-[13px] flex gap-3 items-start">
+                  <Info className="w-5 h-5 mt-0.5 flex-shrink-0" />
+                  <span>Set daily or weekly capacity in Company Settings to enable load warnings.</span>
                 </div>
               )}
               <div className="space-y-1">{renderCalendar()}</div>
-              <div className="mt-4 pt-4 border-t border-gray-200">
-                <div className="flex flex-wrap items-center gap-4 text-xs text-gray-600">
+              {/* Apple-style Legend */}
+              <div className="mt-5 pt-4 border-t border-gray-100">
+                <div className="flex flex-wrap items-center gap-5 text-[13px] text-gray-600">
                   <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded border border-red-400 bg-red-100"></div>
+                    <div className="w-3.5 h-3.5 rounded-md bg-red-100 border border-red-200"></div>
                     <span>Over capacity</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded border border-amber-400 bg-amber-100"></div>
+                    <div className="w-3.5 h-3.5 rounded-md bg-amber-100 border border-amber-200"></div>
                     <span>At capacity</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded border border-green-300 bg-green-50"></div>
-                    <span>Available capacity</span>
+                    <div className="w-3.5 h-3.5 rounded-md bg-green-50 border border-green-200"></div>
+                    <span>Available</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded border border-gray-200 bg-gray-50"></div>
+                    <div className="w-3.5 h-3.5 rounded-md bg-gray-100 border border-gray-200"></div>
                     <span>Non-working</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded border border-blue-400 bg-blue-100"></div>
+                    <div className="w-3.5 h-3.5 rounded-md bg-blue-100 border border-blue-200"></div>
                     <span>Today</span>
                   </div>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
+          {/* Apple-style Two Column Layout */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">
-                  Shop Load •{" "}
-                  {selectedWeekKey
-                    ? `${formatShortLabel(new Date(selectedWeekKey))} – ${formatShortLabel(
-                        addDays(new Date(selectedWeekKey), 6)
-                      )}`
-                    : "Select a week"}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="border border-dashed border-gray-300 rounded-lg p-4 bg-gray-50">
-                  <p className="text-sm font-semibold text-gray-900 mb-3">
+            {/* Shop Load Card */}
+            <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+              <div className="px-6 py-5 border-b border-gray-100">
+                <h3 className="text-[17px] font-semibold text-gray-900">
+                  Shop Load
+                  {selectedWeekKey && (
+                    <span className="font-normal text-gray-500">
+                      {" "}• {formatShortLabel(new Date(selectedWeekKey))} – {formatShortLabel(addDays(new Date(selectedWeekKey), 6))}
+                    </span>
+                  )}
+                </h3>
+              </div>
+              <div className="p-6 space-y-5">
+                {/* Apple-style Form Section */}
+                <div className="rounded-xl bg-gray-50/80 p-5">
+                  <p className="text-[15px] font-semibold text-gray-900 mb-4">
                     Add Awarded Workload
                   </p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="text-[11px] text-gray-500 block mb-1">
+                      <label className="text-[13px] font-medium text-gray-600 block mb-2">
                         Project Name
                       </label>
-                      <Input
+                      <input
                         value={productionForm.projectName}
                         onChange={(e) =>
                           setProductionForm({ ...productionForm, projectName: e.target.value })
                         }
                         placeholder="e.g., Tower A Structural Steel"
+                        className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-[15px] text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
                       />
                     </div>
                     <div>
-                      <label className="text-[11px] text-gray-500 block mb-1">
+                      <label className="text-[13px] font-medium text-gray-600 block mb-2">
                         Total Hours
                       </label>
-                      <Input
+                      <input
                         type="number"
                         min="0"
                         value={productionForm.totalHours}
@@ -1012,162 +1042,394 @@ export default function BidProductionScheduleModal({
                           setProductionForm({ ...productionForm, totalHours: e.target.value })
                         }
                         placeholder="1200"
+                        className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-[15px] text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
                       />
                     </div>
                     <div>
-                      <label className="text-[11px] text-gray-500 block mb-1">
+                      <label className="text-[13px] font-medium text-gray-600 block mb-2">
                         Start Date
                       </label>
-                      <Input
+                      <input
                         type="date"
                         value={productionForm.startDate}
                         onChange={(e) =>
                           setProductionForm({ ...productionForm, startDate: e.target.value })
                         }
+                        className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-[15px] text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
                       />
                     </div>
                     <div>
-                      <label className="text-[11px] text-gray-500 block mb-1">
-                        End Date (optional)
+                      <label className="text-[13px] font-medium text-gray-600 block mb-2">
+                        End Date <span className="text-gray-400">(optional)</span>
                       </label>
-                      <Input
+                      <input
                         type="date"
                         value={productionForm.endDate}
                         onChange={(e) =>
                           setProductionForm({ ...productionForm, endDate: e.target.value })
                         }
+                        className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-[15px] text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
                       />
                     </div>
                   </div>
-                  <div className="flex justify-end mt-3">
-                    <Button
-                      variant="primary"
-                      size="sm"
+                  <div className="flex justify-end mt-4">
+                    <button
                       onClick={handleAddProductionEntry}
                       disabled={isSavingProduction}
+                      className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-[15px] font-medium rounded-xl transition-colors"
                     >
                       {isSavingProduction ? "Saving..." : "Add Shop Load"}
-                    </Button>
+                    </button>
                   </div>
                 </div>
 
                 {!selectedWeekKey ? (
-                  <p className="text-sm text-gray-500">
-                    Select a date in the calendar to evaluate shop load for that week.
+                  <p className="text-[15px] text-gray-500 py-4 text-center">
+                    Select a date in the calendar to view shop load for that week.
                   </p>
                 ) : selectedWeekLoads.length === 0 ? (
-                  <p className="text-sm text-gray-500">
-                    No awarded work scheduled this week. Great window for aggressive bids.
+                  <p className="text-[15px] text-gray-500 py-4 text-center">
+                    No awarded work scheduled. Great window for aggressive bids.
                   </p>
                 ) : (
-                  selectedWeekLoads.map(({ load, rows }) => (
-                    <div key={load.key} className="border border-gray-200 rounded-lg p-3 bg-white space-y-3">
-                      <div className="flex items-center justify-between">
+                  <>
+                    {/* Apple-style Project Pills */}
+                    <div className="flex flex-wrap gap-3">
+                      {selectedWeekLoads.slice(0, 2).map(({ load }) => (
+                        <button
+                          key={load.key}
+                          onClick={() => setExpandedLoadKeys((prev) => new Set(prev).add(load.key))}
+                          className="flex items-center gap-3 px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-xl transition-colors text-left min-w-0 flex-1"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[15px] font-medium text-gray-900 truncate">{load.name}</p>
+                            <p className="text-[13px] text-gray-500">{load.totalHours.toLocaleString()} hrs</p>
+                          </div>
+                          <ChevronDown className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Apple-style Capacity Chart */}
+                    <div className="mt-5 rounded-xl bg-gray-50/80 p-5">
+                      <div className="flex items-center justify-between mb-4">
                         <div>
-                          <p className="text-sm font-semibold text-gray-900">{load.name}</p>
-                          <p className="text-xs text-gray-500">
-                            {load.source === "project" ? "Project" : "Manual Entry"} •{" "}
-                            {load.totalHours.toLocaleString()} hrs total
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {updatingOverrideKey?.startsWith(load.key) && (
-                            <span className="text-xs text-blue-600">Saving…</span>
-                          )}
-                          {load.canDelete && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="text-gray-400 hover:text-red-600"
-                              onClick={() => handleDeleteProductionEntry(load)}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          )}
+                          <h4 className="text-[15px] font-semibold text-gray-900">Capacity Timeline</h4>
+                          <p className="text-[13px] text-gray-500 mt-0.5">Shop utilization over time</p>
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 md:grid-cols-7 gap-2 text-xs">
-                        {rows.map((row) => {
-                          if (!row.isWorkingDay) {
-                            return (
-                              <div
-                                key={row.dateKey}
-                                className="text-center py-3 border border-dashed border-gray-200 rounded bg-gray-50 text-gray-400"
+                      {weeklySummaries.length === 0 ? (
+                        <p className="text-[15px] text-gray-500 text-center py-8">
+                          Configure shop capacity in Settings to view chart.
+                        </p>
+                      ) : (
+                        <div className="space-y-5">
+                          {/* Chart Container */}
+                          <div
+                            className="relative bg-white rounded-xl p-4"
+                            style={{ height: "220px" }}
+                            onMouseLeave={() => setHoveredWeek(null)}
+                            onMouseMove={(e) => {
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              const x = e.clientX - rect.left - 40; // Account for Y-axis padding
+                              const width = rect.width - 56;
+                              if (width > 0 && weeklySummaries.length > 0) {
+                                const percent = Math.max(0, Math.min(100, (x / width) * 100));
+                                const weekIndex = Math.round((percent / 100) * (weeklySummaries.length - 1));
+                                const clampedIndex = Math.max(0, Math.min(weekIndex, weeklySummaries.length - 1));
+                                const week = weeklySummaries[clampedIndex];
+                                setHoveredWeek(week?.weekIndex ?? null);
+                              }
+                            }}
+                          >
+                            {/* Apple-style Tooltip */}
+                            {hoveredWeek !== null && (() => {
+                              const week = weeklySummaries.find((w) => w.weekIndex === hoveredWeek);
+                              if (!week) return null;
+                              const utilization = week.capacityHours > 0 ? (week.usedHours / week.capacityHours) * 100 : 0;
+                              const weekIndex = weeklySummaries.findIndex((w) => w.weekIndex === hoveredWeek);
+                              const xPercent = weeklySummaries.length > 1 && weekIndex >= 0 ? (weekIndex / Math.max(1, weeklySummaries.length - 1)) * 100 : 50;
+                              return (
+                                <div
+                                  className="absolute top-3 bg-gray-900/95 backdrop-blur-sm text-white rounded-xl px-4 py-3 shadow-xl z-50 pointer-events-none"
+                                  style={{ left: `calc(40px + ${Math.min(Math.max(5, xPercent), 85)}% * 0.85)`, transform: "translateX(-50%)" }}
+                                >
+                                  <div className="text-[13px] font-semibold mb-2">
+                                    {formatShortLabel(week.startDate)} – {formatShortLabel(addDays(week.startDate, 6))}
+                                  </div>
+                                  <div className="space-y-1 text-[13px]">
+                                    <div className="flex justify-between gap-4">
+                                      <span className="text-gray-400">Used</span>
+                                      <span className="font-medium">{week.usedHours.toLocaleString()} hrs</span>
+                                    </div>
+                                    <div className="flex justify-between gap-4">
+                                      <span className="text-gray-400">Capacity</span>
+                                      <span className="font-medium">{week.capacityHours.toLocaleString()} hrs</span>
+                                    </div>
+                                    <div className="flex justify-between gap-4 pt-1 border-t border-gray-700">
+                                      <span className="text-gray-400">Utilization</span>
+                                      <span className="font-semibold text-blue-400">{Math.round(utilization)}%</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })()}
+                            
+                            {/* Y-axis labels */}
+                            <div className="absolute left-0 top-4 bottom-8 w-10 flex flex-col justify-between text-right pr-2">
+                              {[150, 100, 50, 0].map((percent) => (
+                                <span key={percent} className="text-[11px] font-medium text-gray-500">{percent}%</span>
+                              ))}
+                            </div>
+                            
+                            {/* Chart SVG */}
+                            <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute left-10 right-4 top-4 bottom-8">
+                              {/* Grid lines - lighter, more Apple-like */}
+                              {[0, 50, 100, 150].map((percent) => {
+                                const y = 100 - (percent / 150) * 100;
+                                return <line key={`grid-${percent}`} x1="0" y1={y} x2="100" y2={y} stroke="#f3f4f6" strokeWidth="0.5" />;
+                              })}
+                              {/* 100% capacity line */}
+                              <line x1="0" y1={100 - (100 / 150) * 100} x2="100" y2={100 - (100 / 150) * 100} stroke="#fbbf24" strokeWidth="0.8" strokeDasharray="3,3" />
+                              
+                              {/* Bars - wider, more prominent */}
+                              {weeklySummaries.map((week, index) => {
+                                const x = weeklySummaries.length > 1 ? (index / Math.max(1, weeklySummaries.length - 1)) * 100 : 50;
+                                const utilization = week.capacityHours > 0 ? (week.usedHours / week.capacityHours) * 100 : 0;
+                                const totalBarHeight = Math.min((utilization / 150) * 100, 100);
+                                const barY = 100 - totalBarHeight;
+                                const isHovered = hoveredWeek === week.weekIndex;
+                                const barWidth = isHovered ? 4.5 : 3.5;
+                                const barX = x - barWidth / 2;
+                                let currentY = barY;
+                                return (
+                                  <g key={`week-${week.weekIndex}`}>
+                                    {week.projectBreakdown.map((project) => {
+                                      const projectUtilization = week.capacityHours > 0 ? (project.hours / week.capacityHours) * 100 : 0;
+                                      const segmentHeight = (projectUtilization / 150) * 100;
+                                      const segmentY = currentY;
+                                      currentY += segmentHeight;
+                                      const projectColor = projectColors.get(project.projectKey) || "#94a3b8";
+                                      return (
+                                        <rect
+                                          key={`project-${project.projectKey}`}
+                                          x={barX}
+                                          y={segmentY}
+                                          width={barWidth}
+                                          height={Math.max(segmentHeight, 0.5)}
+                                          fill={projectColor}
+                                          opacity={isHovered ? "1" : "0.85"}
+                                          rx="0.5"
+                                          className="pointer-events-none transition-opacity"
+                                        />
+                                      );
+                                    })}
+                                    {isHovered && (
+                                      <line x1={x} y1="0" x2={x} y2="100" stroke="#3b82f6" strokeWidth="0.5" strokeDasharray="2,2" className="pointer-events-none" />
+                                    )}
+                                  </g>
+                                );
+                              })}
+                            </svg>
+                            
+                            {/* X-axis labels */}
+                            <div className="absolute left-10 right-4 bottom-0 flex justify-between">
+                              {weeklySummaries.filter((_, i) => i % Math.ceil(weeklySummaries.length / 6) === 0 || i === weeklySummaries.length - 1).map((week, idx, arr) => {
+                                const index = idx === arr.length - 1 ? weeklySummaries.length - 1 : idx * Math.ceil(weeklySummaries.length / 6);
+                                return (
+                                  <span key={`x-${index}`} className="text-[11px] font-medium text-gray-500 whitespace-nowrap">
+                                    {week.startDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </div>
+                          
+                          {/* Apple-style Summary Stats */}
+                          <div className="grid grid-cols-3 gap-4">
+                            <div className="text-center p-4 bg-white rounded-xl">
+                              <div className="text-[24px] font-semibold text-amber-500 tracking-tight">{gapWeeksCurrent.length + gapWeeksFuture.length}</div>
+                              <div className="text-[13px] font-medium text-gray-600 mt-1">Under-utilized</div>
+                            </div>
+                            <div className="text-center p-4 bg-white rounded-xl">
+                              <div className="text-[24px] font-semibold text-green-500 tracking-tight">
+                                {weeklySummaries.filter((w) => {
+                                  const util = w.capacityHours > 0 ? (w.usedHours / w.capacityHours) * 100 : 0;
+                                  return util >= underUtilizedThreshold * 100 && util <= 100;
+                                }).length}
+                              </div>
+                              <div className="text-[13px] font-medium text-gray-600 mt-1">Optimal</div>
+                            </div>
+                            <div className="text-center p-4 bg-white rounded-xl">
+                              <div className="text-[24px] font-semibold text-red-500 tracking-tight">{overloadWeeks.length}</div>
+                              <div className="text-[13px] font-medium text-gray-600 mt-1">Overbooked</div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Apple-style Remaining Shop Load Cards */}
+                    {selectedWeekLoads.map(({ load, rows }, index) => {
+                      if (index < 2 && !effectiveExpandedKeys.has(load.key)) return null;
+                      const isExpanded = effectiveExpandedKeys.has(load.key);
+                      const canCollapse = index >= 2;
+                    if (!isExpanded) {
+                      return (
+                        <button
+                          key={load.key}
+                          onClick={() => setExpandedLoadKeys((prev) => new Set(prev).add(load.key))}
+                          className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-xl transition-colors text-left"
+                        >
+                          <div className="min-w-0">
+                            <p className="text-[15px] font-medium text-gray-900 truncate">{load.name}</p>
+                            <p className="text-[13px] text-gray-500">
+                              {load.source === "project" ? "Project" : "Manual"} • {load.totalHours.toLocaleString()} hrs
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            {load.canDelete && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleDeleteProductionEntry(load); }}
+                                className="p-2 text-gray-400 hover:text-red-500 rounded-full hover:bg-red-50 transition-colors"
                               >
-                                <div>{row.date.toLocaleDateString("en-US", { weekday: "short" })}</div>
-                                <div className="text-[11px]">Non-working</div>
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                            <ChevronDown className="w-5 h-5 text-gray-400" />
+                          </div>
+                        </button>
+                      );
+                    }
+                    return (
+                      <div key={load.key} className="rounded-xl bg-white border border-gray-200/60 shadow-sm p-4 space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-[15px] font-semibold text-gray-900">{load.name}</p>
+                            <p className="text-[13px] text-gray-500">
+                              {load.source === "project" ? "Project" : "Manual"} • {load.totalHours.toLocaleString()} hrs
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {updatingOverrideKey?.startsWith(load.key) && (
+                              <span className="text-[13px] text-blue-600">Saving…</span>
+                            )}
+                            {canCollapse && (
+                              <button
+                                onClick={() =>
+                                  setExpandedLoadKeys((prev) => {
+                                    const next = new Set(prev);
+                                    next.delete(load.key);
+                                    return next;
+                                  })
+                                }
+                                className="flex items-center gap-1 px-3 py-1.5 text-[13px] font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                              >
+                                <ChevronUp className="w-4 h-4" />
+                                Collapse
+                              </button>
+                            )}
+                            {load.canDelete && (
+                              <button
+                                onClick={() => handleDeleteProductionEntry(load)}
+                                className="p-2 text-gray-400 hover:text-red-500 rounded-full hover:bg-red-50 transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        {/* Apple-style Day Grid */}
+                        <div className="grid grid-cols-2 md:grid-cols-7 gap-3">
+                          {rows.map((row) => {
+                            if (!row.isWorkingDay) {
+                              return (
+                                <div
+                                  key={row.dateKey}
+                                  className="text-center py-4 rounded-xl bg-gray-50 text-gray-400"
+                                >
+                                  <div className="text-[13px] font-medium">{row.date.toLocaleDateString("en-US", { weekday: "short" })}</div>
+                                  <div className="text-[11px] mt-1">Off</div>
+                                </div>
+                              );
+                            }
+                            const editKey = `${load.key}-${row.dateKey}`;
+                            const inputValue =
+                              dailyEdits[editKey] ??
+                              (row.hours !== undefined
+                                ? Number(row.hours.toFixed(1)).toString()
+                                : "");
+                            return (
+                              <div key={row.dateKey} className="space-y-2">
+                                <label className="text-[13px] font-medium text-gray-600 block text-center">
+                                  {row.date.toLocaleDateString("en-US", { weekday: "short" })}
+                                </label>
+                                <input
+                                  type="number"
+                                  step="0.1"
+                                  value={inputValue}
+                                  placeholder="0"
+                                  onChange={(e) =>
+                                    setDailyEdits((prev) => ({
+                                      ...prev,
+                                      [editKey]: e.target.value,
+                                    }))
+                                  }
+                                  onBlur={(e) =>
+                                    handleDailyOverrideBlur(load, row.dateKey, e.target.value)
+                                  }
+                                  className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-[15px] text-gray-900 text-center placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent focus:bg-white transition-all"
+                                />
                               </div>
                             );
-                          }
-                          const editKey = `${load.key}-${row.dateKey}`;
-                          const inputValue =
-                            dailyEdits[editKey] ??
-                            (row.hours !== undefined
-                              ? Number(row.hours.toFixed(1)).toString()
-                              : "");
-                          return (
-                            <div key={row.dateKey}>
-                              <label className="text-[11px] text-gray-500 block mb-1">
-                                {row.date.toLocaleDateString("en-US", { weekday: "short" })}
-                              </label>
-                              <Input
-                                type="number"
-                                step="0.1"
-                                value={inputValue}
-                                placeholder="0"
-                                onChange={(e) =>
-                                  setDailyEdits((prev) => ({
-                                    ...prev,
-                                    [editKey]: e.target.value,
-                                  }))
-                                }
-                                onBlur={(e) =>
-                                  handleDailyOverrideBlur(load, row.dateKey, e.target.value)
-                                }
-                              />
-                            </div>
-                          );
-                        })}
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })}
+                  </>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
-            <Card>
-              <CardHeader className="flex flex-col gap-1">
-                <CardTitle className="text-base">
-                  Bids on {selectedDate || "Select a date"}
-                </CardTitle>
-                <p className="text-xs text-gray-500">Bids update independently from production.</p>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
+            {/* Apple-style Bids Card */}
+            <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+              <div className="px-6 py-5 border-b border-gray-100">
+                <h3 className="text-[17px] font-semibold text-gray-900">
+                  Bids
+                  {selectedDate && (
+                    <span className="font-normal text-gray-500">
+                      {" "}• {new Date(selectedDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                    </span>
+                  )}
+                </h3>
+                <p className="text-[13px] text-gray-500 mt-0.5">Manage bid deadlines and submissions</p>
+              </div>
+              <div className="p-6 space-y-5">
+                {/* Existing Bids List */}
+                <div className="space-y-3">
                   {selectedDate &&
                   getEventsForDate(selectedDate).length > 0 ? (
                     getEventsForDate(selectedDate).map((event) => (
                       <div
                         key={event.id}
-                        className="border border-gray-200 rounded-lg p-3 flex items-start justify-between"
+                        className="flex items-start justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
                       >
-                        <div>
-                          <p className="text-sm font-semibold text-gray-900">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[15px] font-medium text-gray-900">
                             {event.projectName}
                             {event.bidTime && (
-                              <span className="ml-2 text-xs font-normal text-gray-500">
+                              <span className="ml-2 text-[13px] font-normal text-gray-500">
                                 @ {normalizeTimeTo24Hour(event.bidTime)}
                               </span>
                             )}
                           </p>
-                          <p className="text-xs text-gray-500">{event.generalContractor}</p>
+                          <p className="text-[13px] text-gray-500 mt-0.5">{event.generalContractor}</p>
                           {event.notes && (
-                            <p className="text-xs text-gray-400 mt-1">{event.notes}</p>
+                            <p className="text-[13px] text-gray-400 mt-1">{event.notes}</p>
                           )}
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
+                        <button
                           onClick={() => {
                             setEditingEvent(event);
                             setBidForm({
@@ -1180,427 +1442,127 @@ export default function BidProductionScheduleModal({
                               estimatedValue: event.estimatedValue || 0,
                             });
                           }}
-                          className="text-xs"
+                          className="px-3 py-1.5 text-[13px] font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex-shrink-0"
                         >
                           Edit
-                        </Button>
+                        </button>
                       </div>
                     ))
                   ) : (
-                    <p className="text-sm text-gray-500">
-                      {selectedDate ? "No bids logged for this date." : "Select a date to view bids."}
+                    <p className="text-[15px] text-gray-500 text-center py-4">
+                      {selectedDate ? "No bids for this date." : "Select a date to view bids."}
                     </p>
                   )}
                 </div>
 
-                <div className="border rounded-lg p-3 bg-gray-50 space-y-3">
-                  <p className="text-sm font-semibold text-gray-900">
-                    {editingEvent ? "Edit Bid" : "Add Bid"}
+                {/* Apple-style Bid Form */}
+                <div className="rounded-xl bg-gray-50/80 p-5 space-y-4">
+                  <p className="text-[15px] font-semibold text-gray-900">
+                    {editingEvent ? "Edit Bid" : "Add New Bid"}
                   </p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="text-[11px] text-gray-500 block mb-1">
+                      <label className="text-[13px] font-medium text-gray-600 block mb-2">
                         Date
                       </label>
-                      <Input
+                      <input
                         type="date"
                         value={bidForm.date || selectedDate || ""}
                         onChange={(e) => setBidForm({ ...bidForm, date: e.target.value })}
+                        className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-[15px] text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
                       />
                     </div>
                     <div>
-                      <label className="text-[11px] text-gray-500 block mb-1">
-                        Bid Time (24hr)
+                      <label className="text-[13px] font-medium text-gray-600 block mb-2">
+                        Bid Time
                       </label>
-                      <Input
+                      <input
                         type="time"
                         step="60"
                         value={normalizeTimeTo24Hour(bidForm.bidTime || "")}
                         onChange={(e) => {
-                          // Ensure 24-hour format (HH:mm)
                           const timeValue = normalizeTimeTo24Hour(e.target.value);
                           setBidForm({ ...bidForm, bidTime: timeValue });
                         }}
-                        placeholder="HH:mm"
-                        className="[&::-webkit-calendar-picker-indicator]:hidden"
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[11px] text-gray-500 block mb-1">
-                        Status
-                      </label>
-                      <select
-                        value={bidForm.status || "active"}
-                        onChange={(e) =>
-                          setBidForm({ ...bidForm, status: e.target.value as BidEvent["status"] })
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="draft">Draft</option>
-                        <option value="active">Active</option>
-                        <option value="submitted">Submitted</option>
-                        <option value="won">Won</option>
-                        <option value="lost">Lost</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[11px] text-gray-500 block mb-1">
-                        Project Name
-                      </label>
-                      <Input
-                        value={bidForm.projectName || ""}
-                        onChange={(e) => setBidForm({ ...bidForm, projectName: e.target.value })}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[11px] text-gray-500 block mb-1">
-                        General Contractor
-                      </label>
-                      <Input
-                        value={bidForm.generalContractor || ""}
-                        onChange={(e) =>
-                          setBidForm({ ...bidForm, generalContractor: e.target.value })
-                        }
+                        className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-[15px] text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
                       />
                     </div>
                   </div>
                   <div>
-                    <label className="text-[11px] text-gray-500 block mb-1">Notes</label>
+                    <label className="text-[13px] font-medium text-gray-600 block mb-2">
+                      Status
+                    </label>
+                    <select
+                      value={bidForm.status || "active"}
+                      onChange={(e) =>
+                        setBidForm({ ...bidForm, status: e.target.value as BidEvent["status"] })
+                      }
+                      className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-[15px] text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow appearance-none"
+                    >
+                      <option value="draft">Draft</option>
+                      <option value="active">Active</option>
+                      <option value="submitted">Submitted</option>
+                      <option value="won">Won</option>
+                      <option value="lost">Lost</option>
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[13px] font-medium text-gray-600 block mb-2">
+                        Project Name
+                      </label>
+                      <input
+                        value={bidForm.projectName || ""}
+                        onChange={(e) => setBidForm({ ...bidForm, projectName: e.target.value })}
+                        placeholder="Enter project name"
+                        className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-[15px] text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[13px] font-medium text-gray-600 block mb-2">
+                        General Contractor
+                      </label>
+                      <input
+                        value={bidForm.generalContractor || ""}
+                        onChange={(e) =>
+                          setBidForm({ ...bidForm, generalContractor: e.target.value })
+                        }
+                        placeholder="Enter GC name"
+                        className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-[15px] text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[13px] font-medium text-gray-600 block mb-2">Notes</label>
                     <textarea
                       value={bidForm.notes || ""}
                       onChange={(e) => setBidForm({ ...bidForm, notes: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                      placeholder="Add any notes..."
+                      className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-[15px] text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow resize-none"
                       rows={2}
                     />
                   </div>
-                  <div className="flex items-center justify-end gap-2">
+                  <div className="flex items-center justify-end gap-3 pt-2">
                     {editingEvent && (
-                      <Button variant="ghost" size="sm" onClick={handleBidDelete}>
+                      <button
+                        onClick={handleBidDelete}
+                        className="px-4 py-2.5 text-[15px] font-medium text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+                      >
                         Delete
-                      </Button>
+                      </button>
                     )}
-                    <Button variant="primary" size="sm" onClick={handleBidSave} disabled={isSavingBid}>
+                    <button
+                      onClick={handleBidSave}
+                      disabled={isSavingBid}
+                      className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-[15px] font-medium rounded-xl transition-colors"
+                    >
                       {isSavingBid ? "Saving..." : editingEvent ? "Update Bid" : "Add Bid"}
-                    </Button>
+                    </button>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-amber-500" />
-                Capacity Utilization Timeline
-              </CardTitle>
-              <p className="text-xs text-gray-500 mt-1">
-                Visual overview of shop capacity vs. scheduled work over time
-              </p>
-            </CardHeader>
-            <CardContent>
-              {weeklySummaries.length === 0 ? (
-                <p className="text-sm text-gray-500 text-center py-8">
-                  No capacity data available. Configure shop capacity in Company Settings.
-                </p>
-              ) : (
-                <div className="space-y-4">
-                  {/* Interactive Timeline Chart */}
-                  <div 
-                    className="relative" 
-                    style={{ height: "300px" }}
-                    onMouseLeave={() => setHoveredWeek(null)}
-                    onMouseMove={(e) => {
-                      const rect = e.currentTarget.getBoundingClientRect();
-                      const x = e.clientX - rect.left;
-                      const percent = (x / rect.width) * 100;
-                      const weekIndex = Math.round((percent / 100) * (weeklySummaries.length - 1));
-                      const clampedIndex = Math.max(0, Math.min(weekIndex, weeklySummaries.length - 1));
-                      setHoveredWeek(weeklySummaries[clampedIndex]?.weekIndex ?? null);
-                    }}
-                  >
-                    {/* Tooltip */}
-                    {hoveredWeek !== null && (() => {
-                      const week = weeklySummaries.find(w => w.weekIndex === hoveredWeek);
-                      if (!week) return null;
-                      const utilization = week.capacityHours > 0 
-                        ? (week.usedHours / week.capacityHours) * 100 
-                        : 0;
-                      const xPercent = weeklySummaries.length > 1 
-                        ? (hoveredWeek / (weeklySummaries.length - 1)) * 100 
-                        : 50;
-                      return (
-                        <div 
-                          className="absolute top-2 bg-slate-900 text-white text-xs rounded-lg px-3 py-2 shadow-lg z-10 pointer-events-none whitespace-nowrap"
-                          style={{ left: `${xPercent}%`, transform: "translateX(-50%)" }}
-                        >
-                          <div className="font-semibold mb-1">
-                            {formatShortLabel(week.startDate)} – {formatShortLabel(addDays(week.startDate, 6))}
-                          </div>
-                          <div className="space-y-1">
-                            <div>Used: {week.usedHours.toLocaleString()} hrs</div>
-                            <div>Capacity: {week.capacityHours.toLocaleString()} hrs</div>
-                            <div className="font-semibold">Utilization: {Math.round(utilization)}%</div>
-                            {week.projectBreakdown.length > 0 && (
-                              <div className="mt-2 pt-2 border-t border-gray-700">
-                                <div className="font-semibold mb-1">Projects:</div>
-                                {week.projectBreakdown.map((project) => {
-                                  const projectColor = projectColors.get(project.projectKey) || "#94a3b8";
-                                  return (
-                                    <div key={project.projectKey} className="flex items-center gap-2 text-xs">
-                                      <div 
-                                        className="w-2 h-2 rounded" 
-                                        style={{ backgroundColor: projectColor }}
-                                      />
-                                      <span>{project.projectName}: {project.hours.toFixed(1)} hrs</span>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })()}
-                    <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full">
-                      {/* Grid lines */}
-                      {[0, 25, 50, 75, 100, 125, 150].map((percent) => {
-                        const y = 100 - (percent / 150) * 100;
-                        return (
-                          <line
-                            key={`grid-${percent}`}
-                            x1="0"
-                            y1={y}
-                            x2="100"
-                            y2={y}
-                            stroke="#e5e7eb"
-                            strokeWidth="0.3"
-                          />
-                        );
-                      })}
-                      
-                      {/* Capacity line (100%) */}
-                      <line
-                        x1="0"
-                        y1={100 - (100 / 150) * 100}
-                        x2="100"
-                        y2={100 - (100 / 150) * 100}
-                        stroke="#f59e0b"
-                        strokeWidth="0.5"
-                        strokeDasharray="2,2"
-                      />
-                      
-                      {/* Stacked bars for each week showing individual projects */}
-                      {weeklySummaries.map((week, index) => {
-                        const x = weeklySummaries.length > 1 
-                          ? (index / (weeklySummaries.length - 1)) * 100 
-                          : 50;
-                        const utilization = week.capacityHours > 0 
-                          ? (week.usedHours / week.capacityHours) * 100 
-                          : 0;
-                        const totalBarHeight = Math.min((utilization / 150) * 100, 100);
-                        const barY = 100 - totalBarHeight;
-                        
-                        const isHovered = hoveredWeek === week.weekIndex;
-                        const barWidth = isHovered ? 3.5 : 2.5;
-                        const barX = x - (barWidth / 2);
-                        
-                        // Calculate stacked segments for each project based on actual hours
-                        let currentY = barY;
-                        
-                        return (
-                          <g key={`week-${week.weekIndex}`}>
-                            {/* Stacked project segments */}
-                            {week.projectBreakdown.map((project, pIndex) => {
-                              const projectUtilization = week.capacityHours > 0 
-                                ? (project.hours / week.capacityHours) * 100 
-                                : 0;
-                              const segmentHeight = (projectUtilization / 150) * 100;
-                              const segmentY = currentY;
-                              currentY += segmentHeight;
-                              
-                              const projectColor = projectColors.get(project.projectKey) || "#94a3b8";
-                              
-                              return (
-                                <rect
-                                  key={`project-${project.projectKey}`}
-                                  x={barX}
-                                  y={segmentY}
-                                  width={barWidth}
-                                  height={Math.max(segmentHeight, 0.3)}
-                                  fill={projectColor}
-                                  opacity={isHovered ? "1" : "0.9"}
-                                  stroke="#fff"
-                                  strokeWidth="0.15"
-                                  className="pointer-events-none"
-                                />
-                              );
-                            })}
-                            
-                            {/* Project name labels (show on hover) */}
-                            {isHovered && week.projectBreakdown.length > 0 && (
-                              <g>
-                                {week.projectBreakdown.reduce((acc, project, pIndex) => {
-                                  const projectUtilization = week.capacityHours > 0 
-                                    ? (project.hours / week.capacityHours) * 100 
-                                    : 0;
-                                  const segmentHeight = (projectUtilization / 150) * 100;
-                                  const labelY = barY + acc.accumulatedHeight + (segmentHeight / 2);
-                                  acc.accumulatedHeight += segmentHeight;
-                                  
-                                  if (segmentHeight > 2) { // Only show label if segment is tall enough
-                                    acc.elements.push(
-                                      <text
-                                        key={`label-${project.projectKey}`}
-                                        x={x + 2.5}
-                                        y={labelY}
-                                        fontSize="2.2"
-                                        fill="#1f2937"
-                                        fontWeight="600"
-                                        className="pointer-events-none"
-                                      >
-                                        {project.projectName.length > 18 
-                                          ? project.projectName.substring(0, 18) + "..." 
-                                          : project.projectName}
-                                      </text>
-                                    );
-                                  }
-                                  return acc;
-                                }, { accumulatedHeight: 0, elements: [] as JSX.Element[] }).elements}
-                              </g>
-                            )}
-                            
-                            {/* Hover indicator line */}
-                            {isHovered && (
-                              <line
-                                x1={x}
-                                y1="0"
-                                x2={x}
-                                y2="100"
-                                stroke="#3b82f6"
-                                strokeWidth="0.4"
-                                strokeDasharray="2,2"
-                                className="pointer-events-none"
-                              />
-                            )}
-                          </g>
-                        );
-                      })}
-                      
-                      {/* Y-axis labels */}
-                      {[0, 50, 100, 150].map((percent) => {
-                        const y = 100 - (percent / 150) * 100;
-                        return (
-                          <text
-                            key={`y-label-${percent}`}
-                            x="-1"
-                            y={y + 1}
-                            fontSize="2.5"
-                            fill="#6b7280"
-                            textAnchor="end"
-                          >
-                            {percent}%
-                          </text>
-                        );
-                      })}
-                    </svg>
-                    
-                    {/* X-axis labels (weeks) */}
-                    <div className="absolute bottom-0 left-0 right-0 flex justify-between text-xs text-gray-600" style={{ height: "60px", paddingTop: "4px" }}>
-                      {weeklySummaries.filter((_, i) => i % Math.ceil(weeklySummaries.length / 8) === 0 || i === weeklySummaries.length - 1).map((week, idx, arr) => {
-                        const index = idx === arr.length - 1 
-                          ? weeklySummaries.length - 1 
-                          : idx * Math.ceil(weeklySummaries.length / 8);
-                        return (
-                          <div key={`x-label-${index}`} className="flex flex-col items-center">
-                            <div className="text-center font-medium" style={{ fontSize: "9px", transform: "rotate(-45deg)", transformOrigin: "top center", marginTop: "8px" }}>
-                              {formatShortLabel(week.startDate)}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    
-                    {/* Y-axis label */}
-                    <div className="absolute left-0 top-0 text-xs font-semibold text-gray-700" style={{ transform: "rotate(-90deg)", transformOrigin: "center", left: "-40px", top: "50%" }}>
-                      Utilization %
-                    </div>
-                  </div>
-                  
-                  {/* Legend */}
-                  <div className="space-y-3 pt-2 border-t border-gray-200">
-                    {/* Utilization Legend */}
-                    <div className="flex flex-wrap items-center gap-4 text-xs text-gray-600">
-                      <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded bg-amber-500"></div>
-                        <span>Under-utilized (&lt;{Math.round(underUtilizedThreshold * 100)}%)</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded bg-green-500"></div>
-                        <span>Good ({Math.round(underUtilizedThreshold * 100)}% - 100%)</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded bg-red-500"></div>
-                        <span>Overbooked (&gt;100%)</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-0.5 h-4 bg-amber-500" style={{ borderStyle: "dashed" }}></div>
-                        <span>100% Capacity</span>
-                      </div>
-                    </div>
-                    
-                    {/* Project Colors Legend */}
-                    {productionLoads.length > 0 && (
-                      <div className="pt-2 border-t border-gray-100">
-                        <div className="text-xs font-semibold text-gray-700 mb-2">Projects:</div>
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                          {productionLoads.map((load) => {
-                            const color = projectColors.get(load.key) || "#94a3b8";
-                            return (
-                              <div key={load.key} className="flex items-center gap-2 text-xs">
-                                <div 
-                                  className="w-3 h-3 rounded flex-shrink-0" 
-                                  style={{ backgroundColor: color }}
-                                />
-                                <span className="text-gray-600 truncate" title={load.name}>
-                                  {load.name.length > 20 ? load.name.substring(0, 20) + "..." : load.name}
-                                </span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* Summary stats */}
-                  <div className="grid grid-cols-3 gap-4 pt-4 border-t border-gray-200">
-                    <div className="text-center">
-                      <div className="text-2xl font-semibold text-amber-600">{gapWeeksCurrent.length + gapWeeksFuture.length}</div>
-                      <div className="text-xs text-gray-500">Under-utilized weeks</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-2xl font-semibold text-green-600">
-                        {weeklySummaries.filter(w => {
-                          const util = w.capacityHours > 0 ? (w.usedHours / w.capacityHours) * 100 : 0;
-                          return util >= underUtilizedThreshold * 100 && util <= 100;
-                        }).length}
-                      </div>
-                      <div className="text-xs text-gray-500">Optimal weeks</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-2xl font-semibold text-red-600">{overloadWeeks.length}</div>
-                      <div className="text-xs text-gray-500">Overbooked weeks</div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
         </div>
       </div>
     </div>

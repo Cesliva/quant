@@ -30,7 +30,7 @@ export default function Step3Scope({ state, onUpdate }: Step3ScopeProps) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-semibold text-gray-900 mb-2">
+        <h2 className="text-2xl font-bold text-gray-900 tracking-normal mb-2">
           Scope Snapshot
         </h2>
         <p className="text-gray-600 text-sm">
@@ -54,7 +54,7 @@ export default function Step3Scope({ state, onUpdate }: Step3ScopeProps) {
             >
               <div className="flex items-start justify-between mb-2">
                 <div className="flex-1">
-                  <h3 className="font-semibold text-gray-900 mb-1">
+                  <h3 className="font-bold text-gray-900 tracking-normal mb-1">
                     {option.label}
                   </h3>
                   <p className="text-sm text-gray-600">

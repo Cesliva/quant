@@ -95,8 +95,8 @@ export default function BacklogAtAGlance({ companyId }: BacklogAtAGlanceProps) {
 
   return (
     <Card className="w-full h-full flex flex-col p-2 md:p-3 rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300">
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+      <CardHeader className="pb-3 mb-3 border-b border-gray-200/70">
+        <CardTitle className="flex items-center gap-2 text-sm font-extrabold text-gray-900 tracking-wide uppercase">
           <Briefcase className="w-4 h-4 text-blue-600" />
           Backlog at a Glance
         </CardTitle>

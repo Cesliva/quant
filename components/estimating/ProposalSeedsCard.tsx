@@ -256,10 +256,10 @@ export default function ProposalSeedsCard({
 
   return (
       <Card className="p-4">
-        <CardHeader className="mb-2">
+        <CardHeader className="pb-4 pt-5 mb-4 border-b border-gray-200/70">
           <div className="flex items-start justify-between">
             <div>
-              <CardTitle className="text-lg">Progressive Inclusions/Exclusions</CardTitle>
+              <CardTitle className="text-lg font-bold text-gray-900 tracking-normal">Progressive Inclusions/Exclusions</CardTitle>
               <p className="text-xs text-gray-500 mt-1">
                 Capture inclusions/exclusions as you estimate.
               </p>

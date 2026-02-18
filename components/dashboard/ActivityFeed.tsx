@@ -141,8 +141,8 @@ export default function ActivityFeed({ companyId, className }: ActivityFeedProps
 
   return (
     <Card className={cn("border border-gray-200 shadow-lg hover:shadow-xl transition-all duration-300 bg-white h-full", className)}>
-      <CardHeader className="pb-5">
-        <CardTitle className="flex items-center gap-2 text-lg font-semibold">
+      <CardHeader className="pb-4 pt-5 mb-4 border-b border-gray-200/70">
+        <CardTitle className="flex items-center gap-2 text-lg font-bold text-gray-900 tracking-normal">
           <Clock className="w-5 h-5 text-gray-600" />
           Recent Activity
         </CardTitle>
@@ -153,7 +153,7 @@ export default function ActivityFeed({ companyId, className }: ActivityFeedProps
             <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 flex items-center justify-center">
               <Clock className="w-8 h-8 text-gray-400" />
             </div>
-            <h3 className="text-base font-semibold text-gray-900 mb-2">No Recent Activity</h3>
+            <h3 className="text-base font-bold text-gray-900 tracking-normal mb-2">No Recent Activity</h3>
             <p className="text-sm text-gray-500">Activity will appear here as you work on projects</p>
           </div>
         ) : (

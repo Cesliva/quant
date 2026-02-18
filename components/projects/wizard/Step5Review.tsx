@@ -28,7 +28,7 @@ export default function Step5Review({ state }: Step5ReviewProps) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-semibold text-gray-900 mb-2">
+        <h2 className="text-2xl font-bold text-gray-900 tracking-normal mb-2">
           Review & Create
         </h2>
         <p className="text-gray-600 text-sm">
@@ -39,7 +39,7 @@ export default function Step5Review({ state }: Step5ReviewProps) {
       <div className="space-y-6">
         {/* Basics */}
         <div className="p-6 bg-gray-50 rounded-xl border border-gray-200">
-          <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <h3 className="font-bold text-gray-900 tracking-normal mb-4 flex items-center gap-2">
             <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center">1</span>
             Project Basics
           </h3>
@@ -76,7 +76,7 @@ export default function Step5Review({ state }: Step5ReviewProps) {
         {/* Parties */}
         {hasParties && (
           <div className="p-6 bg-gray-50 rounded-xl border border-gray-200">
-            <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <h3 className="font-bold text-gray-900 tracking-normal mb-4 flex items-center gap-2">
               <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center">2</span>
               Parties
             </h3>
@@ -106,7 +106,7 @@ export default function Step5Review({ state }: Step5ReviewProps) {
         {/* Scope */}
         {hasScope && (
           <div className="p-6 bg-gray-50 rounded-xl border border-gray-200">
-            <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <h3 className="font-bold text-gray-900 tracking-normal mb-4 flex items-center gap-2">
               <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center">3</span>
               Scope
             </h3>
@@ -130,7 +130,7 @@ export default function Step5Review({ state }: Step5ReviewProps) {
         {/* Defaults */}
         {hasDefaults && (
           <div className="p-6 bg-gray-50 rounded-xl border border-gray-200">
-            <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <h3 className="font-bold text-gray-900 tracking-normal mb-4 flex items-center gap-2">
               <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center">4</span>
               Estimating Defaults
             </h3>

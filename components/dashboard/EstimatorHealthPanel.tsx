@@ -671,7 +671,7 @@ export default function EstimatorHealthPanel({
       <div className="p-6 pb-0">
         <div className="flex items-start justify-between">
           <div>
-            <h3 className="text-lg font-semibold text-slate-900">Estimate Health</h3>
+            <h3 className="text-lg font-bold text-gray-900 tracking-normal">Estimate Health</h3>
             <p className="text-sm text-slate-500 mt-1">
               {model.baseline.label} • {model.activeCount} lines • {formatNumber(model.tons, 1)} tons
             </p>

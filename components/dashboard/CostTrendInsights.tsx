@@ -320,8 +320,8 @@ export default function CostTrendInsights({
   if (points.length === 0) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+        <CardHeader className="pb-4 pt-5 mb-4 border-b border-gray-200/70">
+          <CardTitle className="flex items-center gap-2 font-bold text-gray-900 tracking-normal">
             <Zap className="w-5 h-5" />
             Insights
           </CardTitle>
@@ -337,8 +337,8 @@ export default function CostTrendInsights({
   
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+      <CardHeader className="pb-4 pt-5 mb-4 border-b border-gray-200/70">
+        <CardTitle className="flex items-center gap-2 font-bold text-gray-900 tracking-normal">
           <Zap className="w-5 h-5" />
           Insights
         </CardTitle>
@@ -346,7 +346,7 @@ export default function CostTrendInsights({
       <CardContent className="space-y-6">
         {/* Top Movers */}
         <div>
-          <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+          <h3 className="text-sm font-bold text-gray-900 tracking-normal mb-2 flex items-center gap-2">
             <BarChart3 className="w-4 h-4" />
             Top Movers
           </h3>
@@ -387,7 +387,7 @@ export default function CostTrendInsights({
         
         {/* Volatility Scores */}
         <div>
-          <h3 className="text-sm font-semibold text-gray-700 mb-2">Volatility</h3>
+          <h3 className="text-sm font-bold text-gray-900 tracking-normal mb-2">Volatility</h3>
           {volatility.length === 0 ? (
             <p className="text-xs text-gray-400 py-2">Need at least 2 data points to calculate volatility</p>
           ) : (
@@ -415,7 +415,7 @@ export default function CostTrendInsights({
         {/* Anomalies */}
         {anomalies.length > 0 && (
           <div>
-            <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+            <h3 className="text-sm font-bold text-gray-900 tracking-normal mb-2 flex items-center gap-2">
               <AlertTriangle className="w-4 h-4" />
               Anomalies
             </h3>
@@ -446,7 +446,7 @@ export default function CostTrendInsights({
         
         {/* Category Drivers */}
         <div>
-          <h3 className="text-sm font-semibold text-gray-700 mb-2">Category Drivers</h3>
+          <h3 className="text-sm font-bold text-gray-900 tracking-normal mb-2">Category Drivers</h3>
           {drivers.length === 0 ? (
             <p className="text-xs text-gray-400 py-2">Need at least 2 data points to calculate drivers</p>
           ) : (

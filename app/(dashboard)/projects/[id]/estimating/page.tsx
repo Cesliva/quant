@@ -1,6 +1,7 @@
 "use client";
 
 import { useParams, useSearchParams } from "next/navigation";
+import { Plus } from "lucide-react";
 import EstimatingGrid from "@/components/estimating/EstimatingGrid";
 import KPISummary from "@/components/estimating/KPISummary";
 import { useState, useEffect } from "react";
@@ -37,6 +38,11 @@ export default function EstimatingPage() {
   const [selectedLineId, setSelectedLineId] = useState<string | null>(lineIdFromUrl || null);
   const [addLineHandler, setAddLineHandler] = useState<(() => void) | null>(null);
   const [selectedMetric, setSelectedMetric] = useState<"laborHoursPerTon" | "costPerTon">("laborHoursPerTon");
+
+  // Debug: Log when addLineHandler changes
+  useEffect(() => {
+    console.log("[EstimatingPage] addLineHandler updated:", addLineHandler ? "Function received" : "null");
+  }, [addLineHandler]);
 
   // Load company settings
   useEffect(() => {
@@ -123,8 +129,28 @@ export default function EstimatingPage() {
   }, [projectId, companyId]);
 
   return (
-    <div className="flex flex-col min-h-[calc(100vh-4rem)] max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 overflow-y-auto">
-      <div className="flex flex-col space-y-4 pb-4">
+    <div className="flex flex-col min-h-[calc(100vh-4rem)] max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 overflow-y-auto relative">
+      {/* Floating Add Line — fixed to viewport, above footer; always visible */}
+      <button
+        type="button"
+        onClick={() => {
+          console.log("[FAB Button] Clicked! addLineHandler:", addLineHandler);
+          if (addLineHandler) {
+            addLineHandler();
+          } else {
+            console.error("[FAB Button] No handler available");
+          }
+        }}
+        disabled={!addLineHandler}
+        aria-label="Add new line"
+        title={addLineHandler ? "Add a new estimate line" : "Loading…"}
+        className="fixed bottom-8 right-8 z-[99999] flex items-center gap-2 px-5 py-3.5 rounded-full bg-blue-600 text-white font-semibold text-base shadow-xl ring-4 ring-blue-200/50 hover:bg-blue-700 hover:shadow-2xl hover:ring-blue-300/60 active:scale-95 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
+      >
+        <Plus className="w-5 h-5" />
+        Add Line
+      </button>
+
+      <div className="flex flex-col space-y-4 pb-20">
         {/* User Presence */}
         <div className="flex items-center justify-end">
           <UserPresence projectId={projectId} currentPage="estimating" />

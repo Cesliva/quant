@@ -77,8 +77,8 @@ export default function SubscriptionManagement() {
     <div className="space-y-6">
       {/* Current Subscription */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+        <CardHeader className="pb-4 pt-5 mb-4 border-b border-gray-200/70">
+          <CardTitle className="flex items-center gap-2 font-extrabold text-gray-900 tracking-normal">
             <Crown className="w-5 h-5 text-yellow-500" />
             Current Subscription
           </CardTitle>
@@ -86,7 +86,7 @@ export default function SubscriptionManagement() {
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">
+              <h3 className="text-lg font-bold text-gray-900 tracking-normal">
                 {planNames[subscription.plan]} Plan
               </h3>
               <p className="text-sm text-gray-600 mt-1">
@@ -137,8 +137,8 @@ export default function SubscriptionManagement() {
       {/* Plan Management (Admin Only) */}
       {canManageSubscription && (
         <Card>
-          <CardHeader>
-            <CardTitle>Manage Subscription</CardTitle>
+          <CardHeader className="pb-4 pt-5 mb-4 border-b border-gray-200/70">
+            <CardTitle className="font-extrabold text-gray-900 tracking-normal">Manage Subscription</CardTitle>
             <p className="text-sm text-gray-600 mt-1">
               Update your subscription plan. Changes take effect immediately.
             </p>
@@ -176,7 +176,7 @@ export default function SubscriptionManagement() {
                     onClick={() => !isCurrentPlan && setSelectedPlan(plan)}
                   >
                     <div className="flex items-center justify-between mb-2">
-                      <h3 className="font-semibold text-gray-900">{planNames[plan]}</h3>
+                      <h3 className="font-bold text-gray-900 tracking-normal">{planNames[plan]}</h3>
                       {isCurrentPlan && (
                         <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded">
                           Current

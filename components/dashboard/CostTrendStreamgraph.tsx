@@ -771,8 +771,8 @@ export default function CostTrendStreamgraph({
   if (lines.length === 0) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+        <CardHeader className="pb-4 pt-5 mb-4 border-b border-gray-200/70">
+          <CardTitle className="flex items-center gap-2 font-bold text-gray-900 tracking-normal">
             <BarChart3 className="w-5 h-5" />
             Cost Trend Analysis
           </CardTitle>
@@ -788,10 +788,10 @@ export default function CostTrendStreamgraph({
   
   return (
     <Card className="p-4 md:p-6 rounded-2xl border border-slate-200/60 bg-white shadow-sm hover:shadow-md transition-shadow">
-      <CardHeader className="pb-4">
+      <CardHeader className="pb-4 pt-5 mb-4 border-b border-gray-200/70">
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-xl font-semibold text-gray-900">
+            <CardTitle className="text-xl font-bold text-gray-900 tracking-normal">
               Cost Trend Analysis
             </CardTitle>
             <div className="flex items-center gap-2">

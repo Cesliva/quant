@@ -290,7 +290,7 @@ export default function WinLossModal({ companyId, onClose }: WinLossModalProps) 
       <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <h3 className="text-2xl font-extrabold text-gray-900 tracking-normal flex items-center gap-2">
               <TrendingUp className="w-6 h-6 text-green-600" />
               Win/Loss Tracker
             </h3>
@@ -324,7 +324,7 @@ export default function WinLossModal({ companyId, onClose }: WinLossModalProps) 
           {/* Win/Loss Chart */}
           <div className="mb-6">
             <div className="flex items-center justify-between mb-3">
-              <h4 className="text-lg font-semibold text-gray-700">Last 6 Months</h4>
+              <h4 className="text-lg font-bold text-gray-900 tracking-normal">Last 6 Months</h4>
               <Button variant="primary" size="sm" onClick={handleAdd} className="gap-2">
                 <Plus className="w-4 h-4" />
                 Log Win/Loss
@@ -404,7 +404,7 @@ export default function WinLossModal({ companyId, onClose }: WinLossModalProps) 
 
           {/* Recent Records */}
           <div>
-            <h4 className="text-lg font-semibold text-gray-700 mb-3">All Records</h4>
+            <h4 className="text-lg font-bold text-gray-900 tracking-normal mb-3">All Records</h4>
             <div className="space-y-2 max-h-96 overflow-y-auto">
               {records.map((record) => (
                 <div
@@ -495,7 +495,7 @@ export default function WinLossModal({ companyId, onClose }: WinLossModalProps) 
             <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
               <div className="p-6">
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-xl font-semibold text-gray-900">
+                  <h3 className="text-xl font-bold text-gray-900 tracking-normal">
                     {editingRecord ? "Edit Win/Loss Record" : "Log Win/Loss"}
                   </h3>
                   <button

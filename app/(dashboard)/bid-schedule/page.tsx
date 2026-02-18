@@ -8,15 +8,12 @@ function BidScheduleContent() {
   const companyId = useCompanyId();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50">
-      {/* Render the modal component as a full page */}
-      <BidProductionScheduleModal 
-        companyId={companyId} 
-        isOpen={true} 
-        onClose={() => {}} 
-        asPage={true}
-      />
-    </div>
+    <BidProductionScheduleModal
+      companyId={companyId}
+      isOpen={true}
+      onClose={() => {}}
+      asPage={true}
+    />
   );
 }
 

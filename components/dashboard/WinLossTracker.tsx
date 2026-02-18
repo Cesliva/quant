@@ -235,9 +235,9 @@ export default function WinLossTracker({ companyId }: WinLossTrackerProps) {
   return (
     <>
       <Card>
-        <CardHeader>
+        <CardHeader className="pb-4 pt-5 mb-4 border-b border-gray-200/70">
           <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 font-bold text-gray-900 tracking-normal">
               <TrendingUp className="w-5 h-5 text-green-600" />
               Win/Loss Tracker
             </CardTitle>
@@ -272,7 +272,7 @@ export default function WinLossTracker({ companyId }: WinLossTrackerProps) {
 
           {/* Win/Loss Chart */}
           <div className="mb-6">
-            <h4 className="text-sm font-semibold text-gray-700 mb-3">Last 6 Months</h4>
+            <h4 className="text-sm font-bold text-gray-900 tracking-normal mb-3">Last 6 Months</h4>
             <div className="relative h-48 bg-gray-50 rounded-lg p-4">
               <div className="flex items-end justify-between h-full gap-2">
                 {chartData.months.map((month, index) => {
@@ -349,7 +349,7 @@ export default function WinLossTracker({ companyId }: WinLossTrackerProps) {
 
           {/* Recent Records */}
           <div>
-            <h4 className="text-sm font-semibold text-gray-700 mb-3">Recent Records</h4>
+            <h4 className="text-sm font-bold text-gray-900 tracking-normal mb-3">Recent Records</h4>
             <div className="space-y-2">
               {records.slice(0, 5).map((record) => (
                 <div
@@ -444,7 +444,7 @@ export default function WinLossTracker({ companyId }: WinLossTrackerProps) {
           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-semibold text-gray-900">
+                <h3 className="text-xl font-bold text-gray-900 tracking-normal">
                   {editingRecord ? "Edit Win/Loss Record" : "Log Win/Loss"}
                 </h3>
                 <button

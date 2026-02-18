@@ -4,6 +4,7 @@ import { ReactNode, useState, useRef, useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import { ChevronDown, X } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import ContextualHelp from "@/components/ui/ContextualHelp";
 
 interface KpiCardProps {
   id: string;
@@ -20,7 +21,7 @@ interface KpiCardProps {
   children: ReactNode;
   expandedContent?: ReactNode;
   className?: string;
-  tooltip?: ReactNode;
+  helpText?: string;
 }
 
 export default function KpiCard({
@@ -38,7 +39,7 @@ export default function KpiCard({
   children,
   expandedContent,
   className,
-  tooltip,
+  helpText,
 }: KpiCardProps) {
   const [expandedHeight, setExpandedHeight] = useState<number | null>(null);
   const expandedRef = useRef<HTMLDivElement>(null);
@@ -109,23 +110,21 @@ export default function KpiCard({
         tabIndex={0}
         className="cursor-pointer"
       >
-        <CardHeader className="pb-5">
-          <CardTitle className="text-xs font-bold text-gray-800 uppercase tracking-widest flex items-center justify-between">
+        <CardHeader className="pb-4 pt-5 mb-4 border-b border-gray-200/70">
+          <CardTitle className="text-xs font-extrabold text-gray-900 uppercase tracking-widest flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <div className={cn("p-2 rounded-lg", iconBgColor)}>
                 <div className={iconColor}>{icon}</div>
               </div>
               <span>{title}</span>
+              {helpText && <ContextualHelp content={helpText} className="ml-1.5" />}
             </div>
-            <div className="flex items-center gap-2">
-              {tooltip}
-              <div className="flex items-center gap-1">
-                {isExpanded ? (
-                  <X className="h-4 w-4 text-gray-400 hover:text-gray-600 transition-colors" />
-                ) : (
-                  <ChevronDown className="h-4 w-4 text-gray-400 hover:text-gray-600 transition-colors" />
-                )}
-              </div>
+            <div className="flex items-center gap-1">
+              {isExpanded ? (
+                <X className="h-4 w-4 text-gray-400 hover:text-gray-600 transition-colors" />
+              ) : (
+                <ChevronDown className="h-4 w-4 text-gray-400 hover:text-gray-600 transition-colors" />
+              )}
             </div>
           </CardTitle>
         </CardHeader>

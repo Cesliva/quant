@@ -8,11 +8,13 @@ import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
 import { Save, Building2, DollarSign, Package, Paintbrush, Settings2, Plus, Trash2, Info, AlertCircle, TrendingUp, BookOpen, Database, Upload as UploadIcon, X, Image } from "lucide-react";
 import CompanyAddressBook from "@/components/settings/CompanyAddressBook";
+import ConsumablesSettingsPanel, { DEFAULT_CONSUMABLES } from "@/components/settings/ConsumablesSettingsPanel";
 import { 
   loadCompanySettings, 
   saveCompanySettings, 
   type CompanySettings,
-  type CompanyInfo 
+  type CompanyInfo,
+  type ConsumablesSettings
 } from "@/lib/utils/settingsLoader";
 import { validateCompanySettings, getFieldError, type ValidationError } from "@/lib/utils/validation";
 import { useCompanyId } from "@/lib/hooks/useCompanyId";
@@ -38,6 +40,8 @@ interface CoatingType {
   type: string;
   costPerSF?: number; // For coatings priced per square foot
   costPerPound?: number; // For coatings priced per pound (e.g., Galvanizing)
+  sspcPrepType?: string; // SSPC surface preparation standard
+  sspcPrepRate?: number; // Cost per square foot for prep
 }
 
 function SettingsPageContent() {
@@ -140,6 +144,9 @@ function SettingsPageContent() {
   const [showSampleData, setShowSampleData] = useState(true);
   const [savingSampleDataToggle, setSavingSampleDataToggle] = useState(false);
 
+  // Consumables & Equipment Settings
+  const [consumablesSettings, setConsumablesSettings] = useState<ConsumablesSettings>(DEFAULT_CONSUMABLES);
+
   const loadSettings = async () => {
     setIsLoading(true);
     try {
@@ -241,6 +248,11 @@ function SettingsPageContent() {
             : DEFAULT_WORKING_DAYS),
         holidays: settings.holidays || [],
       });
+
+      // Load consumables settings
+      if (settings.consumablesSettings) {
+        setConsumablesSettings(settings.consumablesSettings);
+      }
     } catch (error) {
       console.error("Failed to load settings:", error);
     } finally {
@@ -335,6 +347,7 @@ function SettingsPageContent() {
         holidays:
           executiveSettings.holidays?.filter((date) => date && date.trim() !== "") || undefined,
         pipelineRanges: pipelineRanges,
+        consumablesSettings: consumablesSettings,
       };
 
       await saveCompanySettings(companyId, settingsToSave);
@@ -428,6 +441,7 @@ function SettingsPageContent() {
         holidays:
           executiveSettings.holidays?.filter((date) => date && date.trim() !== "") || undefined,
         pipelineRanges: pipelineRanges,
+        consumablesSettings: consumablesSettings,
       };
       
       await saveCompanySettings(companyId, settingsToSave);
@@ -516,6 +530,7 @@ function SettingsPageContent() {
         holidays:
           executiveSettings.holidays?.filter((date) => date && date.trim() !== "") || undefined,
         pipelineRanges: pipelineRanges,
+        consumablesSettings: consumablesSettings,
       };
       
       await saveCompanySettings(companyId, settingsToSave);
@@ -677,14 +692,40 @@ function SettingsPageContent() {
     );
   }
 
+  // Get title and description based on active tab
+  const getPageTitle = () => {
+    switch (activeTab) {
+      case "company":
+        return { title: "Company Information", description: "Configure company details and branding" };
+      case "labor":
+        return { title: "Labor Rates", description: "Manage trade rates and labor costs" };
+      case "material":
+        return { title: "Material Costs", description: "Configure material grades and pricing" };
+      case "coating":
+        return { title: "Coating Rates", description: "Manage coating types and costs" };
+      case "markup":
+        return { title: "Markup & Fees", description: "Configure overhead, profit, and waste factors" };
+      case "addressbook":
+        return { title: "Address Book", description: "Manage company contacts and relationships" };
+      case "executive":
+        return { title: "Shop Capacity & Backlog", description: "Configure shop capacity, backlog forecasting, and pipeline ranges" };
+      case "advanced":
+        return { title: "Advanced Settings", description: "Configure system preferences and defaults" };
+      default:
+        return { title: "Settings", description: "Configure company defaults and estimating parameters" };
+    }
+  };
+
+  const pageInfo = getPageTitle();
+
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Settings</h1>
+          <h1 className="text-3xl font-bold text-gray-900">{pageInfo.title}</h1>
           <p className="text-sm text-gray-600 mt-1">
-            Configure company defaults and estimating parameters
+            {pageInfo.description}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -1247,79 +1288,132 @@ function SettingsPageContent() {
                 {coatingTypes.map((coating) => {
                   const isGalvanizing = coating.type.toLowerCase().includes("galvanizing") || coating.type.toLowerCase().includes("galv");
                   return (
-                    <div key={coating.id} className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
-                      <div className="flex-1 grid grid-cols-3 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Coating Type
-                          </label>
-                          <select
-                            value={coating.type}
-                            onChange={(e) =>
-                              updateCoatingType(coating.id, "type", e.target.value)
-                            }
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          >
-                            <option value="None">None</option>
-                            <option value="Standard Shop Primer">Standard Shop Primer</option>
-                            <option value="Zinc Primer">Zinc Primer</option>
-                            <option value="Paint">Paint</option>
-                            <option value="Powder Coat">Powder Coat</option>
-                            <option value="Galvanizing">Galvanizing</option>
-                            <option value="Specialty Coating">Specialty Coating</option>
-                          </select>
+                    <div key={coating.id} className="flex items-start gap-4 p-4 bg-gray-50 rounded-lg">
+                      <div className="flex-1 space-y-4">
+                        {/* Row 1: Coating Type and Cost */}
+                        <div className="grid grid-cols-3 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Coating Type
+                            </label>
+                            <select
+                              value={coating.type}
+                              onChange={(e) =>
+                                updateCoatingType(coating.id, "type", e.target.value)
+                              }
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                              <option value="None">None</option>
+                              <option value="Standard Shop Primer">Standard Shop Primer</option>
+                              <option value="Zinc Primer">Zinc Primer</option>
+                              <option value="Paint">Paint</option>
+                              <option value="Powder Coat">Powder Coat</option>
+                              <option value="Galvanizing">Galvanizing</option>
+                              <option value="Specialty Coating">Specialty Coating</option>
+                            </select>
+                          </div>
+                          {isGalvanizing ? (
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Cost per Pound ($/lb)
+                              </label>
+                              <div className="relative">
+                                <span className="absolute left-3 top-2 text-gray-500">$</span>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  value={coating.costPerPound || 0}
+                                  onChange={(e) =>
+                                    updateCoatingType(coating.id, "costPerPound", parseFloat(e.target.value) || 0)
+                                  }
+                                  placeholder="0.00"
+                                  className="pl-8"
+                                />
+                              </div>
+                            </div>
+                          ) : (
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Cost per Square Foot ($/SF)
+                              </label>
+                              <div className="relative">
+                                <span className="absolute left-3 top-2 text-gray-500">$</span>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  value={coating.costPerSF || 0}
+                                  onChange={(e) =>
+                                    updateCoatingType(coating.id, "costPerSF", parseFloat(e.target.value) || 0)
+                                  }
+                                  placeholder="0.00"
+                                  className="pl-8"
+                                />
+                              </div>
+                            </div>
+                          )}
+                          <div className="flex items-end">
+                            <div className="text-xs text-gray-500">
+                              {isGalvanizing 
+                                ? "Galvanizing is priced per pound"
+                                : "Most coatings are priced per square foot"}
+                            </div>
+                          </div>
                         </div>
-                        {isGalvanizing ? (
+                        
+                        {/* Row 2: SSPC Prep Type and Rate */}
+                        <div className="grid grid-cols-3 gap-4">
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Cost per Pound ($/lb)
+                              SSPC Prep Type (Optional)
+                            </label>
+                            <select
+                              value={coating.sspcPrepType || ""}
+                              onChange={(e) =>
+                                updateCoatingType(coating.id, "sspcPrepType", e.target.value)
+                              }
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                              <option value="">None</option>
+                              <option value="SSPC-SP1">SSPC-SP1 - Solvent Cleaning</option>
+                              <option value="SSPC-SP2">SSPC-SP2 - Hand Tool Cleaning</option>
+                              <option value="SSPC-SP3">SSPC-SP3 - Power Tool Cleaning</option>
+                              <option value="SSPC-SP5">SSPC-SP5 - White Metal Blast</option>
+                              <option value="SSPC-SP6">SSPC-SP6 - Commercial Blast</option>
+                              <option value="SSPC-SP7">SSPC-SP7 - Brush-Off Blast</option>
+                              <option value="SSPC-SP10">SSPC-SP10 - Near-White Blast</option>
+                              <option value="SSPC-SP11">SSPC-SP11 - Power Tool to Bare Metal</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Prep Rate ($/SF)
                             </label>
                             <div className="relative">
                               <span className="absolute left-3 top-2 text-gray-500">$</span>
                               <Input
                                 type="number"
                                 step="0.01"
-                                value={coating.costPerPound || 0}
+                                value={coating.sspcPrepRate || 0}
                                 onChange={(e) =>
-                                  updateCoatingType(coating.id, "costPerPound", parseFloat(e.target.value) || 0)
+                                  updateCoatingType(coating.id, "sspcPrepRate", parseFloat(e.target.value) || 0)
                                 }
                                 placeholder="0.00"
                                 className="pl-8"
+                                disabled={!coating.sspcPrepType}
                               />
                             </div>
                           </div>
-                        ) : (
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Cost per Square Foot ($/SF)
-                            </label>
-                            <div className="relative">
-                              <span className="absolute left-3 top-2 text-gray-500">$</span>
-                              <Input
-                                type="number"
-                                step="0.01"
-                                value={coating.costPerSF || 0}
-                                onChange={(e) =>
-                                  updateCoatingType(coating.id, "costPerSF", parseFloat(e.target.value) || 0)
-                                }
-                                placeholder="0.00"
-                                className="pl-8"
-                              />
+                          <div className="flex items-end">
+                            <div className="text-xs text-gray-500">
+                              Surface prep cost per square foot
                             </div>
-                          </div>
-                        )}
-                        <div className="flex items-end">
-                          <div className="text-xs text-gray-500">
-                            {isGalvanizing 
-                              ? "Galvanizing is priced per pound"
-                              : "Most coatings are priced per square foot"}
                           </div>
                         </div>
                       </div>
                       {coatingTypes.length > 1 && (
                         <button
                           onClick={() => removeCoatingType(coating.id)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors mt-8"
                           title="Remove coating"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -1480,7 +1574,7 @@ function SettingsPageContent() {
           <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Shop Capacity & Backlog Settings</CardTitle>
+              <CardTitle>Capacity & Backlog Configuration</CardTitle>
               <p className="text-sm text-gray-500 mt-2">
                 Configure shop capacity for hours-based backlog calculation and capacity gap detection
               </p>
@@ -2010,6 +2104,12 @@ function SettingsPageContent() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Consumables & Equipment Drivers */}
+            <ConsumablesSettingsPanel
+              settings={consumablesSettings}
+              onChange={setConsumablesSettings}
+            />
           </div>
         )}
       </div>

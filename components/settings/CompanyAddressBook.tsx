@@ -210,9 +210,9 @@ export default function CompanyAddressBook({ companyId, compact = false }: Compa
 
   return (
     <Card className="border-2 border-blue-200">
-      <CardHeader>
+      <CardHeader className="pb-4 pt-5 mb-4 border-b border-gray-200/70">
         <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 font-extrabold text-gray-900 tracking-normal">
             <BookOpen className="w-5 h-5" />
             Company Address Book
           </CardTitle>
@@ -233,7 +233,7 @@ export default function CompanyAddressBook({ companyId, compact = false }: Compa
             <div className="flex items-start gap-3">
               <BookOpen className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
-                <h3 className="text-sm font-semibold text-blue-900 mb-1">
+                <h3 className="text-sm font-bold text-gray-900 tracking-normal mb-1">
                   Company Contacts
                 </h3>
                 <p className="text-xs text-blue-800">
@@ -245,7 +245,7 @@ export default function CompanyAddressBook({ companyId, compact = false }: Compa
 
           {/* Add New Button */}
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+            <h3 className="text-sm font-bold text-gray-900 tracking-normal flex items-center gap-2">
               <Users className="w-4 h-4" />
               Contacts ({contacts.length})
               {!showAllContacts && contacts.length > 20 && (
@@ -441,7 +441,7 @@ export default function CompanyAddressBook({ companyId, compact = false }: Compa
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
-                          <h4 className="font-semibold text-gray-900">{contact.name}</h4>
+                          <h4 className="font-bold text-gray-900 tracking-normal">{contact.name}</h4>
                           <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                             contact.type === "customer" ? "bg-blue-100 text-blue-800" :
                             contact.type === "contractor" ? "bg-green-100 text-green-800" :
@@ -497,7 +497,7 @@ export default function CompanyAddressBook({ companyId, compact = false }: Compa
             {/* New Contact Form */}
             {isAddingNew && editingContact && !contacts.find(c => c.id === editingContact.id) && (
               <div className="border-2 border-blue-300 border-dashed rounded-lg p-4 bg-blue-50">
-                <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <h4 className="font-bold text-gray-900 tracking-normal mb-4 flex items-center gap-2">
                   <Plus className="w-4 h-4" />
                   New Contact
                 </h4>

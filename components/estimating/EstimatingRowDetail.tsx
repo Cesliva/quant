@@ -445,7 +445,7 @@ export default function EstimatingRowDetail({
                   }, 200);
                 }}
                 placeholder={currentValue || "Type to filter sizes..."}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
               />
               <ChevronDown 
                 className={`absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none transition-transform ${sizeDropdownOpen ? 'rotate-180' : ''}`}
@@ -505,7 +505,7 @@ export default function EstimatingRowDetail({
               onSave();
             }
           }}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
         >
           <option value="">Select...</option>
           {options.map((opt) => {
@@ -541,7 +541,7 @@ export default function EstimatingRowDetail({
               onSave();
             }
           }}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none text-gray-900"
           rows={3}
         />
       );
@@ -625,7 +625,7 @@ export default function EstimatingRowDetail({
           }
         }}
         step={type === "number" ? "any" : undefined}
-        className={hasSeededValue ? "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-blue-50 border-blue-300" : "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"}
+        className={hasSeededValue ? "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-blue-50 border-blue-300 text-gray-900" : "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"}
         readOnly={isReadOnly}
       />
     );
@@ -649,7 +649,7 @@ export default function EstimatingRowDetail({
       {/* Edit Mode Controls */}
       {isEditing && (
         <div className="flex items-center justify-between pb-4 border-b border-gray-300">
-          <h3 className="text-lg font-semibold text-gray-900">Editing Line {line.lineId}</h3>
+          <h3 className="text-lg font-bold text-gray-900 tracking-normal">Editing Line {line.lineId}</h3>
           <div className="flex gap-2">
             <button
               onClick={onSave}
@@ -670,7 +670,7 @@ export default function EstimatingRowDetail({
       <div className="space-y-6">
         {/* Identification Section - Full Width */}
         <div className="space-y-4">
-          <h4 className="font-semibold text-gray-700 bg-gray-50/80 rounded-lg px-4 py-2.5 mb-4 shadow-sm border border-gray-200/60">Identification</h4>
+          <h4 className="font-bold text-gray-900 tracking-normal bg-gray-50/80 rounded-lg px-4 py-2.5 mb-4 shadow-sm border border-gray-200/60">Identification</h4>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -1014,7 +1014,7 @@ export default function EstimatingRowDetail({
             (isEditing ? editingLine.miscMethod : line.miscMethod) === "DETAILED") && (
 
             <div className="space-y-4">
-              <h4 className="font-semibold text-gray-700 bg-gray-50/80 rounded-lg px-4 py-2.5 mb-4 shadow-sm border border-gray-200/60">
+              <h4 className="font-bold text-gray-900 tracking-normal bg-gray-50/80 rounded-lg px-4 py-2.5 mb-4 shadow-sm border border-gray-200/60">
                 Material {((isEditing ? editingLine.workType : line.workType) === "MISC") && "(Detailed Mode)"}
               </h4>
             <div className="grid grid-cols-2 gap-4">
@@ -1150,7 +1150,7 @@ export default function EstimatingRowDetail({
                     onClick={() => setHardwareExpanded(!hardwareExpanded)}
                     className="flex items-center justify-between w-full mb-3 bg-gray-50/80 rounded-lg px-4 py-2.5 shadow-sm border border-gray-200/60 hover:bg-gray-100/90 transition-all"
                   >
-                    <h4 className="font-semibold text-gray-700 flex items-center gap-2">
+                    <h4 className="font-bold text-gray-900 tracking-normal flex items-center gap-2">
                       <Wrench className="w-4 h-4 text-orange-600" />
                       Hardware
                     </h4>
@@ -1339,7 +1339,7 @@ export default function EstimatingRowDetail({
            (isEditing ? editingLine.miscMethod : line.miscMethod) === "ASSEMBLY" &&
            (isEditing ? editingLine.miscSubtype : line.miscSubtype) === "STAIR" && (
             <div className="space-y-4 bg-purple-50/30 rounded-lg p-4 border border-purple-200">
-              <h4 className="font-semibold text-gray-900 border-b border-gray-200 pb-2">Stair Assembly</h4>
+              <h4 className="font-bold text-gray-900 tracking-normal border-b border-gray-200 pb-2">Stair Assembly</h4>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">Number of Treads</label>
@@ -1385,7 +1385,7 @@ export default function EstimatingRowDetail({
            ((isEditing ? editingLine.miscSubtype : line.miscSubtype) === "HANDRAIL" ||
             (isEditing ? editingLine.miscSubtype : line.miscSubtype) === "GUARDRAIL") && (
             <div className="space-y-4 bg-purple-50/30 rounded-lg p-4 border border-purple-200">
-              <h4 className="font-semibold text-gray-900 border-b border-gray-200 pb-2">Rail Assembly</h4>
+              <h4 className="font-bold text-gray-900 tracking-normal border-b border-gray-200 pb-2">Rail Assembly</h4>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">Rail Type</label>

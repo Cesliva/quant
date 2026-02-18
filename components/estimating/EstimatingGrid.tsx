@@ -758,7 +758,9 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
     };
   }, [editingId, editingLine, companySettings, projectSettings]);
 
-  const handleAddLine = () => {
+  const handleAddLine = useCallback(() => {
+    console.log("[handleAddLine] Called - isManualMode:", isManualMode);
+    
     if (!isManualMode) {
       alert("Please enable Manual Entry Mode to add line items manually");
       return;
@@ -770,6 +772,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
       return;
     }
 
+    console.log("[handleAddLine] Creating new line...");
     isAddingLineRef.current = true;
 
     const newLine: Omit<EstimatingLine, "id"> = {
@@ -792,6 +795,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
     try {
       const linesPath = getProjectPath(companyId, projectId, "lines");
       createDocument(linesPath, newLine).then((newId) => {
+        console.log("[handleAddLine] Line created with ID:", newId);
         // Add to local state for immediate UI update
         const addedLine = { ...newLine, id: newId };
         setLines([...lines, addedLine], true); // Add to history
@@ -830,36 +834,28 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
         }
       }).catch((error: any) => {
         console.error("Failed to add line:", error);
-        alert("Firebase is not configured. Please set up Firebase credentials to save data.");
+        alert("Failed to add line: " + (error.message || "Unknown error"));
         isAddingLineRef.current = false; // Reset guard on error
       });
     } catch (error: any) {
       console.error("Failed to add line:", error);
-      alert("Firebase is not configured. Please set up Firebase credentials to save data.");
+      alert("Failed to add line: " + (error.message || "Unknown error"));
       isAddingLineRef.current = false; // Reset guard on error
     }
-  };
+  }, [isManualMode, lines, companySettings, projectSettings, companyId, projectId, setLines]);
 
-  // Store handleAddLine in a ref so we always expose the latest version without recreating the callback
-  const handleAddLineRef = useRef(handleAddLine);
-  handleAddLineRef.current = handleAddLine;
-
-  // Expose handleAddLine to parent via ref callback
-  // Use a stable wrapper function that calls the ref - this prevents infinite loops
-  const stableHandleAddLine = useCallback(() => {
-    handleAddLineRef.current();
-  }, []); // Empty deps - function never changes, always calls latest handleAddLine via ref
-
+  // Expose handleAddLine to parent via onAddLineRef
   useEffect(() => {
+    console.log("[EstimatingGrid] Exposing handleAddLine to parent, isManualMode:", isManualMode);
     if (onAddLineRef) {
-      onAddLineRef(stableHandleAddLine);
+      onAddLineRef(handleAddLine);
     }
     return () => {
       if (onAddLineRef) {
         onAddLineRef(null);
       }
     };
-  }, [onAddLineRef, stableHandleAddLine]);
+  }, [onAddLineRef, handleAddLine]);
 
   const handleEdit = (line: EstimatingLine) => {
     // In manual mode, editing is automatic when fields are clicked

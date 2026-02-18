@@ -3,12 +3,15 @@
 import { useState, useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
-import { Save, Settings2, ChevronDown, ChevronUp } from "lucide-react";
+import { Save, Settings2, ChevronDown, ChevronUp, AlertTriangle } from "lucide-react";
 import { 
   loadCompanySettings, 
   saveCompanySettings, 
   type CompanySettings 
 } from "@/lib/utils/settingsLoader";
+import { queryDocuments } from "@/lib/firebase/firestore";
+import { isFirebaseConfigured } from "@/lib/firebase/config";
+import Link from "next/link";
 
 interface CompanySettingsPanelProps {
   companyId: string;
@@ -38,10 +41,49 @@ export default function CompanySettingsPanel({ companyId, compact = false }: Com
     overheadPercentage: 15,
     profitPercentage: 10,
   });
+  const [projectsWithOverrides, setProjectsWithOverrides] = useState<Array<{id: string; projectName: string; projectNumber?: string}>>([]);
 
   useEffect(() => {
     loadSettings();
+    checkForLaborOverrides();
   }, [companyId]);
+
+  const checkForLaborOverrides = async () => {
+    if (!isFirebaseConfigured()) return;
+    
+    try {
+      // Query all projects that have project settings
+      const projectsPath = `companies/${companyId}/projects`;
+      const projects = await queryDocuments(projectsPath);
+      
+      const projectsWithLaborOverrides = [];
+      
+      for (const project of projects) {
+        // Check if project has settings document with labor rate overrides
+        const settingsPath = `${projectsPath}/${project.id}/settings/projectSettings`;
+        try {
+          const settingsDoc = await queryDocuments(settingsPath);
+          if (settingsDoc && settingsDoc.length > 0) {
+            const settings = settingsDoc[0];
+            // Check if projectLaborRates array exists and has entries
+            if (settings.projectLaborRates && Array.isArray(settings.projectLaborRates) && settings.projectLaborRates.length > 0) {
+              projectsWithLaborOverrides.push({
+                id: project.id,
+                projectName: project.projectName || "Untitled Project",
+                projectNumber: project.projectNumber,
+              });
+            }
+          }
+        } catch (err) {
+          // Settings document doesn't exist for this project, skip
+        }
+      }
+      
+      setProjectsWithOverrides(projectsWithLaborOverrides);
+    } catch (error) {
+      console.error("Failed to check for labor overrides:", error);
+    }
+  };
 
   const loadSettings = async () => {
     setIsLoading(true);
@@ -142,9 +184,9 @@ export default function CompanySettingsPanel({ companyId, compact = false }: Com
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="pb-4 pt-5 mb-4 border-b border-gray-200/70">
         <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 font-extrabold text-gray-900 tracking-normal">
             <Settings2 className="w-5 h-5" />
             Company Settings
           </CardTitle>
@@ -163,7 +205,7 @@ export default function CompanySettingsPanel({ companyId, compact = false }: Com
         <CardContent className="space-y-6">
           {/* Company Info */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Company Information</h3>
+            <h3 className="text-sm font-bold text-gray-900 tracking-normal mb-3">Company Information</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="md:col-span-2">
                 <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -217,7 +259,36 @@ export default function CompanySettingsPanel({ companyId, compact = false }: Com
 
           {/* Labor Rates Summary */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Labor Rates</h3>
+            <h3 className="text-sm font-bold text-gray-900 tracking-normal mb-3">Labor Rates</h3>
+            
+            {/* Override Alert */}
+            {projectsWithOverrides.length > 0 && (
+              <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-amber-900 mb-1">
+                      Labor rates overridden in {projectsWithOverrides.length} project{projectsWithOverrides.length !== 1 ? 's' : ''}
+                    </p>
+                    <p className="text-xs text-amber-700 mb-2">
+                      The following projects have project-specific labor rates that override these company defaults:
+                    </p>
+                    <div className="space-y-1 max-h-32 overflow-y-auto">
+                      {projectsWithOverrides.map(project => (
+                        <Link 
+                          key={project.id} 
+                          href={`/projects/${project.id}`}
+                          className="block text-xs text-amber-800 hover:text-amber-900 hover:underline font-medium"
+                        >
+                          {project.projectNumber ? `${project.projectNumber}: ` : ''}{project.projectName}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            
             <div className="space-y-2">
               {laborRates.slice(0, compact ? 3 : laborRates.length).map((rate) => (
                 <div key={rate.id} className="flex items-center justify-between text-sm">
@@ -230,7 +301,7 @@ export default function CompanySettingsPanel({ companyId, compact = false }: Com
 
           {/* Material Grades Summary */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Material Grades</h3>
+            <h3 className="text-sm font-bold text-gray-900 tracking-normal mb-3">Material Grades</h3>
             <div className="space-y-2">
               {materialGrades.slice(0, compact ? 3 : materialGrades.length).map((grade) => (
                 <div key={grade.id} className="flex items-center justify-between text-sm">
@@ -243,7 +314,7 @@ export default function CompanySettingsPanel({ companyId, compact = false }: Com
 
           {/* Coating Types Summary */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Coating Types</h3>
+            <h3 className="text-sm font-bold text-gray-900 tracking-normal mb-3">Coating Types</h3>
             <div className="space-y-2">
               {coatingTypes.slice(0, compact ? 3 : coatingTypes.length).map((coating) => {
                 const isGalvanizing = coating.type.toLowerCase().includes("galvanizing") || coating.type.toLowerCase().includes("galv");
@@ -262,7 +333,7 @@ export default function CompanySettingsPanel({ companyId, compact = false }: Com
 
           {/* Markup Settings */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Markup</h3>
+            <h3 className="text-sm font-bold text-gray-900 tracking-normal mb-3">Markup</h3>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">

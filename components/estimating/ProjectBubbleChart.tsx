@@ -5,14 +5,15 @@ import * as d3 from "d3";
 import { EstimatingLine } from "./EstimatingGrid";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
-import { BarChart3, Info, X, TrendingUp, TrendingDown, Sparkles } from "lucide-react";
+import { BarChart3, X, TrendingUp, TrendingDown, Sparkles, Maximize2 } from "lucide-react";
+import ChartOverlay from "@/components/ui/ChartOverlay";
+import ContextualHelp from "@/components/ui/ContextualHelp";
 import { loadCompanySettings, type CompanySettings } from "@/lib/utils/settingsLoader";
 import { subscribeToCollection, getProjectPath } from "@/lib/firebase/firestore";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
 import { 
   LABOR_FINGERPRINT_NAME, 
-  LABOR_FINGERPRINT_SUBTITLE, 
-  LABOR_FINGERPRINT_TOOLTIP 
+  LABOR_FINGERPRINT_SUBTITLE
 } from "@/lib/branding";
 
 interface ProjectBubbleChartProps {
@@ -83,28 +84,9 @@ interface ProjectData {
 export default function ProjectBubbleChart({ lines, companyId, projectName, currentProjectId, selectedMetric: externalMetric, onMetricChange }: ProjectBubbleChartProps) {
   const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
   const [internalMetric, setInternalMetric] = useState<"laborHoursPerTon" | "costPerTon">("laborHoursPerTon");
-  const [showFirstTimeHelp, setShowFirstTimeHelp] = useState(false);
-  const [showInfoTooltip, setShowInfoTooltip] = useState(false);
+  const [isOverlayOpen, setIsOverlayOpen] = useState(false);
   
   const selectedMetric = externalMetric || internalMetric;
-  
-  // Check if user has dismissed first-time help
-  useEffect(() => {
-    const hasSeenHelp = localStorage.getItem('quant-bubble-chart-help-dismissed');
-    const activeLines = lines.filter((line) => line.status !== "Void");
-    if (!hasSeenHelp && activeLines.length > 0) {
-      // Use a small delay to ensure bubbleData is calculated
-      const timer = setTimeout(() => {
-        setShowFirstTimeHelp(true);
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [lines]);
-  
-  const handleDismissHelp = () => {
-    setShowFirstTimeHelp(false);
-    localStorage.setItem('quant-bubble-chart-help-dismissed', 'true');
-  };
   
   const handleMetricChange = (metric: "laborHoursPerTon" | "costPerTon") => {
     if (onMetricChange) {
@@ -117,6 +99,7 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
   const [allProjectLines, setAllProjectLines] = useState<ProjectData[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+  const overlaySvgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
 
@@ -625,8 +608,33 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
         if (tooltipRef.current) {
           const tooltip = tooltipRef.current;
           tooltip.style.display = "block";
-          tooltip.style.left = `${event.pageX + 10}px`;
-          tooltip.style.top = `${event.pageY - 10}px`;
+          
+          // Use clientX/clientY for viewport-relative positioning
+          const x = event.clientX;
+          const y = event.clientY;
+          const tooltipWidth = 200; // Approximate tooltip width
+          const tooltipHeight = 100; // Approximate tooltip height
+          const padding = 10;
+          
+          // Calculate position with viewport bounds checking
+          let left = x + padding;
+          let top = y - padding;
+          
+          // Keep tooltip within viewport horizontally
+          if (left + tooltipWidth > window.innerWidth) {
+            left = x - tooltipWidth - padding;
+          }
+          
+          // Keep tooltip within viewport vertically
+          if (top + tooltipHeight > window.innerHeight) {
+            top = y - tooltipHeight - padding;
+          }
+          if (top < 0) {
+            top = padding;
+          }
+          
+          tooltip.style.left = `${left}px`;
+          tooltip.style.top = `${top}px`;
           tooltip.innerHTML = `
             <div class="font-semibold">${d.label}</div>
             <div>${d.mhPerTon.toFixed(2)} ${selectedMetric === "laborHoursPerTon" ? "MH/T" : "$/T"}</div>
@@ -638,8 +646,33 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
       .on("mousemove", function(event) {
         if (tooltipRef.current) {
           const tooltip = tooltipRef.current;
-          tooltip.style.left = `${event.pageX + 10}px`;
-          tooltip.style.top = `${event.pageY - 10}px`;
+          
+          // Use clientX/clientY for viewport-relative positioning
+          const x = event.clientX;
+          const y = event.clientY;
+          const tooltipWidth = 200; // Approximate tooltip width
+          const tooltipHeight = 100; // Approximate tooltip height
+          const padding = 10;
+          
+          // Calculate position with viewport bounds checking
+          let left = x + padding;
+          let top = y - padding;
+          
+          // Keep tooltip within viewport horizontally
+          if (left + tooltipWidth > window.innerWidth) {
+            left = x - tooltipWidth - padding;
+          }
+          
+          // Keep tooltip within viewport vertically
+          if (top + tooltipHeight > window.innerHeight) {
+            top = y - tooltipHeight - padding;
+          }
+          if (top < 0) {
+            top = padding;
+          }
+          
+          tooltip.style.left = `${left}px`;
+          tooltip.style.top = `${top}px`;
         }
       })
       .on("mouseout", function() {
@@ -815,6 +848,190 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
 
   }, [bubbleData, selectedMetric, averageData, wonLostAverageData]);
 
+  // Render overlay chart (larger version)
+  useEffect(() => {
+    if (!overlaySvgRef.current || !isOverlayOpen || bubbleData.length === 0) return;
+
+    const svg = d3.select(overlaySvgRef.current);
+    svg.selectAll("*").remove();
+
+    const nonZeroData = bubbleData.filter(d => d.mhPerTon > 0);
+    if (nonZeroData.length === 0) return;
+
+    const viewBoxWidth = 1200;
+    const viewBoxHeight = 800;
+    const centerX = viewBoxWidth / 2;
+    const centerY = viewBoxHeight / 2;
+
+    const maxValue = Math.max(...nonZeroData.map(d => d.mhPerTon));
+    const minRadius = 25;
+    const maxRadius = 120;
+    const radiusScale = d3.scaleSqrt()
+      .domain([0, maxValue])
+      .range([minRadius, maxRadius]);
+
+    const nodes = nonZeroData.map((d, i) => {
+      const radius = radiusScale(d.mhPerTon);
+      const angle = (i / nonZeroData.length) * 2 * Math.PI;
+      const startRadius = 150;
+      return {
+        ...d,
+        radius,
+        x: centerX + Math.cos(angle) * startRadius,
+        y: centerY + Math.sin(angle) * startRadius,
+        vx: 0,
+        vy: 0,
+      };
+    });
+
+    const simulation = d3.forceSimulation(nodes as any)
+      .force("center", d3.forceCenter(centerX, centerY).strength(0.05))
+      .force("collision", d3.forceCollide().radius((d: any) => d.radius + 5).strength(0.9))
+      .force("charge", d3.forceManyBody().strength(-30))
+      .force("x", d3.forceX(centerX).strength(0.03))
+      .force("y", d3.forceY(centerY).strength(0.02))
+      .alphaDecay(0.01)
+      .velocityDecay(0.3);
+
+    const g = svg.append("g").attr("class", "zoom-container");
+    
+    const zoom = d3.zoom<SVGSVGElement, unknown>()
+      .scaleExtent([0.5, 3])
+      .on("zoom", (event) => {
+        g.attr("transform", event.transform);
+      });
+    
+    svg.call(zoom);
+
+    const bubbles = g.selectAll("g.bubble")
+      .data(nodes)
+      .enter()
+      .append("g")
+      .attr("class", "bubble")
+      .style("cursor", "pointer");
+
+    const circles = bubbles.append("circle")
+      .attr("r", 0)
+      .attr("fill", (d: any) => d.color)
+      .attr("opacity", 0.8)
+      .attr("stroke", "#fff")
+      .attr("stroke-width", 3)
+      .style("cursor", "pointer")
+      .on("click", function(event, d: any) {
+        event.stopPropagation();
+        setSelectedCategory(d.category);
+      });
+
+    circles.transition()
+      .duration(800)
+      .ease(d3.easeElasticOut.period(0.5))
+      .attr("r", (d: any) => d.radius);
+
+    // Add average halos
+    bubbles.each(function(d: any) {
+      const bubbleGroup = d3.select(this);
+      const category = d.category;
+      const avgValue = averageData.get(category) || 0;
+      const currentValue = d.mhPerTon;
+      
+      if (avgValue > 0 && Math.abs(avgValue - currentValue) > 0.01) {
+        const avgRadius = radiusScale(avgValue);
+        if (avgRadius > 5) {
+          bubbleGroup.append("circle")
+            .attr("r", 0)
+            .attr("fill", "none")
+            .attr("stroke", "#ef4444")
+            .attr("stroke-width", 3)
+            .attr("stroke-dasharray", "8,8")
+            .attr("opacity", 0.7)
+            .style("pointer-events", "none")
+            .transition()
+            .duration(1000)
+            .delay(400)
+            .attr("r", avgRadius);
+        }
+      }
+    });
+
+    // Add labels
+    const labels = bubbles.append("g")
+      .attr("class", "label-group")
+      .style("pointer-events", "none");
+
+    labels.each(function(d: any) {
+      const labelGroup = d3.select(this);
+      const radius = d.radius;
+      const fontSize = Math.min(radius / 2.5, 18);
+      const valueFontSize = Math.min(radius / 3.5, 14);
+      
+      if (radius > 25) {
+        labelGroup.append("text")
+          .attr("text-anchor", "middle")
+          .attr("dy", "-0.3em")
+          .attr("fill", "#fff")
+          .attr("font-weight", "bold")
+          .attr("font-size", `${fontSize}px`)
+          .attr("opacity", 0)
+          .text(d.label)
+          .transition()
+          .duration(800)
+          .delay(500)
+          .attr("opacity", 1);
+
+        labelGroup.append("text")
+          .attr("text-anchor", "middle")
+          .attr("dy", "1.2em")
+          .attr("fill", "#fff")
+          .attr("font-size", `${valueFontSize}px`)
+          .attr("opacity", 0)
+          .text(`${d.mhPerTon.toFixed(1)} ${selectedMetric === "laborHoursPerTon" ? "MH/T" : "$/T"}`)
+          .transition()
+          .duration(800)
+          .delay(600)
+          .attr("opacity", 1);
+      }
+    });
+
+    simulation.on("tick", () => {
+      bubbles.attr("transform", (d: any) => {
+        const boundedX = Math.max(d.radius, Math.min(viewBoxWidth - d.radius, d.x));
+        const boundedY = Math.max(d.radius, Math.min(viewBoxHeight - d.radius, d.y));
+        return `translate(${boundedX},${boundedY})`;
+      });
+    });
+
+    const drag = d3.drag<SVGGElement, any>()
+      .on("start", function(event, d: any) {
+        event.sourceEvent.stopPropagation();
+        if (!event.active) simulation.alphaTarget(0.3).restart();
+        d.fx = d.x;
+        d.fy = d.y;
+      })
+      .on("drag", function(event, d: any) {
+        const transform = d3.zoomTransform(svg.node() as SVGSVGElement);
+        d.fx = (event.x - transform.x) / transform.k;
+        d.fy = (event.y - transform.y) / transform.k;
+      })
+      .on("end", function(event, d: any) {
+        if (!event.active) simulation.alphaTarget(0);
+        d.fx = null;
+        d.fy = null;
+      });
+
+    bubbles.call(drag as any);
+    
+    svg.on("dblclick.zoom", () => {
+      svg.transition()
+        .duration(750)
+        .call(zoom.transform as any, d3.zoomIdentity);
+    });
+
+    return () => {
+      simulation.stop();
+    };
+
+  }, [bubbleData, selectedMetric, averageData, isOverlayOpen]);
+
   const totalMHPT = bubbleData.reduce((sum, d) => sum + d.mhPerTon, 0);
   const maxValue = bubbleData.length > 0 ? Math.max(...bubbleData.map(d => d.mhPerTon)) : 0;
   const nonZeroData = bubbleData.filter(d => d.mhPerTon > 0);
@@ -870,11 +1087,15 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
   }, [selectedCategory, bubbleData, averageData, wonLostAverageData, allProjectLines, allProjects, currentProjectId]);
 
   return (
-    <Card className="p-4">
-        <CardHeader className="mb-2">
+    <>
+    <Card 
+      className="p-4 cursor-pointer hover:shadow-lg transition-all duration-200 group"
+      onClick={() => setIsOverlayOpen(true)}
+    >
+        <CardHeader className="pb-4 pt-5 mb-4 border-b border-gray-200/70">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 flex-1 min-w-0">
-              <CardTitle className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2 min-w-0 flex-wrap">
+              <CardTitle className="text-xl font-extrabold text-gray-900 tracking-normal flex items-center gap-2 min-w-0 flex-wrap">
                 <BarChart3 className="w-5 h-5 flex-shrink-0 text-slate-900" />
                 <span className="break-words">
                   {selectedMetric === "laborHoursPerTon" ? LABOR_FINGERPRINT_NAME : "Cost Distribution"}
@@ -884,57 +1105,12 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
                     - {projectName}
                   </span>
                 )}
+                <ContextualHelp content={selectedMetric === "laborHoursPerTon" 
+                  ? "Bubble size represents man hours per ton (MH/T) for each category. Larger bubbles indicate higher intensity. Dotted circles show historical averages from won and lost projects. Click any bubble to see detailed comparisons."
+                  : "Bubble size represents cost per ton ($/T) for each category. Larger bubbles indicate higher cost intensity. Dotted circles show historical averages. Click any bubble to see detailed comparisons."} 
+                />
               </CardTitle>
-              {/* Always-visible info button with rich tooltip */}
-              <div className="relative flex-shrink-0">
-                <button
-                  onClick={() => setShowInfoTooltip(!showInfoTooltip)}
-                  className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors group"
-                  aria-label="Chart information"
-                >
-                  <Info className="w-4 h-4 text-gray-400 group-hover:text-gray-600 transition-colors" />
-                </button>
-                {showInfoTooltip && (
-                  <>
-                    <div 
-                      className="fixed inset-0 z-40" 
-                      onClick={() => setShowInfoTooltip(false)}
-                    />
-                    <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-xl shadow-xl border border-gray-200 p-4 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
-                      <div className="flex items-start justify-between mb-3">
-                        <h3 className="text-sm font-semibold text-gray-900">How to read this chart</h3>
-                        <button
-                          onClick={() => setShowInfoTooltip(false)}
-                          className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
-                        >
-                          <X className="w-3.5 h-3.5 text-gray-400" />
-                        </button>
-                      </div>
-                      <div className="space-y-3 text-xs text-gray-600">
-                        <div>
-                          <p className="font-medium text-gray-900 mb-1">Bubble size</p>
-                          <p>Represents {selectedMetric === "laborHoursPerTon" ? "man hours per ton (MH/T)" : "cost per ton ($/T)"} for each category. Larger bubbles indicate higher intensity.</p>
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-900 mb-1">Dotted circles</p>
-                          <p>Show historical averages from won and lost projects. Use these as benchmarks to spot outliers.</p>
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-900 mb-1">Click to compare</p>
-                          <p>Click any bubble to see a detailed comparison with historical data, including won vs. lost averages.</p>
-                        </div>
-                        {selectedMetric === "laborHoursPerTon" && (
-                          <div className="pt-2 border-t border-gray-200">
-                            <p className="text-[11px] text-gray-500 italic">
-                              {LABOR_FINGERPRINT_TOOLTIP}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
+              <Maximize2 className="w-5 h-5 text-slate-400 group-hover:text-slate-600 transition-colors flex-shrink-0 ml-2" />
             </div>
             <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
               <Button
@@ -965,36 +1141,6 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
             }
           </p>
           
-          {/* First-time help banner - Apple-style subtle and dismissible */}
-          {showFirstTimeHelp && bubbleData.length > 0 && (
-            <div className="mb-4 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/50 rounded-xl shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
-              <div className="flex items-start gap-2.5">
-                <div className="p-1.5 bg-blue-100 rounded-lg flex-shrink-0">
-                  <Sparkles className="w-4 h-4 text-blue-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-blue-900 mb-1.5">Quick tip</p>
-                  <p className="text-xs text-blue-800 leading-relaxed mb-2">
-                    Bubble size shows {selectedMetric === "laborHoursPerTon" ? "labor intensity" : "cost intensity"} per category. 
-                    Click any bubble to compare with historical projects and spot opportunities.
-                  </p>
-                  <button
-                    onClick={handleDismissHelp}
-                    className="text-[11px] font-medium text-blue-700 hover:text-blue-900 transition-colors"
-                  >
-                    Got it
-                  </button>
-                </div>
-                <button
-                  onClick={handleDismissHelp}
-                  className="p-1 hover:bg-blue-100 rounded-lg transition-colors flex-shrink-0"
-                  aria-label="Dismiss"
-                >
-                  <X className="w-3.5 h-3.5 text-blue-600" />
-                </button>
-              </div>
-            </div>
-          )}
           {bubbleData.length === 0 || nonZeroData.length === 0 ? (
             <div className="flex items-center justify-center h-96 text-gray-500">
               <div className="text-center">
@@ -1015,6 +1161,12 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
                     preserveAspectRatio="xMidYMid meet"
                     className="border border-gray-200 rounded-lg cursor-move"
                     style={{ maxWidth: "100%", height: "auto", aspectRatio: "4/3", maxHeight: "400px" }}
+                  />
+                  {/* Tooltip */}
+                  <div
+                    ref={tooltipRef}
+                    className="fixed bg-white rounded-lg shadow-lg p-2 border border-gray-200 pointer-events-none z-50"
+                    style={{ display: "none" }}
                   />
                   <div className="absolute top-2 right-2 flex flex-col items-end gap-1.5">
                     <div className="text-xs text-gray-400 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-lg shadow-sm border border-gray-200/50">
@@ -1045,7 +1197,7 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
                 </div>
               </div>
               <div className="mt-2">
-                <h4 className="text-xs font-semibold text-gray-900 mb-2">
+                <h4 className="text-xs font-bold text-gray-900 tracking-normal mb-2">
                   {selectedMetric === "laborHoursPerTon" ? "LABOR CATEGORIES" : "COST CATEGORIES"}
                 </h4>
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
@@ -1122,8 +1274,8 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
               </div>
             </>
           )}
-          {/* Modal Popup (appears on click) */}
-          {selectedCategory && categoryComparison && (
+          {/* Modal Popup (appears on click) - only show when overlay is NOT open */}
+          {selectedCategory && categoryComparison && !isOverlayOpen && (
             <div 
               className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" 
               onClick={(e) => {
@@ -1147,7 +1299,7 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
                 <div className="p-6">
                   <div className="flex items-center justify-between mb-6">
                     <div>
-                      <h3 className="text-xl font-semibold text-slate-900">{categoryComparison.label}</h3>
+                      <h3 className="text-xl font-bold text-gray-900 tracking-normal">{categoryComparison.label}</h3>
                       <p className="text-sm text-slate-600 mt-1">
                         Live comparison across all projects
                       </p>
@@ -1165,7 +1317,7 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-5">
                       <div className="flex items-center gap-2 mb-2">
                         <div className="w-3 h-3 rounded-full bg-blue-600"></div>
-                        <span className="text-sm font-semibold text-slate-900">Current</span>
+                        <span className="text-sm font-bold text-gray-900 tracking-normal">Current</span>
                       </div>
                       <p className="text-xs text-slate-600 mb-2 truncate">{projectName || "Current Estimate"}</p>
                       <p className="text-2xl font-bold text-blue-900 tabular-nums">
@@ -1178,7 +1330,7 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
                       <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-5">
                         <div className="flex items-center gap-2 mb-2">
                           <div className="w-3 h-3 rounded-full bg-emerald-600"></div>
-                          <span className="text-sm font-semibold text-slate-900">Won Average</span>
+                          <span className="text-sm font-bold text-gray-900 tracking-normal">Won Average</span>
                           <span className="text-xs text-slate-600">({categoryComparison.wonCount})</span>
                         </div>
                         <div className="flex items-center gap-2 mb-2">
@@ -1209,7 +1361,7 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
                     <div className="bg-red-50 border border-red-200 rounded-lg p-5">
                       <div className="flex items-center gap-2 mb-2">
                         <div className="w-3 h-3 rounded-full bg-red-600"></div>
-                        <span className="text-sm font-semibold text-slate-900">Lost Average</span>
+                        <span className="text-sm font-bold text-gray-900 tracking-normal">Lost Average</span>
                         {categoryComparison.lostCount > 0 ? (
                           <span className="text-xs text-slate-600">({categoryComparison.lostCount})</span>
                         ) : (
@@ -1255,7 +1407,7 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
                       <div className="bg-slate-50 border border-slate-200 rounded-lg p-5">
                         <div className="flex items-center gap-2 mb-2">
                           <div className="w-3 h-3 rounded-full bg-slate-600"></div>
-                          <span className="text-sm font-semibold text-slate-900">All Average</span>
+                          <span className="text-sm font-bold text-gray-900 tracking-normal">All Average</span>
                           <span className="text-xs text-slate-600">({categoryComparison.allCount})</span>
                         </div>
                         <div className="flex items-center gap-2 mb-2">
@@ -1303,6 +1455,208 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
           
         </CardContent>
       </Card>
+
+      {/* Full-screen Overlay */}
+      <ChartOverlay
+        isOpen={isOverlayOpen}
+        onClose={() => setIsOverlayOpen(false)}
+        title={selectedMetric === "laborHoursPerTon" ? `${LABOR_FINGERPRINT_NAME} - Detailed View` : "Cost Distribution - Detailed View"}
+      >
+        <div className="space-y-6">
+          {/* Enhanced Chart */}
+          <div className="flex justify-center bg-slate-50 rounded-xl p-6">
+            <svg
+              ref={overlaySvgRef}
+              viewBox="0 0 1200 800"
+              preserveAspectRatio="xMidYMid meet"
+              className="w-full h-auto"
+            />
+          </div>
+
+          {/* Enhanced Legend and Info */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-blue-50 rounded-xl p-4 border border-blue-200">
+              <div className="text-sm text-blue-700 font-medium mb-1">Total {selectedMetric === "laborHoursPerTon" ? "MH/T" : "$/T"}</div>
+              <div className="text-2xl font-bold text-blue-900">{totalMHPT.toFixed(2)}</div>
+            </div>
+            <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+              <div className="text-sm text-slate-700 font-medium mb-1">Categories</div>
+              <div className="text-2xl font-bold text-slate-900">{nonZeroData.length}</div>
+            </div>
+          </div>
+
+          {/* Category Details Modal - appears when bubble is clicked in overlay */}
+          {selectedCategory && categoryComparison && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4" 
+              onClick={(e) => {
+                if (e.target === e.currentTarget) {
+                  setSelectedCategory(null);
+                }
+              }}
+            >
+              <div 
+                className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto relative z-[70]"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h3 className="text-xl font-semibold text-slate-900">{categoryComparison.label}</h3>
+                      <p className="text-sm text-slate-600 mt-1">
+                        Live comparison across all projects
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setSelectedCategory(null)}
+                      className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                    >
+                      <X className="w-5 h-5 text-slate-500" />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {/* Current Project */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-5">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-3 h-3 rounded-full bg-blue-600"></div>
+                        <span className="text-sm font-semibold text-slate-900">Current</span>
+                      </div>
+                      <p className="text-xs text-slate-600 mb-2 truncate">{projectName || "Current Estimate"}</p>
+                      <p className="text-2xl font-bold text-blue-900 tabular-nums">
+                        {categoryComparison.current.toFixed(2)} {selectedMetric === "laborHoursPerTon" ? "MH/T" : "$/T"}
+                      </p>
+                    </div>
+
+                    {/* Won Average */}
+                    {categoryComparison.wonCount > 0 && (
+                      <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-5">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-3 h-3 rounded-full bg-emerald-600"></div>
+                          <span className="text-sm font-bold text-gray-900 tracking-normal">Won Average</span>
+                          <span className="text-xs text-slate-600">({categoryComparison.wonCount})</span>
+                        </div>
+                        <div className="flex items-center gap-2 mb-2">
+                          {categoryComparison.current > categoryComparison.wonAverage ? (
+                            <TrendingUp className="w-4 h-4 text-amber-600" />
+                          ) : (
+                            <TrendingDown className="w-4 h-4 text-emerald-600" />
+                          )}
+                          <span className="text-xs text-slate-600">
+                            {categoryComparison.current > categoryComparison.wonAverage ? (
+                              <span className="text-amber-700">
+                                {((categoryComparison.current / categoryComparison.wonAverage - 1) * 100).toFixed(1)}% above
+                              </span>
+                            ) : (
+                              <span className="text-emerald-700">
+                                {((1 - categoryComparison.current / categoryComparison.wonAverage) * 100).toFixed(1)}% below
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                        <p className="text-2xl font-bold text-emerald-900 tabular-nums">
+                          {categoryComparison.wonAverage.toFixed(2)} {selectedMetric === "laborHoursPerTon" ? "MH/T" : "$/T"}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Lost Average */}
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-5">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-3 h-3 rounded-full bg-red-600"></div>
+                        <span className="text-sm font-bold text-gray-900 tracking-normal">Lost Average</span>
+                        {categoryComparison.lostCount > 0 ? (
+                          <span className="text-xs text-slate-600">({categoryComparison.lostCount})</span>
+                        ) : (
+                          <span className="text-xs text-slate-400">(No data)</span>
+                        )}
+                      </div>
+                      {categoryComparison.lostCount > 0 && categoryComparison.lostAverage > 0 ? (
+                        <>
+                          <div className="flex items-center gap-2 mb-2">
+                            {categoryComparison.current > categoryComparison.lostAverage ? (
+                              <TrendingUp className="w-4 h-4 text-red-600" />
+                            ) : (
+                              <TrendingDown className="w-4 h-4 text-emerald-600" />
+                            )}
+                            <span className="text-xs text-slate-600">
+                              {categoryComparison.current > categoryComparison.lostAverage ? (
+                                <span className="text-red-700 font-medium">
+                                  {((categoryComparison.current / categoryComparison.lostAverage - 1) * 100).toFixed(1)}% above
+                                </span>
+                              ) : (
+                                <span className="text-emerald-700">
+                                  {((1 - categoryComparison.current / categoryComparison.lostAverage) * 100).toFixed(1)}% below
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                          <p className="text-2xl font-bold text-red-900 tabular-nums">
+                            {categoryComparison.lostAverage.toFixed(2)} {selectedMetric === "laborHoursPerTon" ? "MH/T" : "$/T"}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-sm text-slate-400 italic">No lost projects data available</p>
+                      )}
+                      <div className="mt-2 pt-2 border-t border-red-200">
+                        <p className="text-xs text-red-700">
+                          <span className="font-semibold">Lost Rate:</span> {categoryComparison.lostPercentage.toFixed(1)}% of projects
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* All Average */}
+                    {categoryComparison.allCount > 0 && (
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-5">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-3 h-3 rounded-full bg-slate-600"></div>
+                          <span className="text-sm font-bold text-gray-900 tracking-normal">All Average</span>
+                          <span className="text-xs text-slate-600">({categoryComparison.allCount})</span>
+                        </div>
+                        <div className="flex items-center gap-2 mb-2">
+                          {categoryComparison.current > categoryComparison.allAverage ? (
+                            <TrendingUp className="w-4 h-4 text-amber-600" />
+                          ) : (
+                            <TrendingDown className="w-4 h-4 text-emerald-600" />
+                          )}
+                          <span className="text-xs text-slate-600">
+                            {categoryComparison.current > categoryComparison.allAverage ? (
+                              <span className="text-amber-700">
+                                {((categoryComparison.current / categoryComparison.allAverage - 1) * 100).toFixed(1)}% above
+                              </span>
+                            ) : (
+                              <span className="text-emerald-700">
+                                {((1 - categoryComparison.current / categoryComparison.allAverage) * 100).toFixed(1)}% below
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                        <p className="text-2xl font-bold text-slate-900 tabular-nums">
+                          {categoryComparison.allAverage.toFixed(2)} {selectedMetric === "laborHoursPerTon" ? "MH/T" : "$/T"}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Insight */}
+                  <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm text-slate-700 mb-2">
+                      <strong className="text-slate-900">Live Control Panel:</strong> This comparison updates in real-time as projects are estimated. 
+                      Use won/lost averages to identify competitive positioning and adjust estimates accordingly.
+                    </p>
+                    {categoryComparison.lostCount > 0 && (
+                      <p className="text-sm text-slate-700">
+                        <strong className="text-slate-900">Lost Rate Warning:</strong> {categoryComparison.lostPercentage.toFixed(1)}% of historical projects were lost. 
+                        If your current estimate is approaching or exceeding the lost average, consider adjusting to improve win probability.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </ChartOverlay>
+    </>
   );
 }
 

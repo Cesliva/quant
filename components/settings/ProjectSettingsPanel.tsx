@@ -501,7 +501,7 @@ export default function ProjectSettingsPanel({ companyId, projectId, compact = f
             <div className="flex items-start gap-3">
               <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
-                <h3 className="text-sm font-semibold text-amber-900 mb-1">
+                <h3 className="text-sm font-bold text-gray-900 tracking-normal mb-1">
                   Project-Specific Overrides
                 </h3>
                 <p className="text-xs text-amber-800">
@@ -513,7 +513,7 @@ export default function ProjectSettingsPanel({ companyId, projectId, compact = f
 
           {/* Project Information */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+            <h3 className="text-sm font-bold text-gray-900 tracking-normal mb-3 flex items-center gap-2">
               <Building2 className="w-4 h-4" />
               Project Information
             </h3>
@@ -604,7 +604,7 @@ export default function ProjectSettingsPanel({ companyId, projectId, compact = f
 
           {/* Customer & Contractor Information */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+            <h3 className="text-sm font-bold text-gray-900 tracking-normal mb-3 flex items-center gap-2">
               <Users className="w-4 h-4" />
               Customer & Contractor Information
             </h3>
@@ -772,7 +772,7 @@ export default function ProjectSettingsPanel({ companyId, projectId, compact = f
 
           {/* Dates & Deadlines */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Dates & Deadlines</h3>
+            <h3 className="text-sm font-bold text-gray-900 tracking-normal mb-3">Dates & Deadlines</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -809,7 +809,7 @@ export default function ProjectSettingsPanel({ companyId, projectId, compact = f
 
           {/* Shop Schedule */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+            <h3 className="text-sm font-bold text-gray-900 tracking-normal mb-3 flex items-center gap-2">
               <Clock className="w-4 h-4" />
               Shop Schedule
             </h3>
@@ -885,7 +885,7 @@ export default function ProjectSettingsPanel({ companyId, projectId, compact = f
 
           {/* Project Details */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Project Details</h3>
+            <h3 className="text-sm font-bold text-gray-900 tracking-normal mb-3">Project Details</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -946,7 +946,7 @@ export default function ProjectSettingsPanel({ companyId, projectId, compact = f
 
           {/* Rate Overrides */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Rate Overrides</h3>
+            <h3 className="text-sm font-bold text-gray-900 tracking-normal mb-3">Rate Overrides</h3>
             <p className="text-xs text-gray-600 mb-4">
               Override company defaults for this project. Leave blank to use company defaults.
             </p>
@@ -1132,7 +1132,7 @@ export default function ProjectSettingsPanel({ companyId, projectId, compact = f
           {/* Project-Specific Labor Rates */}
           <div>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-gray-900">Project-Specific Labor Rates</h3>
+              <h3 className="text-sm font-bold text-gray-900 tracking-normal">Project-Specific Labor Rates</h3>
               <Button variant="outline" size="sm" onClick={addLaborRate}>
                 <Plus className="w-4 h-4 mr-1" />
                 Add Rate
@@ -1190,7 +1190,7 @@ export default function ProjectSettingsPanel({ companyId, projectId, compact = f
 
           {/* Markup Overrides */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Markup Overrides</h3>
+            <h3 className="text-sm font-bold text-gray-900 tracking-normal mb-3">Markup Overrides</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -1267,9 +1267,9 @@ export default function ProjectSettingsPanel({ companyId, projectId, compact = f
   
   return (
     <Card className="border-2 border-amber-200">
-      <CardHeader>
+      <CardHeader className="pb-4 pt-5 mb-4 border-b border-gray-200/70">
         <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 font-extrabold text-gray-900 tracking-normal">
             <Settings2 className="w-5 h-5" />
             Project Settings
           </CardTitle>
@@ -1290,7 +1290,7 @@ export default function ProjectSettingsPanel({ companyId, projectId, compact = f
             <div className="flex items-start gap-3">
               <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
-                <h3 className="text-sm font-semibold text-amber-900 mb-1">
+                <h3 className="text-sm font-bold text-gray-900 tracking-normal mb-1">
                   Project-Specific Overrides
                 </h3>
                 <p className="text-xs text-amber-800">
@@ -1302,7 +1302,7 @@ export default function ProjectSettingsPanel({ companyId, projectId, compact = f
 
           {/* Project Information */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+            <h3 className="text-sm font-bold text-gray-900 tracking-normal mb-3 flex items-center gap-2">
               <Building2 className="w-4 h-4" />
               Project Information
             </h3>
@@ -1393,7 +1393,7 @@ export default function ProjectSettingsPanel({ companyId, projectId, compact = f
 
           {/* Customer & Contractor Information */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+            <h3 className="text-sm font-bold text-gray-900 tracking-normal mb-3 flex items-center gap-2">
               <Users className="w-4 h-4" />
               Customer & Contractor Information
             </h3>
@@ -1557,7 +1557,7 @@ export default function ProjectSettingsPanel({ companyId, projectId, compact = f
 
           {/* Dates & Deadlines */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Dates & Deadlines</h3>
+            <h3 className="text-sm font-bold text-gray-900 tracking-normal mb-3">Dates & Deadlines</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -1594,7 +1594,7 @@ export default function ProjectSettingsPanel({ companyId, projectId, compact = f
 
           {/* Shop Schedule */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+            <h3 className="text-sm font-bold text-gray-900 tracking-normal mb-3 flex items-center gap-2">
               <Clock className="w-4 h-4" />
               Shop Schedule
             </h3>
@@ -1670,7 +1670,7 @@ export default function ProjectSettingsPanel({ companyId, projectId, compact = f
 
           {/* Project Details */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Project Details</h3>
+            <h3 className="text-sm font-bold text-gray-900 tracking-normal mb-3">Project Details</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -1731,7 +1731,7 @@ export default function ProjectSettingsPanel({ companyId, projectId, compact = f
 
           {/* Rate Overrides */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Rate Overrides</h3>
+            <h3 className="text-sm font-bold text-gray-900 tracking-normal mb-3">Rate Overrides</h3>
             <p className="text-xs text-gray-600 mb-4">
               Override company defaults for this project. Leave blank to use company defaults.
             </p>
@@ -1900,7 +1900,7 @@ export default function ProjectSettingsPanel({ companyId, projectId, compact = f
           {/* Project-Specific Labor Rates */}
           <div>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-gray-900">Project-Specific Labor Rates</h3>
+              <h3 className="text-sm font-bold text-gray-900 tracking-normal">Project-Specific Labor Rates</h3>
               <Button variant="outline" size="sm" onClick={addLaborRate}>
                 <Plus className="w-4 h-4 mr-1" />
                 Add Rate
@@ -1958,7 +1958,7 @@ export default function ProjectSettingsPanel({ companyId, projectId, compact = f
 
           {/* Markup Overrides */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Markup Overrides</h3>
+            <h3 className="text-sm font-bold text-gray-900 tracking-normal mb-3">Markup Overrides</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">

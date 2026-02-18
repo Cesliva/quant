@@ -21,7 +21,7 @@ export function Card({ className, children, ...props }: CardProps) {
 
 export function CardHeader({ className, children, ...props }: CardProps) {
   return (
-    <div className={cn("mb-4", className)} {...props}>
+    <div className={cn("mb-3 pb-3 border-b border-gray-200/60", className)} {...props}>
       {children}
     </div>
   );
@@ -29,7 +29,7 @@ export function CardHeader({ className, children, ...props }: CardProps) {
 
 export function CardTitle({ className, children, ...props }: CardProps) {
   return (
-    <h3 className={cn("text-2xl font-bold text-slate-900 tracking-tight", className)} {...props}>
+    <h3 className={cn("text-2xl font-extrabold text-gray-900 tracking-normal leading-tight", className)} {...props}>
       {children}
     </h3>
   );

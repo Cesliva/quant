@@ -158,8 +158,8 @@ export default function EstimatorWorkload({ companyId }: EstimatorWorkloadProps)
   if (loading) {
     return (
       <Card className="h-full flex flex-col p-3 md:p-4 rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+        <CardHeader className="pb-4 pt-5 mb-4 border-b border-gray-200/70">
+          <CardTitle className="flex items-center gap-2 text-sm font-bold text-gray-900 tracking-normal">
             <BarChart3 className="w-4 h-4" />
             Estimator Workload
           </CardTitle>
@@ -177,8 +177,8 @@ export default function EstimatorWorkload({ companyId }: EstimatorWorkloadProps)
   if (workload.length === 0) {
     return (
       <Card className="h-full flex flex-col p-3 md:p-4 rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+        <CardHeader className="pb-4 pt-5 mb-4 border-b border-gray-200/70">
+          <CardTitle className="flex items-center gap-2 text-sm font-bold text-gray-900 tracking-normal">
             <BarChart3 className="w-4 h-4" />
             Estimator Workload
           </CardTitle>
@@ -198,9 +198,9 @@ export default function EstimatorWorkload({ companyId }: EstimatorWorkloadProps)
       className="h-full flex flex-col"
     >
       <Card className="h-full flex flex-col cursor-pointer p-3 md:p-4 rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1),0_1px_2px_-1px_rgb(0,0,0,0.1),0_4px_12px_0_rgb(0,0,0,0.05)] hover:shadow-[0_4px_6px_-1px_rgb(0,0,0,0.1),0_2px_4px_-2px_rgb(0,0,0,0.1),0_8px_16px_0_rgb(0,0,0,0.08)] transition-all duration-300 hover:-translate-y-0.5">
-        <CardHeader className="pb-2">
+        <CardHeader className="pb-4 pt-5 mb-4 border-b border-gray-200/70">
           <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+            <CardTitle className="flex items-center gap-2 text-sm font-bold text-gray-900 tracking-normal">
               <BarChart3 className="w-4 h-4" />
               Estimator Workload
             </CardTitle>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
@@ -52,6 +52,12 @@ import { useCompanyId } from "@/lib/hooks/useCompanyId";
 import { syncProjectToWinLoss } from "@/lib/utils/syncWinLossRecord";
 import { uploadFileToStorage, deleteFileFromStorage } from "@/lib/firebase/storage";
 import { logActivity } from "@/lib/utils/activityLogger";
+import { loadCompanySettings, type CompanySettings } from "@/lib/utils/settingsLoader";
+import {
+  calculateConsumables,
+  extractLaborHours,
+  estimateEquipmentHours,
+} from "@/lib/utils/consumablesCalculator";
 import Input from "@/components/ui/Input";
 import { Slider } from "@/components/ui/Slider";
 import ProjectBubbleChart from "@/components/estimating/ProjectBubbleChart";
@@ -194,11 +200,20 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
   const [adjustmentHistory, setAdjustmentHistory] = useState<any[]>([]);
   const { user } = useAuth();
 
+  // Company settings for consumables calculation
+  const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
+
   // Track when companyId becomes valid (not "default")
   useEffect(() => {
     if (companyId && companyId !== "default") {
       setValidCompanyId(companyId);
     }
+  }, [companyId]);
+
+  // Load company settings for consumables calculation
+  useEffect(() => {
+    if (!isFirebaseConfigured() || !companyId || companyId === "default") return;
+    loadCompanySettings(companyId).then(setCompanySettings);
   }, [companyId]);
 
   // Timeout to prevent infinite loading if companyId never resolves
@@ -784,7 +799,34 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
       laborCost += adjustedLaborHours * laborRate * parameters.laborRateMultiplier;
     });
 
-    const directCost = materialCost + laborCost + coatingCost + hardwareCost;
+    // Calculate consumables (separate from labor cost)
+    const laborHoursForConsumables = extractLaborHours(
+      activeLines.map(line => ({
+        weld: line.laborWeld || 0,
+        fit: line.laborFit || 0,
+        cut: line.laborCut || 0,
+        processPlate: line.laborProcessPlate || 0,
+        cope: line.laborCope || 0,
+        drillPunch: line.laborDrillPunch || 0,
+        handleMove: line.laborHandleMove || 0,
+        loadShip: line.laborLoadShip || 0,
+        prepClean: line.laborPrepClean || 0,
+        paint: line.laborPaint || 0,
+        unload: line.laborUnload || 0,
+        allowance: 0,
+        totalLabor: line.totalLabor || 0,
+      }))
+    );
+    const equipmentHoursEstimate = estimateEquipmentHours(weight);
+    const consumablesResult = calculateConsumables(
+      laborHoursForConsumables,
+      equipmentHoursEstimate,
+      companySettings?.consumablesSettings,
+      'standard'
+    );
+    const consumables = consumablesResult.totalConsumables;
+
+    const directCost = materialCost + laborCost + coatingCost + hardwareCost + consumables;
     const materialWaste = directCost * (parameters.materialWastePercentage / 100);
     const laborWaste = laborCost * (parameters.laborWastePercentage / 100);
     const costBeforeOverhead = directCost + materialWaste + laborWaste;
@@ -805,6 +847,7 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
       laborCost,
       coatingCost,
       hardwareCost,
+      consumables,
       directCost,
       materialWaste,
       laborWaste,
@@ -814,7 +857,7 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
       costPerTon,
       hoursPerTon,
     };
-  }, [estimatingLines, parameters]);
+  }, [estimatingLines, parameters, companySettings]);
 
   // Update parameter with logging
   const updateParameter = useCallback((
@@ -864,6 +907,148 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
       return newParams;
     });
   }, [user, validCompanyId, companyId, projectId, calculatedTotals]);
+
+  // Store original line values for category adjustments (snapshot when component mounts or lines are first loaded)
+  const originalLineValuesRef = useRef<Map<string, EstimatingLine>>(new Map());
+
+  // Initialize original values when lines are first loaded
+  useEffect(() => {
+    if (estimatingLines.length > 0 && originalLineValuesRef.current.size === 0) {
+      const originals = new Map<string, EstimatingLine>();
+      estimatingLines.forEach(line => {
+        if (line.id && line.status !== "Void") {
+          // Deep clone to preserve original values
+          originals.set(line.id, JSON.parse(JSON.stringify(line)));
+        }
+      });
+      originalLineValuesRef.current = originals;
+    }
+  }, [estimatingLines]);
+
+  // Handle category adjustments from CategoryComparisonChart
+  const handleCategoryAdjustment = useCallback(async (
+    adjustments: {
+      categoryAdjustments: Record<string, number>;
+      strategyAdjustments: {
+        laborEfficiency: number;
+        materialRate: number;
+        overhead: number;
+        profit: number;
+      };
+    }
+  ) => {
+    // Map category keys to line item fields
+    const categoryToField: Record<string, string> = {
+      "Weld": "laborWeld",
+      "Fit": "laborFit",
+      "Cut": "laborCut",
+      "Cope": "laborCope",
+      "Process Plate": "laborProcessPlate",
+      "Drill/Punch": "laborDrillPunch",
+      "Prep/Clean": "laborPrepClean",
+      "Paint": "laborPaint",
+      "Handle/Move": "laborHandleMove",
+      "Unload": "laborUnload",
+      "Load/Ship": "laborLoadShip",
+    };
+
+    // Update each line item
+    const updatedLines = estimatingLines.map(line => {
+      if (line.status === "Void" || !line.id) return line;
+      
+      // Get original line values from ref
+      const originalLine = originalLineValuesRef.current.get(line.id);
+      if (!originalLine) return line; // Skip if no original stored
+      
+      const newLine = { ...line };
+      
+      // Apply adjustments to each labor field
+      Object.entries(categoryToField).forEach(([category, field]) => {
+        const originalValue = (originalLine[field as keyof EstimatingLine] as number) || 0;
+        const categoryMultiplier = adjustments.categoryAdjustments[category] || 1.0;
+        const globalEfficiency = adjustments.strategyAdjustments.laborEfficiency;
+        
+        // Apply: original * categoryAdjustment * globalEfficiency
+        (newLine as any)[field] = originalValue * categoryMultiplier * globalEfficiency;
+      });
+      
+      // Recalculate totalLabor for this line
+      const totalLabor = 
+        (newLine.laborUnload || 0) +
+        (newLine.laborCut || 0) +
+        (newLine.laborCope || 0) +
+        (newLine.laborProcessPlate || 0) +
+        (newLine.laborDrillPunch || 0) +
+        (newLine.laborFit || 0) +
+        (newLine.laborWeld || 0) +
+        (newLine.laborPrepClean || 0) +
+        (newLine.laborPaint || 0) +
+        (newLine.laborHandleMove || 0) +
+        (newLine.laborLoadShip || 0);
+      newLine.totalLabor = totalLabor;
+      
+      // Recalculate laborCost (apply material rate if needed, but for now just labor)
+      const laborRate = newLine.laborRate || 0;
+      newLine.laborCost = totalLabor * laborRate;
+      
+      // Recalculate totalCost
+      let materialCost = (newLine.materialCost || 0) * adjustments.strategyAdjustments.materialRate;
+      newLine.totalCost = materialCost + 
+                         (newLine.laborCost || 0) + 
+                         (newLine.coatingCost || 0) + 
+                         (newLine.hardwareCost || 0);
+      
+      return newLine;
+    });
+    
+    // Update local state
+    setEstimatingLines(updatedLines);
+    
+    // Save to Firestore
+    if (isFirebaseConfigured() && validCompanyId) {
+      const linesPath = getProjectPath(validCompanyId, projectId, "lines");
+      
+      // Batch update all lines
+      const updatePromises = updatedLines
+        .filter(line => line.id && line.status !== "Void")
+        .map(line => {
+          const lineRef = getDocRef(`${linesPath}/${line.id}`);
+          return updateDocument(lineRef, {
+            totalLabor: line.totalLabor,
+            laborCost: line.laborCost,
+            totalCost: line.totalCost,
+            materialCost: line.materialCost,
+            // Update all labor fields
+            laborUnload: line.laborUnload,
+            laborCut: line.laborCut,
+            laborCope: line.laborCope,
+            laborProcessPlate: line.laborProcessPlate,
+            laborDrillPunch: line.laborDrillPunch,
+            laborFit: line.laborFit,
+            laborWeld: line.laborWeld,
+            laborPrepClean: line.laborPrepClean,
+            laborPaint: line.laborPaint,
+            laborHandleMove: line.laborHandleMove,
+            laborLoadShip: line.laborLoadShip,
+          });
+        });
+      
+      try {
+        await Promise.all(updatePromises);
+        if (user) {
+          logActivity(
+            validCompanyId,
+            projectId,
+            user.uid,
+            "estimate_adjusted",
+            `Adjusted category labor hours via comparison chart`
+          );
+        }
+      } catch (error) {
+        console.error("Error updating lines:", error);
+      }
+    }
+  }, [estimatingLines, validCompanyId, projectId, user]);
 
   // Reset parameters
   const resetParameters = useCallback(() => {
@@ -1154,7 +1339,7 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" onClick={() => setShowProjectSettings(false)}>
             <div className="bg-white rounded-2xl shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
               <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-slate-900">Project Settings</h2>
+                <h2 className="text-xl font-bold text-gray-900 tracking-normal">Project Settings</h2>
                 <Button
                   onClick={() => setShowProjectSettings(false)}
                   variant="ghost"
@@ -1184,8 +1369,8 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
           <div className="space-y-6 mb-6">
             {/* Basic Information */}
             <Card className="bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1)]">
-              <CardHeader>
-                <CardTitle className="text-xl font-bold text-slate-900 tracking-tight mb-1">Basic Information</CardTitle>
+              <CardHeader className="pb-4 pt-5 mb-4 border-b border-gray-200/70">
+                <CardTitle className="text-xl font-bold text-gray-900 tracking-normal">Basic Information</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1285,8 +1470,8 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
 
             {/* Client & Contractor Information */}
             <Card className="bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1)]">
-              <CardHeader>
-                <CardTitle className="text-xl font-bold text-slate-900 tracking-tight mb-1 flex items-center gap-2">
+              <CardHeader className="pb-4 pt-5 mb-4 border-b border-gray-200/70">
+                <CardTitle className="text-xl font-bold text-gray-900 tracking-normal flex items-center gap-2">
                   <Users className="w-5 h-5" />
                   Client & Contractor Information
                 </CardTitle>
@@ -1396,8 +1581,8 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
 
             {/* Dates & Deadlines */}
             <Card className="bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1)]">
-              <CardHeader>
-                <CardTitle className="text-xl font-bold text-slate-900 tracking-tight mb-1">Dates & Deadlines</CardTitle>
+              <CardHeader className="pb-4 pt-5 mb-4 border-b border-gray-200/70">
+                <CardTitle className="text-xl font-bold text-gray-900 tracking-normal">Dates & Deadlines</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -1495,8 +1680,8 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
 
             {/* Project Details */}
             <Card className="bg-white rounded-3xl border border-slate-100/50 shadow-[0_1px_3px_0_rgb(0,0,0,0.1)]">
-              <CardHeader>
-                <CardTitle className="text-xl font-bold text-slate-900 tracking-tight mb-1">Project Details</CardTitle>
+              <CardHeader className="pb-4 pt-5 mb-4 border-b border-gray-200/70">
+                <CardTitle className="text-xl font-bold text-gray-900 tracking-normal">Project Details</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -1645,7 +1830,7 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
         {/* Quick Actions - Minimalist */}
         <div className="mb-6">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
-            <h2 className="text-xl font-bold text-slate-900 tracking-tight mb-4">Quick Actions</h2>
+            <h2 className="text-xl font-bold text-gray-900 tracking-normal mb-4">Quick Actions</h2>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               {quickActions.map((action) => {
                 const Icon = action.icon;
@@ -1659,7 +1844,7 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
                           <AiIcon className="w-3 h-3 text-yellow-300 absolute -top-0.5 -right-0.5 drop-shadow-lg" />
                         )}
                       </div>
-                      <h3 className="text-sm font-semibold text-slate-900 line-clamp-2">
+                      <h3 className="text-sm font-bold text-gray-900 tracking-normal line-clamp-2">
                         {action.name}
                       </h3>
                     </div>
@@ -1673,7 +1858,7 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
                 <div className="w-10 h-10 bg-indigo-500 rounded-lg flex items-center justify-center mb-2 group-hover:scale-105 transition-transform relative">
                   <Upload className="w-5 h-5 text-white" />
                 </div>
-                <h3 className="text-sm font-semibold text-slate-900 line-clamp-2">
+                <h3 className="text-sm font-bold text-gray-900 tracking-normal line-clamp-2">
                   Project Files
                 </h3>
               </div>
@@ -1684,10 +1869,10 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
         {/* Project Files Section - Expandable from Quick Actions */}
         {showProjectFiles && (
           <Card className="bg-white rounded-2xl border border-slate-200 shadow-sm mb-6">
-            <CardHeader>
+            <CardHeader className="pb-4 pt-5 mb-4 border-b border-gray-200/70">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="text-2xl font-bold text-slate-900 tracking-tight mb-1">Project Files</CardTitle>
+                  <CardTitle className="text-2xl font-bold text-gray-900 tracking-normal">Project Files</CardTitle>
                   <p className="text-sm text-slate-600 mt-1">
                     Upload specifications, drawings, and quotes
                   </p>
@@ -1766,7 +1951,7 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
           {/* Files List */}
           {project && project.projectFiles && project.projectFiles.length > 0 && (
             <div>
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">
+              <h3 className="text-sm font-bold text-gray-900 tracking-normal mb-3">
                 Uploaded Files ({project.projectFiles.length})
               </h3>
               <div className="space-y-2">
@@ -1851,6 +2036,12 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
                   companyId={validCompanyId || companyId}
                   currentProjectId={projectId}
                   selectedMetric={selectedMetric}
+                  estimatingStats={{
+                    totalCost: calculatedTotals.totalWithMarkup,
+                    totalLabor: calculatedTotals.laborHours,
+                    totalWeight: calculatedTotals.weight,
+                  }}
+                  onAdjustment={handleCategoryAdjustment}
                 />
                 
                 {/* Buyout Quotes Tracker */}
@@ -1878,9 +2069,9 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
 
             {/* Cost Breakdown */}
             <Card className="bg-white rounded-2xl border border-slate-200 shadow-sm">
-              <CardHeader>
+              <CardHeader className="pb-4 pt-5 mb-4 border-b border-gray-200/70">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-2xl font-bold text-slate-900 tracking-tight mb-1">
+                  <CardTitle className="text-2xl font-bold text-gray-900 tracking-normal">
                     Cost Breakdown
                   </CardTitle>
                   <Button
@@ -1917,6 +2108,14 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
                         {formatMoney(calculatedTotals.laborWaste)}
                       </div>
                     </div>
+                    {calculatedTotals.consumables > 0 && (
+                      <div className="bg-orange-50 rounded-lg p-4 border border-orange-100">
+                        <div className="text-xs text-orange-700 mb-1">Consumables</div>
+                        <div className="text-xl font-semibold text-orange-900 tabular-nums">
+                          {formatMoney(calculatedTotals.consumables)}
+                        </div>
+                      </div>
+                    )}
                     <div className="bg-slate-50 rounded-lg p-4">
                       <div className="text-xs text-slate-600 mb-1">Overhead</div>
                       <div className="text-xl font-semibold text-slate-900 tabular-nums">
@@ -1943,10 +2142,10 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
             {/* Adjustment History */}
             {adjustmentHistory.length > 0 && (
               <Card className="bg-white rounded-2xl border border-slate-200 shadow-sm">
-                <CardHeader>
+                <CardHeader className="pb-4 pt-5 mb-4 border-b border-gray-200/70">
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-2xl font-bold text-slate-900 tracking-tight mb-1 flex items-center gap-2">
-                      <History className="w-6 h-6 text-slate-900" />
+                    <CardTitle className="text-2xl font-bold text-gray-900 tracking-normal flex items-center gap-2">
+                      <History className="w-6 h-6 text-gray-900" />
                       Adjustment History ({adjustmentHistory.length})
                     </CardTitle>
                     <Button

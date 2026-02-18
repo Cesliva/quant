@@ -74,8 +74,8 @@ export default function PipelineOverview({
     return (
       <Card className="border-0 shadow-2xl bg-gradient-to-br from-indigo-50 via-white to-blue-100/60 hover:-translate-y-2 transition-all duration-300 overflow-hidden relative min-w-0">
         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 to-blue-500"></div>
-        <CardHeader className="pb-4">
-          <CardTitle className="flex items-center gap-2 text-xs font-bold text-gray-800 uppercase tracking-widest">
+        <CardHeader className="pb-4 pt-5 mb-4 border-b border-gray-200/70">
+          <CardTitle className="flex items-center gap-2 text-xs font-extrabold text-gray-900 uppercase tracking-wide">
             <Activity className="w-4 h-4 text-indigo-600" />
             Pipeline Outlook
           </CardTitle>
@@ -108,8 +108,8 @@ export default function PipelineOverview({
 
   return (
     <Card className="border border-gray-200 shadow-lg bg-white h-full">
-      <CardHeader className="pb-4">
-        <CardTitle className="flex items-center gap-2 text-lg font-semibold">
+      <CardHeader className="pb-4 pt-5 mb-4 border-b border-gray-200/70">
+        <CardTitle className="flex items-center gap-2 text-lg font-bold text-gray-900 tracking-normal">
           <Activity className="w-5 h-5 text-blue-600" />
           Pipeline Outlook
         </CardTitle>
@@ -136,7 +136,7 @@ export default function PipelineOverview({
 
         <div>
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-semibold text-gray-700">
+            <span className="text-sm font-bold text-gray-900 tracking-normal">
               6-Month Bid Value Trend
             </span>
             <span className="text-xs text-gray-500 uppercase tracking-wide">

@@ -24,7 +24,7 @@ export default function Step4Defaults({ state, onUpdate }: Step4DefaultsProps) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-semibold text-gray-900 mb-2">
+        <h2 className="text-2xl font-bold text-gray-900 tracking-normal mb-2">
           Estimating Defaults
         </h2>
         <p className="text-gray-600 text-sm">

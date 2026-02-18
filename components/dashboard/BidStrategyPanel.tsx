@@ -277,7 +277,7 @@ export default function BidStrategyPanel({
       <div className="p-6">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h3 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
+            <h3 className="text-xl font-bold text-gray-900 tracking-normal flex items-center gap-2 pb-3 mb-4 border-b border-gray-200/70">
               <Target className="w-5 h-5 text-blue-600" />
               Bid Strategy Control Panel
             </h3>

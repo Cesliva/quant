@@ -31,7 +31,13 @@ export interface CompanySettings {
   companyInfo?: CompanyInfo;
   materialGrades: Array<{ grade: string; costPerPound: number }>;
   laborRates: Array<{ trade: string; rate: number }>;
-  coatingTypes: Array<{ type: string; costPerSF?: number; costPerPound?: number }>;
+  coatingTypes: Array<{ 
+    type: string; 
+    costPerSF?: number; 
+    costPerPound?: number;
+    sspcPrepType?: string;
+    sspcPrepRate?: number;
+  }>;
   markupSettings: {
     overheadPercentage: number;
     profitPercentage: number;
@@ -89,6 +95,30 @@ export interface CompanySettings {
       closing?: string; // Custom closing paragraph template
       signatureBlock?: string; // Custom signature format
     };
+  };
+  // Consumables & Equipment Settings (Advanced)
+  consumablesSettings?: ConsumablesSettings;
+}
+
+// Consumables & Equipment Drivers
+// Labor = cost of time | Consumables = cost of doing work | Equipment = cost driver, not markup
+export interface ConsumablesSettings {
+  // Labor-Driven Consumables ($ per hour)
+  laborDriven: {
+    weldingConsumablesPerHour: number;        // wire, gas, grinding discs
+    generalFabConsumablesPerHour: number;     // layout, minor grinding, disposables
+  };
+  // Equipment-Driven Consumables ($ per machine hour)
+  equipmentDriven: {
+    plasmaCuttingPerHour: number;
+    sawCuttingPerHour: number;
+    drillMachiningPerHour: number;
+  };
+  // Optional Job-Type Multipliers
+  jobTypeMultipliers?: {
+    structuralSteel: number;        // default 1.00
+    miscMetalsStairsRails: number;  // default 1.15
+    heavyWeldJobs: number;          // default 1.25
   };
 }
 
