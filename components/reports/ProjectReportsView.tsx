@@ -443,7 +443,7 @@ export default function ProjectReportsView({ companyId, projectId, project, onDa
       const materialRate = line.materialRate || 
         (projectSettings?.materialRate || (companySettings ? getMaterialRateForGrade(grade, companySettings) : 0));
       const laborRate = line.laborRate || 
-        (projectSettings?.laborRate || (companySettings ? getLaborRate(undefined, companySettings) : 0));
+        (projectSettings?.laborRate || (companySettings ? getLaborRate(companySettings) : 0));
       const coatingRate = line.coatingRate || 
         (projectSettings?.coatingRate || (companySettings ? getCoatingRate(line.coatingSystem, companySettings) : 0));
 

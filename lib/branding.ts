@@ -1,9 +1,22 @@
 /**
  * Centralized branding constants for Quant application
  * 
- * This file contains all branded terminology used across the UI.
- * Import these constants instead of hardcoding branded strings.
+ * This file contains all branded terminology and visual identity used across the UI.
+ * Import these constants instead of hardcoding branded strings or colors.
  */
+
+/** Quant brand colors — blue + indigo gradient (matches app, login, dashboard) */
+export const BRAND = {
+  primary: "#3b82f6",      // blue-500
+  primaryDark: "#2563eb",  // blue-600
+  accent: "#6366f1",       // indigo-500
+  gradient: "linear-gradient(135deg, #2563eb 0%, #6366f1 100%)",
+  /** Light background gradient (body, auth pages) */
+  bgGradient: "linear-gradient(to bottom right, #e0f2fe 0%, #f3e8ff 100%)",
+  /** Dark overlay tints for hero/sections */
+  glowBlue: "rgba(59, 130, 246, 0.15)",
+  glowIndigo: "rgba(99, 102, 241, 0.12)",
+} as const;
 
 export const PRODUCT_SYSTEM_NAME = "Quant Intelligent Advantage™";
 export const LABOR_FINGERPRINT_NAME = "Quant Labor Fingerprint™";

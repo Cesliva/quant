@@ -159,19 +159,37 @@ export function getAllPlateGrades(): string[] {
   ];
 }
 
+/** Map abbreviated grade names from plate database to standard names */
+const PLATE_GRADE_ALIAS: Record<string, string> = {
+  "A572 Gr50": "A572 Grade 50",
+  "A572 Gr42": "A572 Grade 42",
+};
+
 /**
- * Get available grades for a given thickness
- * Returns all Plate grades (thickness-specific filtering can be added later if needed)
+ * Get available grades for a given thickness - narrowed to typical options
  */
 export function getAvailableGrades(thickness: string | number): string[] {
-  return getAllPlateGrades();
+  const spec = typeof thickness === "number"
+    ? getPlateByThicknessInches(thickness)
+    : getPlateByThickness(String(thickness));
+  if (spec?.grade?.length) {
+    return spec.grade.map((g: string) => PLATE_GRADE_ALIAS[g] || g);
+  }
+  return ["A36", "A572 Grade 50"];
 }
 
 /**
- * Get valid plate grades (alias for getAvailableGrades for backwards compatibility)
+ * Get valid plate grades - narrowed to typical options for beginners
  */
 export function getValidPlateGrades(thickness: string | number): string[] {
-  return getAllPlateGrades();
+  return getAvailableGrades(thickness);
+}
+
+/**
+ * Default plate grade for auto-seeding (most common)
+ */
+export function getDefaultPlateGrade(): string {
+  return "A36";
 }
 
 /**

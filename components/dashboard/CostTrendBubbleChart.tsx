@@ -580,9 +580,9 @@ export default function CostTrendBubbleChart({
       return;
     }
 
-    // Use fixed viewBox dimensions for consistent scaling
-    const viewBoxWidth = 800;
-    const viewBoxHeight = 600;
+    // Compact viewBox — shorter chart to align with backlog column and reduce scroll
+    const viewBoxWidth = 640;
+    const viewBoxHeight = 300;
     const centerX = viewBoxWidth / 2;
     const centerY = viewBoxHeight / 2;
 
@@ -609,10 +609,10 @@ export default function CostTrendBubbleChart({
       });
     }
 
-    // Calculate radius scale
+    // Calculate radius scale (smaller bubbles = less vertical space)
     const maxValue = Math.max(...nonZeroData.map(d => d.mhPerTon));
-    const minRadius = 15;
-    const maxRadius = 80;
+    const minRadius = 8;
+    const maxRadius = 44;
     const radiusScale = d3.scaleSqrt()
       .domain([0, maxValue])
       .range([minRadius, maxRadius]);
@@ -622,7 +622,7 @@ export default function CostTrendBubbleChart({
       const radius = radiusScale(d.mhPerTon);
       // Start bubbles in a circle around center
       const angle = (i / nonZeroData.length) * 2 * Math.PI;
-      const startRadius = 100;
+      const startRadius = 52;
       return {
         ...d,
         radius,
@@ -910,12 +910,12 @@ export default function CostTrendBubbleChart({
   const totalValue = bubbleData.reduce((sum, d) => sum + d.mhPerTon, 0);
   
   return (
-    <Card className="p-4 md:p-6 rounded-2xl border border-slate-200/60 bg-white shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
-      <CardHeader className="pb-4 pt-5 mb-4 border-b border-gray-200/70">
+    <Card className="p-3 md:p-4 rounded-2xl border border-slate-200/60 bg-white shadow-sm hover:shadow-md transition-all duration-300 h-full flex flex-col min-h-0">
+      <CardHeader className="pb-2 pt-3 mb-2 border-b border-gray-200/70 shrink-0">
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-2 flex-1 min-w-0">
-              <CardTitle className="text-xl font-bold text-gray-900 tracking-normal">
+              <CardTitle className="text-base sm:text-lg font-bold text-gray-900 tracking-normal">
                 Cost Trend Analysis
               </CardTitle>
               {/* Always-visible info button with rich tooltip */}
@@ -1041,14 +1041,17 @@ export default function CostTrendBubbleChart({
         </div>
       </CardHeader>
       
-      <CardContent className="space-y-6 relative">
+      <CardContent className="space-y-3 relative flex-1 flex flex-col min-h-0">
         {/* Bubble Chart Visualization */}
-        <div className="w-full flex justify-center" style={{ minHeight: "600px" }}>
-          <div ref={containerRef} className="relative w-full flex justify-center" style={{ minHeight: "600px" }}>
+        <div className="w-full flex justify-center max-h-[min(320px,42vh)]">
+          <div
+            ref={containerRef}
+            className="relative w-full flex justify-center aspect-[64/30] max-h-[min(320px,42vh)]"
+          >
             <svg
               ref={svgRef}
-              className="max-w-full h-auto"
-              viewBox="0 0 800 600"
+              className="max-w-full h-full w-full"
+              viewBox="0 0 640 300"
               preserveAspectRatio="xMidYMid meet"
             />
             {/* Tooltip */}
@@ -1086,56 +1089,58 @@ export default function CostTrendBubbleChart({
           </div>
         </div>
         
-        {/* Legend */}
-        <div className="flex flex-wrap gap-4 items-center pt-2 border-t border-gray-100">
-          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+        {/* Legend — compact grid to save vertical space */}
+        <div className="border-t border-gray-100 pt-2 shrink-0">
+          <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide block mb-1.5">
             {selectedMetric === "laborHoursPerTon" ? "Labor Categories" : "Cost Categories"}
           </span>
-          {bubbleData.map((bubble) => (
-            <div
-              key={bubble.category}
-              className="flex items-center gap-2 text-sm text-gray-700"
-            >
-              <span
-                className="inline-block w-3 h-3 rounded-full"
-                style={{ backgroundColor: bubble.color }}
-              />
-              <span className="font-medium">{bubble.label}</span>
-              <span className="text-xs text-gray-500">
-                ({selectedMetric === "laborHoursPerTon" 
-                  ? `${bubble.mhPerTon.toFixed(1)} MH/T`
-                  : bubble.mhPerTon >= 1000
-                    ? `$${(bubble.mhPerTon / 1000).toFixed(1)}K/T`
-                    : `$${bubble.mhPerTon.toFixed(0)}/T`})
-              </span>
-            </div>
-          ))}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-2 gap-y-1">
+            {bubbleData.map((bubble) => (
+              <div
+                key={bubble.category}
+                className="flex items-center gap-1.5 text-[11px] text-gray-700 min-w-0"
+              >
+                <span
+                  className="inline-block w-2 h-2 rounded-full shrink-0"
+                  style={{ backgroundColor: bubble.color }}
+                />
+                <span className="font-medium truncate">{bubble.label}</span>
+                <span className="text-[10px] text-gray-500 shrink-0">
+                  {selectedMetric === "laborHoursPerTon"
+                    ? `${bubble.mhPerTon.toFixed(1)}`
+                    : bubble.mhPerTon >= 1000
+                      ? `$${(bubble.mhPerTon / 1000).toFixed(1)}K`
+                      : `$${bubble.mhPerTon.toFixed(0)}`}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
-        
-        {/* Summary Stats */}
-        <div className="grid grid-cols-3 gap-4 pt-4 border-t border-gray-100">
-          <div className="text-center">
-            <div className="text-xs text-gray-500 mb-1">Total Categories</div>
-            <div className="text-lg font-semibold text-gray-900">{bubbleData.length}</div>
+
+        {/* Summary Stats — single compact row */}
+        <div className="grid grid-cols-3 gap-2 pt-2 border-t border-gray-100 text-center shrink-0">
+          <div>
+            <div className="text-[10px] text-gray-500 mb-0.5">Categories</div>
+            <div className="text-sm font-semibold text-gray-900">{bubbleData.length}</div>
           </div>
-          <div className="text-center">
-            <div className="text-xs text-gray-500 mb-1">Max Value</div>
-            <div className="text-lg font-semibold text-gray-900">
-              {selectedMetric === "laborHoursPerTon" 
-                ? `${maxValue.toFixed(1)} MH/T`
+          <div>
+            <div className="text-[10px] text-gray-500 mb-0.5">Max</div>
+            <div className="text-sm font-semibold text-gray-900 tabular-nums">
+              {selectedMetric === "laborHoursPerTon"
+                ? `${maxValue.toFixed(1)}`
                 : maxValue >= 1000
-                  ? `$${(maxValue / 1000).toFixed(1)}K/T`
-                  : `$${maxValue.toFixed(0)}/T`}
+                  ? `$${(maxValue / 1000).toFixed(1)}K`
+                  : `$${maxValue.toFixed(0)}`}
             </div>
           </div>
-          <div className="text-center">
-            <div className="text-xs text-gray-500 mb-1">Total {getMetricLabel(selectedMetric)}</div>
-            <div className="text-lg font-semibold text-gray-900">
-              {selectedMetric === "laborHoursPerTon" 
-                ? `${totalValue.toFixed(1)} MH/T`
+          <div>
+            <div className="text-[10px] text-gray-500 mb-0.5">Total</div>
+            <div className="text-sm font-semibold text-gray-900 tabular-nums">
+              {selectedMetric === "laborHoursPerTon"
+                ? `${totalValue.toFixed(1)}`
                 : totalValue >= 1000
-                  ? `$${(totalValue / 1000).toFixed(1)}K/T`
-                  : `$${totalValue.toFixed(0)}/T`}
+                  ? `$${(totalValue / 1000).toFixed(1)}K`
+                  : `$${totalValue.toFixed(0)}`}
             </div>
           </div>
         </div>

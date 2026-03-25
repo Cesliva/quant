@@ -273,19 +273,35 @@ function ProjectsPageContent() {
         {/* Projects List */}
         <div className="bg-white rounded-3xl border border-slate-100/50 shadow-sm overflow-hidden">
           {filteredProjects.length === 0 ? (
-            <div className="p-12 text-center">
-              <p className="text-slate-400 mb-4">
-                {searchQuery || statusFilter !== "all"
-                  ? "No projects match your filters."
-                  : "No projects yet."}
-              </p>
-              {permissions?.canCreateProjects && (
-                <Link href="/projects/new">
-                  <Button className="px-5 py-2.5 rounded-xl bg-blue-500 text-white">
-                    Create Your First Project
-                  </Button>
-                </Link>
-              )}
+            <div className="p-16 text-center">
+              <div className="max-w-md mx-auto">
+                <p className="text-slate-600 text-lg font-medium mb-2">
+                  {searchQuery || statusFilter !== "all"
+                    ? "No projects match your filters."
+                    : "No projects yet."}
+                </p>
+                <p className="text-slate-500 text-sm mb-6">
+                  {searchQuery || statusFilter !== "all"
+                    ? "Try adjusting your search or filter to find projects."
+                    : "Create your first estimate to get started. Each project tracks structural steel takeoff, labor, and costs."}
+                </p>
+                {permissions?.canCreateProjects && (
+                  searchQuery || statusFilter !== "all" ? (
+                    <Button
+                      onClick={() => { setSearchQuery(""); setStatusFilter("all"); }}
+                      className="px-6 py-3 rounded-xl bg-slate-100 text-slate-700 font-medium hover:bg-slate-200 transition-all"
+                    >
+                      Clear Filters
+                    </Button>
+                  ) : (
+                    <Link href="/projects/new">
+                      <Button className="px-6 py-3 rounded-xl bg-blue-500 text-white font-medium shadow-md hover:bg-blue-600 transition-all">
+                        Create Your First Project →
+                      </Button>
+                    </Link>
+                  )
+                )}
+              </div>
             </div>
           ) : (
             <div className="divide-y divide-slate-100">

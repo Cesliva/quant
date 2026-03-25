@@ -20,14 +20,14 @@ import { validateCompanySettings, getFieldError, type ValidationError } from "@/
 import { useCompanyId } from "@/lib/hooks/useCompanyId";
 import { uploadFileToStorage, deleteFileFromStorage } from "@/lib/firebase/storage";
 import { showToast } from "@/lib/utils/toast";
+import LaborRateRow from "@/components/settings/LaborRateRow";
+import {
+  type LaborRateWithId,
+  type LaborRateMode,
+  getEffectiveShopRate,
+} from "@/lib/types/laborRates";
 
 type TabType = "company" | "labor" | "material" | "coating" | "markup" | "advanced" | "executive" | "addressbook";
-
-interface LaborRate {
-  id: string;
-  trade: string;
-  rate: number;
-}
 
 interface MaterialGrade {
   id: string;
@@ -74,11 +74,12 @@ function SettingsPageContent() {
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [logoUploadError, setLogoUploadError] = useState<string | null>(null);
 
-  const [laborRates, setLaborRates] = useState<LaborRate[]>([
-    { id: "1", trade: "Fabricator", rate: 45 },
-    { id: "2", trade: "Welder", rate: 55 },
-    { id: "3", trade: "Fitter", rate: 50 },
-    { id: "4", trade: "Painter", rate: 40 },
+  const [rateModeDefault, setRateModeDefault] = useState<LaborRateMode>("manual");
+  const [laborRates, setLaborRates] = useState<LaborRateWithId[]>([
+    { id: "1", trade: "Fabricator", rate: 45, rateMode: "manual", shopRate: 45 },
+    { id: "2", trade: "Welder", rate: 55, rateMode: "manual", shopRate: 55 },
+    { id: "3", trade: "Fitter", rate: 50, rateMode: "manual", shopRate: 50 },
+    { id: "4", trade: "Painter", rate: 40, rateMode: "manual", shopRate: 40 },
   ]);
 
   const [materialGrades, setMaterialGrades] = useState<MaterialGrade[]>([
@@ -174,14 +175,29 @@ function SettingsPageContent() {
         }
       }
       
-      // Load labor rates
+      // Load labor rates (support legacy { trade, rate } and extended shape)
       if (settings.laborRates && settings.laborRates.length > 0) {
         setLaborRates(
-          settings.laborRates.map((rate, index) => ({
-            id: index.toString(),
-            trade: rate.trade,
-            rate: rate.rate,
-          }))
+          settings.laborRates.map((rate: any, index: number) => {
+            // Migrate legacy burdenPercent to burdenDollars: burdenDollars = baseWage * (burdenPercent/100)
+            let burdenDollars = rate.burdenDollars;
+            if (burdenDollars == null && rate.burdenPercent != null && rate.baseWage != null) {
+              burdenDollars = rate.baseWage * (rate.burdenPercent / 100);
+            }
+            return {
+              id: (rate.id ?? index).toString(),
+              trade: rate.trade,
+              rate: rate.rate,
+              rateMode: rate.rateMode ?? "manual",
+              baseWage: rate.baseWage,
+              burdenDollars: burdenDollars ?? 0,
+              indirectsDollars: rate.indirectsDollars ?? 0,
+              shopRate: rate.shopRate,
+              isDefault: rate.isDefault,
+              createdAt: rate.createdAt,
+              updatedAt: rate.updatedAt,
+            };
+          })
         );
       }
       
@@ -332,7 +348,10 @@ function SettingsPageContent() {
           logoUrl: companySettings.companyInfo.logoUrl || undefined,
         },
         materialGrades: materialGrades.map(({ id, ...rest }) => rest),
-        laborRates: laborRates.map(({ id, ...rest }) => rest),
+        laborRates: laborRates.map(({ id, burdenPercent, ...rest }) => {
+          const effective = getEffectiveShopRate(rest);
+          return { ...rest, rate: effective };
+        }),
         coatingTypes: coatingTypes.map(({ id, ...rest }) => rest),
         markupSettings,
         advancedSettings,
@@ -426,7 +445,10 @@ function SettingsPageContent() {
       const settingsToSave: CompanySettings = {
         companyInfo: updatedCompanyInfo,
         materialGrades: materialGrades.map(({ id, ...rest }) => rest),
-        laborRates: laborRates.map(({ id, ...rest }) => rest),
+        laborRates: laborRates.map(({ id, burdenPercent, ...rest }) => {
+          const effective = getEffectiveShopRate(rest);
+          return { ...rest, rate: effective };
+        }),
         coatingTypes: coatingTypes.map(({ id, ...rest }) => rest),
         markupSettings,
         advancedSettings,
@@ -515,7 +537,10 @@ function SettingsPageContent() {
       const settingsToSave: CompanySettings = {
         companyInfo: updatedCompanyInfo,
         materialGrades: materialGrades.map(({ id, ...rest }) => rest),
-        laborRates: laborRates.map(({ id, ...rest }) => rest),
+        laborRates: laborRates.map(({ id, burdenPercent, ...rest }) => {
+          const effective = getEffectiveShopRate(rest);
+          return { ...rest, rate: effective };
+        }),
         coatingTypes: coatingTypes.map(({ id, ...rest }) => rest),
         markupSettings,
         advancedSettings,
@@ -564,10 +589,18 @@ function SettingsPageContent() {
   };
 
   const addLaborRate = () => {
-    const newRate: LaborRate = {
+    const now = new Date().toISOString();
+    const newRate: LaborRateWithId = {
       id: Date.now().toString(),
       trade: "",
       rate: 0,
+      rateMode: rateModeDefault,
+      shopRate: rateModeDefault === "manual" ? 0 : undefined,
+      baseWage: rateModeDefault === "calculated" ? 0 : undefined,
+      burdenDollars: rateModeDefault === "calculated" ? 0 : undefined,
+      indirectsDollars: rateModeDefault === "calculated" ? 0 : undefined,
+      createdAt: now,
+      updatedAt: now,
     };
     setLaborRates([...laborRates, newRate]);
   };
@@ -576,9 +609,9 @@ function SettingsPageContent() {
     setLaborRates(laborRates.filter((rate) => rate.id !== id));
   };
 
-  const updateLaborRate = (id: string, field: keyof LaborRate, value: string | number) => {
-    setLaborRates(
-      laborRates.map((rate) =>
+  const updateLaborRate = (id: string, field: keyof LaborRateWithId, value: string | number) => {
+    setLaborRates((prev) =>
+      prev.map((rate) =>
         rate.id === id ? { ...rate, [field]: value } : rate
       )
     );
@@ -1132,66 +1165,72 @@ function SettingsPageContent() {
         {activeTab === "labor" && (
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Labor Rates by Trade</CardTitle>
-                <Button variant="outline" size="sm" onClick={addLaborRate}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Trade
-                </Button>
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle>Labor Rates by Trade</CardTitle>
+                  <Button variant="outline" size="sm" onClick={addLaborRate}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Trade
+                  </Button>
+                </div>
+                <p className="text-sm text-gray-600">
+                  These are the default loaded labor rates used in estimating. Project managers can override them per project, and all overrides are logged.
+                </p>
+                <div className="flex flex-wrap items-center gap-3">
+                  <div>
+                    <span className="text-sm font-medium text-gray-700">Rate Mode Default </span>
+                    <span className="text-xs text-gray-500">(for new trades)</span>
+                  </div>
+                  <div className="flex rounded-lg border border-gray-300 bg-white p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setRateModeDefault("manual")}
+                      title="Enter shop rate directly"
+                      className={`px-4 py-2 text-sm font-medium transition-colors whitespace-nowrap rounded-md ${
+                        rateModeDefault === "manual"
+                          ? "bg-blue-600 text-white shadow-sm"
+                          : "bg-transparent text-gray-700 hover:bg-gray-100"
+                      }`}
+                    >
+                      Manual
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRateModeDefault("calculated")}
+                      title="Shop rate = Labor + Directs + Indirects"
+                      className={`px-4 py-2 text-sm font-medium transition-colors whitespace-nowrap rounded-md ${
+                        rateModeDefault === "calculated"
+                          ? "bg-blue-600 text-white shadow-sm"
+                          : "bg-transparent text-gray-700 hover:bg-gray-100"
+                      }`}
+                    >
+                      Calculated
+                    </button>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500">
+                  <strong>Manual:</strong> Enter your shop rate directly. <strong>Calculated:</strong> Shop rate = Labor + Directs + Indirects ($/hr).
+                </p>
               </div>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 {laborRates.map((rate) => (
-                  <div key={rate.id} className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
-                    <div className="flex-1 grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Trade
-                        </label>
-                        <Input
-                          value={rate.trade}
-                          onChange={(e) =>
-                            updateLaborRate(rate.id, "trade", e.target.value)
-                          }
-                          placeholder="e.g., Fabricator, Welder"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Rate ($/hr)
-                        </label>
-                        <div className="relative">
-                          <span className="absolute left-3 top-2 text-gray-500">$</span>
-                          <Input
-                            type="number"
-                            value={rate.rate}
-                            onChange={(e) =>
-                              updateLaborRate(rate.id, "rate", parseFloat(e.target.value) || 0)
-                            }
-                            placeholder="0.00"
-                            className="pl-8"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                    {laborRates.length > 1 && (
-                      <button
-                        onClick={() => removeLaborRate(rate.id)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Remove trade"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
+                  <LaborRateRow
+                    key={rate.id}
+                    rate={rate}
+                    rateMode={rateModeDefault}
+                    onUpdate={updateLaborRate}
+                    onRemove={removeLaborRate}
+                    canRemove={laborRates.length > 1}
+                  />
                 ))}
               </div>
-              <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+              <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-100">
                 <div className="flex items-start gap-2">
-                  <Info className="w-4 h-4 text-blue-600 mt-0.5" />
+                  <Info className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
                   <p className="text-xs text-blue-800">
-                    These rates will be used as defaults for new projects. You can override them per project.
+                    When labor rates are changed at the project level, Quant records the original rate, overridden rate, user, timestamp, and optional reason.
                   </p>
                 </div>
               </div>

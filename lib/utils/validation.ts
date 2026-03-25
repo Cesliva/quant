@@ -78,7 +78,15 @@ export function validateCompanySettings(data: {
   phone?: string;
   zip?: string;
   state?: string;
-  laborRates?: Array<{ trade: string; rate: number }>;
+  laborRates?: Array<{
+    trade: string;
+    rate?: number;
+    rateMode?: "manual" | "calculated";
+    baseWage?: number;
+    burdenDollars?: number;
+    indirectsDollars?: number;
+    shopRate?: number;
+  }>;
   materialGrades?: Array<{ grade: string; costPerPound: number }>;
   coatingTypes?: Array<{ type: string; costPerSF: number }>;
   markupSettings?: {
@@ -124,7 +132,7 @@ export function validateCompanySettings(data: {
     });
   }
 
-  // Labor rates validation
+  // Labor rates validation (supports manual shop rate and calculated baseWage+burden)
   if (data.laborRates) {
     data.laborRates.forEach((rate, index) => {
       if (!validateRequired(rate.trade)) {
@@ -133,11 +141,38 @@ export function validateCompanySettings(data: {
           message: "Trade name is required",
         });
       }
-      if (!validateNumberRange(rate.rate, 0, 1000)) {
-        errors.push({
-          field: `laborRates[${index}].rate`,
-          message: "Labor rate must be between $0 and $1,000 per hour",
-        });
+      // Effective rate: manual uses shopRate/rate; calculated uses baseWage + burdenDollars
+      const rateMode = rate.rateMode ?? "manual";
+      if (rateMode === "manual") {
+        const effectiveRate = rate.shopRate ?? rate.rate ?? 0;
+        if (!validateNumberRange(effectiveRate, 0, 1000)) {
+          errors.push({
+            field: `laborRates[${index}].shopRate`,
+            message: "Shop rate must be between $0 and $1,000 per hour",
+          });
+        }
+      } else {
+        const baseWage = rate.baseWage ?? 0;
+        const burdenDollars = rate.burdenDollars ?? 0;
+        const indirectsDollars = rate.indirectsDollars ?? 0;
+        if (!validateNumberRange(baseWage, 0, 1000)) {
+          errors.push({
+            field: `laborRates[${index}].baseWage`,
+            message: "Labor must be between $0 and $1,000 per hour",
+          });
+        }
+        if (!validateNumberRange(burdenDollars, 0, 500)) {
+          errors.push({
+            field: `laborRates[${index}].burdenDollars`,
+            message: "Directs must be between $0 and $500 per hour",
+          });
+        }
+        if (!validateNumberRange(indirectsDollars, 0, 500)) {
+          errors.push({
+            field: `laborRates[${index}].indirectsDollars`,
+            message: "Indirects must be between $0 and $500 per hour",
+          });
+        }
       }
     });
   }

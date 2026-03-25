@@ -1151,7 +1151,15 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
             </div>
           ) : (
             <>
-              <div ref={containerRef} className="w-full flex justify-center mb-3 relative" style={{ minHeight: "400px" }}>
+              <div 
+                ref={containerRef} 
+                className="w-full flex justify-center mb-3 relative" 
+                style={{ minHeight: "400px" }}
+                onWheel={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                }}
+              >
                 <div className="relative w-full">
                   <svg 
                     ref={svgRef} 
@@ -1464,7 +1472,13 @@ export default function ProjectBubbleChart({ lines, companyId, projectName, curr
       >
         <div className="space-y-6">
           {/* Enhanced Chart */}
-          <div className="flex justify-center bg-slate-50 rounded-xl p-6">
+          <div
+            className="flex justify-center bg-slate-50 rounded-xl p-6"
+            onWheel={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+            }}
+          >
             <svg
               ref={overlaySvgRef}
               viewBox="0 0 1200 800"

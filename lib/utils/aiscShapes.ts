@@ -64,6 +64,8 @@ export function getSurfaceAreaPerFoot(designation: string): number {
  */
 export function getAllMaterialGrades(): string[] {
   return [
+    "A36",
+    "A572 Grade 50",
     "A992",
     "A913 Grade 65",
     "A913 Grade 70",
@@ -80,12 +82,57 @@ export function getAllMaterialGrades(): string[] {
   ];
 }
 
+/** Default grade to auto-seed when shape type is selected (most common for that shape) */
+const SHAPE_DEFAULT_GRADES: Record<ShapeType, string> = {
+  W: "A992",
+  WT: "A992",
+  S: "A992",
+  M: "A992",
+  MT: "A992",
+  ST: "A992",
+  HSS: "A500 Grade B",
+  C: "A36",
+  L: "A36",
+  T: "A992",
+  PIPE: "A53 Type E",
+};
+
+/** Grades valid for each shape type - narrowed to typical options for beginners */
+const SHAPE_GRADES: Record<ShapeType, string[]> = {
+  // Wide flange, tees, misc structural - high-strength options
+  W: ["A992", "A913 Grade 65", "A913 Grade 70"],
+  WT: ["A992", "A913 Grade 65", "A913 Grade 70"],
+  S: ["A992", "A913 Grade 65", "A913 Grade 70"],
+  M: ["A992", "A913 Grade 65", "A913 Grade 70"],
+  MT: ["A992", "A913 Grade 65", "A913 Grade 70"],
+  ST: ["A992", "A913 Grade 65", "A913 Grade 70"],
+  // HSS
+  HSS: ["A500 Grade B", "A500 Grade C", "A1085"],
+  // Angles and channels - A36/A572 most common
+  C: ["A36", "A572 Grade 50"],
+  L: ["A36", "A572 Grade 50"],
+  // Tees (cut from W or plate)
+  T: ["A992", "A36", "A572 Grade 50"],
+  // Pipe
+  PIPE: ["A53 Type E", "A53 Type S", "A252 Grade 1", "A252 Grade 2", "A252 Grade 3"],
+};
+
 /**
- * Get valid grades for a shape type (simplified - in reality, this would come from AISC specs)
- * Returns all Material grades by default, can be filtered by shape type if needed
+ * Get valid grades for a shape type - narrowed list for beginners
+ * Returns only grades that typically apply to that shape
  */
 export function getValidGrades(shapeType?: ShapeType): string[] {
-  // Return all Material grades - shape-specific filtering can be added later if needed
-  return getAllMaterialGrades();
+  if (!shapeType || !(shapeType in SHAPE_GRADES)) {
+    return getAllMaterialGrades();
+  }
+  return SHAPE_GRADES[shapeType as ShapeType];
+}
+
+/**
+ * Get the default (most common) grade for a shape type - for auto-seeding
+ */
+export function getDefaultGradeForShape(shapeType?: ShapeType): string | undefined {
+  if (!shapeType || !(shapeType in SHAPE_DEFAULT_GRADES)) return undefined;
+  return SHAPE_DEFAULT_GRADES[shapeType as ShapeType];
 }
 

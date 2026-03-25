@@ -43,6 +43,30 @@ export function getAllPlateGradeInfo(): Record<string, GradeInfo> {
  * Material (Structural Steel) Grade Information
  */
 const materialGradeInfo: Record<string, GradeInfo> = {
+  "A36": {
+    grade: "A36",
+    description: "Standard carbon steel for angles, channels, and plate",
+    typicalUses: [
+      "Angles and channels",
+      "Base plates and gussets",
+      "General fabrication",
+      "Most economical option"
+    ],
+    yieldStrength: "36 ksi minimum",
+    notes: "Industry standard for angles and channels. Most common for L and C shapes."
+  },
+  "A572 Grade 50": {
+    grade: "A572 Grade 50",
+    description: "High-strength low-alloy steel for angles, channels, and plate",
+    typicalUses: [
+      "Heavy angles and channels",
+      "Where A36 insufficient",
+      "50 ksi yield requirement",
+      "Weight-critical applications"
+    ],
+    yieldStrength: "50 ksi minimum",
+    notes: "Stronger than A36. Use when higher strength needed for L or C shapes."
+  },
   "A992": {
     grade: "A992",
     description: "High-strength structural steel for wide flange shapes",

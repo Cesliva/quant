@@ -2,435 +2,302 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import Button from "@/components/ui/Button";
 import { useAuth } from "@/lib/hooks/useAuth";
-import {
-  Sparkles,
-  BarChart3,
-  FileCheck,
-  Zap,
-  Shield,
-  TrendingUp,
-  ArrowRight,
-  CheckCircle2,
-  Clock,
-  DollarSign,
-  Target,
-  Users,
-  Award,
-} from "lucide-react";
+import { BRAND } from "@/lib/branding";
+import { ArrowRight } from "lucide-react";
+
+/** Unsplash images - steel fabrication, industrial. Swap for /public/graphics/landing/*.jpg when ready */
+const LANDING_IMAGES = {
+  hero: "https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=1920&q=80", // structural steel
+  problem: "https://images.unsplash.com/photo-1581092160562-40e08e68c317?auto=format&fit=crop&w=1920&q=80", // industrial shop
+  breakthrough: "https://images.unsplash.com/photo-1504917595217-d26dc0c90b8e?auto=format&fit=crop&w=1920&q=80", // steel construction
+  fabrication: "https://images.unsplash.com/photo-1504328345607-63d87a3c83b8?auto=format&fit=crop&w=1920&q=80", // welding
+  builtFor: "https://images.unsplash.com/photo-1565793298595-6a879b1d26c2?auto=format&fit=crop&w=1920&q=80", // metal workshop
+  speed: "https://images.unsplash.com/photo-1513467538354-83e5236b6447?auto=format&fit=crop&w=1920&q=80", // industrial interior
+  cta: "https://images.unsplash.com/photo-1504309092620-4d0ecb5da9fb?auto=format&fit=crop&w=1920&q=80", // structural steel
+};
+
+function SectionBg({
+  imgUrl,
+  dark = true,
+  overlayStrength = 0.55,
+  grain = true,
+}: {
+  imgUrl: string;
+  dark?: boolean;
+  overlayStrength?: number;
+  grain?: boolean;
+}) {
+  const overlay = dark
+    ? `linear-gradient(to bottom, rgba(0,0,0,${overlayStrength}) 0%, rgba(0,0,0,${overlayStrength * 0.95}) 50%, rgba(0,0,0,${Math.min(overlayStrength * 1.05, 0.85)}) 100%)`
+    : `linear-gradient(to bottom, rgba(245,245,247,${overlayStrength}) 0%, rgba(245,245,247,${overlayStrength * 0.95}) 50%, rgba(245,245,247,${Math.min(overlayStrength * 1.05, 0.9)}) 100%)`;
+  return (
+    <div
+      className={`absolute inset-0 bg-cover bg-center bg-no-repeat ${grain ? "landing-grain" : ""}`}
+      style={{
+        backgroundImage: `${overlay}, url(${imgUrl})`,
+      }}
+    />
+  );
+}
 
 /**
- * Quant Landing Page - High-Conversion Design
- * Optimized for steel fabrication estimators
+ * Quant Landing Page — Product reveal
+ * Reflects Quant's identity: steel fabrication, blue/indigo palette, professional precision
  */
 export default function Home() {
-  const { user, loading } = useAuth();
-  
+  const { loading } = useAuth();
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-600">Loading...</p>
-        </div>
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-white/30 border-t-white rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* Header - Clean & Minimal */}
-      <header className="sticky top-0 z-50 bg-white border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-          <Image 
-            src="/graphics/logos/quant logo.svg" 
-            alt="Quant" 
-            width={180} 
-            height={45}
-            className="h-10 w-auto"
-          />
-          <div className="flex items-center gap-3">
-            <Link href="/login">
-              <Button variant="outline" size="sm">
-                Sign In
-              </Button>
-            </Link>
-            <Link href="/signup">
-              <Button variant="primary" size="sm" className="shadow-sm">
-                Start Free Trial
-              </Button>
-            </Link>
-          </div>
+    <div className="min-h-screen bg-[#0f172a] text-white antialiased" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif' }}>
+      {/* Header — Quant brand gradient CTA */}
+      <header className="fixed top-0 left-0 right-0 z-50 px-6 lg:px-12 py-5 flex items-center justify-end bg-[#0f172a]/95 backdrop-blur-xl border-b border-slate-700/50" style={{ boxShadow: "inset 0 -1px 0 0 rgba(99, 102, 241, 0.15)" }}>
+        <div className="flex items-center gap-6">
+          <Link href="/login" className="text-[17px] text-slate-400 hover:text-indigo-300 transition-colors duration-200">
+            Sign In
+          </Link>
+          <Link
+            href="/signup"
+            className="inline-flex items-center justify-center px-6 py-2.5 text-[17px] font-medium rounded-[980px] bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 hover:-translate-y-0.5 transition-all duration-200"
+          >
+            Start Free Trial
+          </Link>
         </div>
       </header>
 
-      {/* Hero Section - Above the Fold Optimization */}
-      <section className="relative overflow-hidden">
-        {/* Background gradient */}
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-50 via-white to-indigo-50 -z-10" />
-        
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-24 lg:pt-32 lg:pb-32">
-          <div className="text-center max-w-4xl mx-auto space-y-8">
-            {/* Trust Badge */}
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 border border-blue-100 rounded-full text-sm text-blue-700 font-medium">
-              <Award className="w-4 h-4" />
-              Built by a 25-year steel fabrication estimator
-            </div>
-
-            {/* Main Headline - Clear Value Prop */}
-            <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-slate-900">
-              Win More Bids With
-              <span className="block text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 mt-2">
-                Hyper-Accurate Estimates
-              </span>
-            </h1>
-
-            {/* Sub-headline - Specific Benefits */}
-            <p className="text-xl sm:text-2xl text-slate-600 max-w-3xl mx-auto leading-relaxed">
-              Steel fabrication estimating software that saves 20+ hours per week while increasing win rates by 18%. Price faster, defend your numbers, win more work.
-            </p>
-
-            {/* CTA Buttons - Primary & Secondary */}
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-              <Link href="/signup" className="w-full sm:w-auto">
-                <Button size="lg" className="w-full sm:w-auto px-8 py-6 text-lg font-semibold shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 transition-all">
-                  Start Free Trial
-                  <ArrowRight className="w-5 h-5 ml-2" />
-                </Button>
-              </Link>
-              <Link href="#demo" className="w-full sm:w-auto">
-                <Button size="lg" variant="outline" className="w-full sm:w-auto px-8 py-6 text-lg">
-                  Watch Demo
-                </Button>
-              </Link>
-            </div>
-
-            {/* Trust Indicators */}
-            <div className="flex flex-wrap items-center justify-center gap-6 pt-8 text-sm text-slate-600">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-green-600" />
-                <span className="font-medium">No credit card required</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-green-600" />
-                <span className="font-medium">Setup in under 5 minutes</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-green-600" />
-                <span className="font-medium">Cancel anytime</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Hero Image/Dashboard Preview */}
-          <div className="mt-16 relative max-w-6xl mx-auto">
-            <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-indigo-500/20 blur-3xl -z-10" />
-            <div className="rounded-2xl border-2 border-slate-200 shadow-2xl shadow-slate-900/10 overflow-hidden bg-white p-2">
-              <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl p-8 min-h-[400px] flex items-center justify-center">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl">
-                  <StatCard 
-                    icon={<Clock className="w-8 h-8 text-blue-600" />}
-                    title="20+ hrs/week"
-                    subtitle="Time Saved"
-                    accent="blue"
-                  />
-                  <StatCard 
-                    icon={<Target className="w-8 h-8 text-green-600" />}
-                    title="+18%"
-                    subtitle="Win Rate Increase"
-                    accent="green"
-                  />
-                  <StatCard 
-                    icon={<DollarSign className="w-8 h-8 text-indigo-600" />}
-                    title="99.9%"
-                    subtitle="Accuracy"
-                    accent="indigo"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Problem/Solution Section */}
-      <section className="py-20 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center max-w-3xl mx-auto mb-16">
-            <h2 className="text-4xl sm:text-5xl font-bold text-slate-900 mb-6">
-              Stop losing bids to spreadsheet errors
-            </h2>
-            <p className="text-xl text-slate-600">
-              Every estimator knows the pain: racing against bid deadlines, second-guessing numbers, and losing work to competitors with tighter pricing.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-8 mb-16">
-            <ProblemCard 
-              title="Manual calculations eat your time"
-              desc="20+ hours per week lost to spreadsheets, copy-paste errors, and double-checking formulas."
+      {/* SECTION 1 — Hero (Apple-style: logo, staggered motion, single CTA) */}
+      <section className="relative min-h-screen flex flex-col items-center justify-center px-6 pt-20 pb-24 overflow-hidden">
+        {/* Quant brand gradient vignette — blue + indigo glow */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background: `
+              radial-gradient(ellipse 80% 50% at 50% 50%, transparent 40%, rgba(15,23,42,0.5) 100%),
+              radial-gradient(ellipse 60% 50% at 50% 0%, ${BRAND.glowBlue}, transparent 50%),
+              radial-gradient(ellipse 50% 40% at 80% 20%, ${BRAND.glowIndigo}, transparent 45%),
+              radial-gradient(ellipse 40% 30% at 20% 30%, ${BRAND.glowIndigo}, transparent 40%)
+            `,
+          }}
+        />
+        <div className="relative z-10 flex flex-col items-center justify-center text-center max-w-2xl mx-auto">
+          {/* Logo — staggered entrance */}
+          <Link
+            href="/signup"
+            className="block animate-fade-in-up mb-12 sm:mb-16 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 rounded-lg"
+            style={{ animationDelay: "0.1s" }}
+          >
+            <Image
+              src="/graphics/logos/quant logo.svg"
+              alt="Quant"
+              width={280}
+              height={72}
+              className="w-48 sm:w-56 lg:w-64 h-auto brightness-0 invert"
+              priority
             />
-            <ProblemCard 
-              title="Can't defend your numbers"
-              desc="GCs challenge your pricing and you don't have the data to back up your estimate instantly."
-            />
-            <ProblemCard 
-              title="Missing hidden scope risks"
-              desc="Ambiguous specs and missing details lead to scope creep and profit erosion after award."
-            />
-          </div>
-
-          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-3xl p-12 border border-blue-100">
-            <div className="flex items-center justify-center mb-8">
-              <div className="bg-blue-600 text-white rounded-full p-4">
-                <Sparkles className="w-8 h-8" />
-              </div>
-            </div>
-            <h3 className="text-3xl font-bold text-center text-slate-900 mb-4">
-              Quant eliminates these problems
-            </h3>
-            <p className="text-xl text-center text-slate-600 max-w-3xl mx-auto mb-8">
-              Built by a 25-year steel estimator who lived these challenges every day. Quant automates the tedious work, catches errors before they cost you, and gives you the confidence to bid aggressively when it matters.
-            </p>
-            <div className="flex justify-center">
-              <Link href="/signup">
-                <Button size="lg" className="px-8">
-                  Start Free Trial
-                  <ArrowRight className="w-5 h-5 ml-2" />
-                </Button>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Features - Benefit-Focused */}
-      <section className="py-20 bg-slate-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center max-w-3xl mx-auto mb-16">
-            <h2 className="text-4xl sm:text-5xl font-bold text-slate-900 mb-6">
-              Everything you need to estimate faster and win more
-            </h2>
-            <p className="text-xl text-slate-600">
-              Purpose-built for steel fabrication with workflows that match how estimators actually work
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            <FeatureCard
-              icon={<Sparkles className="w-6 h-6" />}
-              title="AI Estimating Intelligence"
-              desc="Real-time guidance catches errors before they cost you. Get instant alerts on weight anomalies, labor outliers, and pricing risks."
-              benefit="Save 5+ hours per estimate"
-            />
-            <FeatureCard
-              icon={<FileCheck className="w-6 h-6" />}
-              title="Spec Risk Analysis"
-              desc="AI-powered spec review flags ambiguous scope, missing details, and coating conflicts before bid day."
-              benefit="Prevent costly scope creep"
-            />
-            <FeatureCard
-              icon={<BarChart3 className="w-6 h-6" />}
-              title="Live Cost Tracking"
-              desc="Real-time cost per ton and labor per ton visualization shows you exactly where your estimate stands."
-              benefit="Defend your numbers instantly"
-            />
-            <FeatureCard
-              icon={<Shield className="w-6 h-6" />}
-              title="Version Control & Auditing"
-              desc="Lock budgets, track changes, and maintain complete audit trails for executive confidence and accountability."
-              benefit="Never lose track of revisions"
-            />
-            <FeatureCard
-              icon={<TrendingUp className="w-6 h-6" />}
-              title="Executive Dashboard"
-              desc="Weighted pipeline, win/loss intelligence, and capacity planning in one clean view executives actually understand."
-              benefit="Strategic decision-making"
-            />
-            <FeatureCard
-              icon={<Zap className="w-6 h-6" />}
-              title="Instant Exports"
-              desc="Generate professional PDFs and CSV exports in seconds. Client-ready proposals without the formatting hassle."
-              benefit="Look more professional"
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* Social Proof / Results */}
-      <section className="py-20 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-slate-900 mb-4">
-              Real results from steel fabricators
-            </h2>
-            <p className="text-xl text-slate-600">
-              Join estimators who are winning more work with less stress
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-4 gap-6">
-            <ResultCard 
-              metric="20+ hrs/week"
-              label="Time saved per estimator"
-              desc="Focus on strategy, not spreadsheets"
-            />
-            <ResultCard 
-              metric="+18%"
-              label="Average win rate increase"
-              desc="More accurate = more wins"
-            />
-            <ResultCard 
-              metric="< 5 min"
-              label="Setup time"
-              desc="Start estimating immediately"
-            />
-            <ResultCard 
-              metric="99.9%"
-              label="Calculation accuracy"
-              desc="Zero math errors"
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* Final CTA - Conversion Focused */}
-      <section className="py-20 bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-4xl sm:text-5xl font-bold text-white mb-6">
-            Ready to win more bids?
-          </h2>
-          <p className="text-xl text-blue-100 mb-8 max-w-2xl mx-auto">
-            Start your free trial today. No credit card required. Setup takes less than 5 minutes.
+          </Link>
+          {/* Tagline — staggered */}
+          <p
+            className="animate-fade-in-up text-[17px] sm:text-[19px] text-slate-400 font-light tracking-tight max-w-md leading-relaxed mb-14 sm:mb-16"
+            style={{ animationDelay: "0.25s" }}
+          >
+            The estimating engine built for steel fabricators.
           </p>
-          
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8">
-            <Link href="/signup" className="w-full sm:w-auto">
-              <Button 
-                size="lg" 
-                className="w-full sm:w-auto bg-white text-blue-700 hover:bg-blue-50 px-10 py-6 text-lg font-semibold shadow-2xl"
-              >
-                Start Free Trial
-                <ArrowRight className="w-5 h-5 ml-2" />
-              </Button>
-            </Link>
-          </div>
+          {/* Primary CTA — Quant brand gradient */}
+          <Link
+            href="/signup"
+            className="animate-fade-in-up inline-flex items-center justify-center gap-2 px-8 py-4 text-[17px] font-medium rounded-[980px] bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xl shadow-blue-500/30 hover:shadow-indigo-500/30 hover:-translate-y-0.5 transition-all duration-200"
+            style={{ animationDelay: "0.4s" }}
+          >
+            Start Free Trial
+            <ArrowRight className="w-5 h-5" />
+          </Link>
+          {/* Trust signal — brand accent */}
+          <p
+            className="animate-fade-in-up mt-12 sm:mt-14 text-[13px] text-slate-500"
+            style={{ animationDelay: "0.55s" }}
+          >
+            <span className="text-indigo-400/80">Trusted by fabrication shops</span> nationwide
+          </p>
+        </div>
+        {/* Scroll indicator */}
+        <div
+          className="absolute bottom-8 left-1/2 -translate-x-1/2 animate-fade-in-up flex flex-col items-center gap-2"
+          style={{ animationDelay: "0.7s" }}
+        >
+          <span className="text-[11px] text-slate-500 uppercase tracking-widest">Scroll</span>
+          <div className="w-px h-8 bg-gradient-to-b from-blue-400/60 via-indigo-400/40 to-transparent rounded-full" />
+        </div>
+      </section>
 
-          <div className="flex flex-wrap items-center justify-center gap-6 text-blue-100">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-5 h-5" />
-              <span>No credit card required</span>
+      {/* SECTION 2 — The Problem */}
+      <section className="relative py-[140px] px-6 lg:px-12 overflow-hidden">
+        <SectionBg imgUrl={LANDING_IMAGES.problem} dark overlayStrength={0.55} />
+        <div className="relative z-10 max-w-4xl mx-auto text-center">
+          <h2 className="text-[40px] sm:text-[48px] lg:text-[56px] font-semibold tracking-[-0.03em] leading-[1.1] mb-12">
+            The work never ends.
+          </h2>
+          <p className="text-[18px] sm:text-[20px] text-white/70 leading-[1.6] max-w-2xl mx-auto">
+            Slow takeoffs. Repetitive calculations. Inconsistent labor estimates. Every bid eats hours you don&apos;t have.
+          </p>
+        </div>
+      </section>
+
+      {/* SECTION 3 — The Breakthrough */}
+      <section className="relative py-[140px] px-6 lg:px-12 overflow-hidden">
+        <SectionBg imgUrl={LANDING_IMAGES.breakthrough} dark={false} overlayStrength={0.5} />
+        <div className="absolute inset-0 bg-gradient-to-b from-blue-50/30 via-transparent to-indigo-50/20" />
+        <div className="relative z-10 max-w-4xl mx-auto text-center">
+          <h2 className="text-[40px] sm:text-[48px] lg:text-[56px] font-semibold tracking-[-0.03em] leading-[1.1] mb-12 text-slate-900">
+            Fabrication-aware estimating.
+          </h2>
+          <p className="text-[18px] sm:text-[20px] text-slate-600 leading-[1.6] max-w-2xl mx-auto">
+            Quant automatically calculates fabrication labor when you add connections. Add a base plate to a column — labor appears. No spreadsheets. No guesswork.
+          </p>
+        </div>
+      </section>
+
+      {/* SECTION 4 — Fabrication Intelligence */}
+      <section className="relative py-[140px] px-6 lg:px-12 overflow-hidden">
+        <SectionBg imgUrl={LANDING_IMAGES.fabrication} dark overlayStrength={0.6} />
+        <div className="relative z-10 max-w-5xl mx-auto">
+          <h2 className="text-[40px] sm:text-[48px] font-semibold tracking-[-0.03em] text-center mb-20">
+            It understands steel.
+          </h2>
+          <div className="space-y-[120px]">
+            <div className="text-center">
+              <p className="text-[28px] sm:text-[32px] font-medium mb-8">Base plates</p>
+              <p className="text-[18px] text-slate-300 max-w-xl mx-auto">Dimensions, weld size, hole count — Quant derives labor from the geometry.</p>
             </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-5 h-5" />
-              <span>Cancel anytime</span>
+            <div className="text-center">
+              <p className="text-[28px] sm:text-[32px] font-medium mb-8">Shear tabs</p>
+              <p className="text-[18px] text-slate-300 max-w-xl mx-auto">Connection type, plate thickness, weld scheme — labor calculated automatically.</p>
             </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-5 h-5" />
-              <span>Full access</span>
+            <div className="text-center">
+              <p className="text-[28px] sm:text-[32px] font-medium mb-8">Weld calculations</p>
+              <p className="text-[18px] text-slate-300 max-w-xl mx-auto">Weld size, sides, condition. Quant uses your shop&apos;s productivity assumptions.</p>
             </div>
+            <div className="text-center">
+              <p className="text-[28px] sm:text-[32px] font-medium mb-8">Labor automation</p>
+              <p className="text-[18px] text-slate-300 max-w-xl mx-auto">Handle. Layout. Drill. Fit. Weld. Clean. Each bucket populated, traceable, defensible.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* SECTION 5 — Built for Fabricators */}
+      <section className="relative py-[140px] px-6 lg:px-12 overflow-hidden">
+        <SectionBg imgUrl={LANDING_IMAGES.builtFor} dark={false} overlayStrength={0.45} />
+        <div className="absolute inset-0 bg-gradient-to-b from-indigo-50/40 via-transparent to-blue-50/30" />
+        <div className="relative z-10 max-w-4xl mx-auto text-center">
+          <h2 className="text-[40px] sm:text-[48px] lg:text-[56px] font-semibold tracking-[-0.03em] leading-[1.1] mb-12 text-slate-900">
+            Your shop. Your numbers.
+          </h2>
+          <p className="text-[18px] sm:text-[20px] text-slate-600 leading-[1.6] max-w-2xl mx-auto">
+            Configure your labor assumptions once. Quant performs the math every time. Seeded shop productivity — not generic industry rates.
+          </p>
+        </div>
+      </section>
+
+      {/* SECTION 6 — Speed and Productivity */}
+      <section className="relative py-[140px] px-6 lg:px-12 overflow-hidden">
+        <SectionBg imgUrl={LANDING_IMAGES.speed} dark overlayStrength={0.6} />
+        <div className="relative z-10 max-w-4xl mx-auto text-center">
+          <h2 className="text-[40px] sm:text-[48px] lg:text-[56px] font-semibold tracking-[-0.03em] leading-[1.1] mb-16">
+            Hours become minutes.
+          </h2>
+          <div className="grid sm:grid-cols-2 gap-12 max-w-2xl mx-auto">
+            <div className="rounded-2xl bg-slate-800/50 border border-slate-600/50 p-10 text-left backdrop-blur-sm">
+              <p className="text-slate-400 text-[15px] font-medium uppercase tracking-wider mb-4">Traditional</p>
+              <p className="text-[48px] font-semibold mb-2">8–12 hrs</p>
+              <p className="text-[17px] text-slate-400">Per structural estimate</p>
+            </div>
+            <div className="rounded-2xl bg-gradient-to-br from-blue-900/50 to-indigo-900/40 border border-indigo-500/30 p-10 text-left backdrop-blur-sm">
+              <p className="text-indigo-300 text-[15px] font-medium uppercase tracking-wider mb-4">Quant</p>
+              <p className="text-[48px] font-semibold mb-2 bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">45 min</p>
+              <p className="text-[17px] text-slate-400">Same scope</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* SECTION 7 — Interface (brand gradient: app body feel) */}
+      <section id="demo" className="py-[140px] px-6 lg:px-12 bg-gradient-to-br from-slate-50 via-blue-50/80 to-indigo-50/60 text-slate-900 scroll-mt-20">
+        <div className="max-w-6xl mx-auto">
+          <h2 className="text-[40px] sm:text-[48px] font-semibold tracking-[-0.03em] text-center mb-20">
+            Built for the way you work.
+          </h2>
+          <Link href="/signup" className="block group">
+            <div className="rounded-2xl bg-slate-800 overflow-hidden shadow-2xl aspect-video flex flex-col items-center justify-center relative transition-transform duration-500 group-hover:scale-[1.01] border border-slate-600/30 ring-2 ring-transparent group-hover:ring-indigo-500/30 transition-all duration-300">
+              <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)', backgroundSize: '48px 32px' }} />
+              <div className="relative text-center">
+                <p className="text-slate-400 text-[15px] font-medium tracking-wider mb-2">Quant</p>
+                <p className="text-slate-500 text-[17px]">Estimating interface — try it free</p>
+              </div>
+            </div>
+          </Link>
+        </div>
+      </section>
+
+      {/* SECTION 8 — Final CTA */}
+      <section className="relative py-[160px] px-6 lg:px-12 overflow-hidden">
+        <SectionBg imgUrl={LANDING_IMAGES.cta} dark overlayStrength={0.6} />
+        <div
+          className="absolute inset-0"
+          style={{
+            background: "radial-gradient(ellipse 60% 50% at 50% 50%, rgba(99,102,241,0.15), transparent 70%), radial-gradient(ellipse 50% 40% at 50% 50%, rgba(59,130,246,0.08), transparent 60%)",
+          }}
+        />
+        <div className="relative z-10 text-center">
+          <h2 className="text-[48px] sm:text-[56px] lg:text-[64px] font-semibold tracking-[-0.03em] leading-[1.05] mb-10">
+            Ready to estimate faster?
+          </h2>
+          <p className="text-[20px] text-slate-300 max-w-xl mx-auto mb-12">
+            Request a demo. See Quant in action.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Link
+              href="/signup"
+              className="inline-flex items-center justify-center gap-2 px-10 py-4 text-[17px] font-medium rounded-[980px] bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/30 transition-all duration-200"
+            >
+              Start Free Trial
+              <ArrowRight className="w-5 h-5" />
+            </Link>
+            <Link href="#demo" className="text-[17px] text-slate-400 hover:text-indigo-400 transition-colors">
+              Watch Demo
+            </Link>
           </div>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="bg-slate-900 text-slate-300 py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid md:grid-cols-4 gap-8 mb-8">
-            <div className="md:col-span-2">
-              <Image 
-                src="/graphics/logos/quant logo.svg" 
-                alt="Quant" 
-                width={160} 
-                height={40}
-                className="h-8 w-auto mb-4 brightness-0 invert"
-              />
-              <p className="text-slate-400 text-sm max-w-md">
-                Steel fabrication estimating software built by estimators, for estimators. Win more bids with hyper-accurate estimates.
-              </p>
-            </div>
-            <div>
-              <h3 className="font-semibold text-white mb-4">Product</h3>
-              <ul className="space-y-2 text-sm">
-                <li><Link href="/signup" className="hover:text-white transition-colors">Start Free Trial</Link></li>
-                <li><Link href="/login" className="hover:text-white transition-colors">Sign In</Link></li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="font-semibold text-white mb-4">Legal</h3>
-              <ul className="space-y-2 text-sm">
-                <li><Link href="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link></li>
-                <li><Link href="/terms" className="hover:text-white transition-colors">Terms of Service</Link></li>
-              </ul>
-            </div>
-          </div>
-          <div className="border-t border-slate-800 pt-8 text-center text-sm text-slate-400">
-            © {new Date().getFullYear()} Quant Estimating AI. All rights reserved.
+      <footer className="py-16 px-6 lg:px-12 border-t border-slate-700/50 bg-slate-900">
+        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-6">
+          <Image
+            src="/graphics/logos/quant logo.svg"
+            alt="Quant"
+            width={120}
+            height={30}
+            className="h-6 w-auto brightness-0 invert opacity-70"
+          />
+          <div className="flex items-center gap-8 text-[15px] text-slate-400">
+            <Link href="/signup" className="hover:text-indigo-400 transition-colors">Start Free Trial</Link>
+            <Link href="/login" className="hover:text-indigo-400 transition-colors">Sign In</Link>
+            <Link href="/privacy" className="hover:text-indigo-400 transition-colors">Privacy</Link>
+            <Link href="/terms" className="hover:text-indigo-400 transition-colors">Terms</Link>
           </div>
         </div>
+        <div className="max-w-6xl mx-auto mt-8 text-center text-[13px] text-slate-500">
+          © {new Date().getFullYear()} Quant. All rights reserved.
+        </div>
       </footer>
-    </div>
-  );
-}
-
-// Component Definitions
-function StatCard({ icon, title, subtitle, accent }: { 
-  icon: React.ReactNode; 
-  title: string; 
-  subtitle: string;
-  accent: "blue" | "green" | "indigo";
-}) {
-  const bgColor = accent === "blue" ? "bg-blue-50" : accent === "green" ? "bg-green-50" : "bg-indigo-50";
-  
-  return (
-    <div className={`rounded-xl ${bgColor} p-6 text-center`}>
-      <div className="flex justify-center mb-3">{icon}</div>
-      <div className="text-3xl font-bold text-slate-900 mb-1">{title}</div>
-      <div className="text-sm text-slate-600 font-medium">{subtitle}</div>
-    </div>
-  );
-}
-
-function ProblemCard({ title, desc }: { title: string; desc: string }) {
-  return (
-    <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-      <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center mb-4">
-        <div className="w-6 h-6 bg-red-500 rounded-full"></div>
-      </div>
-      <h3 className="text-lg font-semibold text-slate-900 mb-2">{title}</h3>
-      <p className="text-slate-600">{desc}</p>
-    </div>
-  );
-}
-
-function FeatureCard({ icon, title, desc, benefit }: { 
-  icon: React.ReactNode; 
-  title: string; 
-  desc: string;
-  benefit: string;
-}) {
-  return (
-    <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm hover:shadow-md transition-shadow">
-      <div className="w-12 h-12 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600 mb-4">
-        {icon}
-      </div>
-      <h3 className="text-xl font-semibold text-slate-900 mb-2">{title}</h3>
-      <p className="text-slate-600 mb-3">{desc}</p>
-      <div className="flex items-center gap-2 text-sm font-medium text-blue-600">
-        <CheckCircle2 className="w-4 h-4" />
-        <span>{benefit}</span>
-      </div>
-    </div>
-  );
-}
-
-function ResultCard({ metric, label, desc }: { metric: string; label: string; desc: string }) {
-  return (
-    <div className="bg-slate-50 rounded-xl border border-slate-200 p-6 text-center">
-      <div className="text-4xl font-bold text-blue-600 mb-2">{metric}</div>
-      <div className="text-sm font-semibold text-slate-900 mb-1">{label}</div>
-      <div className="text-xs text-slate-600">{desc}</div>
     </div>
   );
 }

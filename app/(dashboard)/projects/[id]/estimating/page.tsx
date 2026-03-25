@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useSearchParams } from "next/navigation";
-import { Plus } from "lucide-react";
+import { Plus, Keyboard } from "lucide-react";
 import EstimatingGrid from "@/components/estimating/EstimatingGrid";
 import KPISummary from "@/components/estimating/KPISummary";
 import { useState, useEffect } from "react";
@@ -23,6 +23,7 @@ import { UserPresence } from "@/components/collaboration/UserPresence";
 import { logActivity } from "@/lib/utils/activityLogger";
 import ProposalSeedsCard from "@/components/estimating/ProposalSeedsCard";
 import ProjectBubbleChart from "@/components/estimating/ProjectBubbleChart";
+import KeyboardShortcutsModal from "@/components/ui/KeyboardShortcutsModal";
 
 export default function EstimatingPage() {
   const params = useParams();
@@ -37,12 +38,25 @@ export default function EstimatingPage() {
   const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
   const [selectedLineId, setSelectedLineId] = useState<string | null>(lineIdFromUrl || null);
   const [addLineHandler, setAddLineHandler] = useState<(() => void) | null>(null);
+  const [isAddingLine, setIsAddingLine] = useState(false);
   const [selectedMetric, setSelectedMetric] = useState<"laborHoursPerTon" | "costPerTon">("laborHoursPerTon");
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
-  // Debug: Log when addLineHandler changes
+  // ? key toggles keyboard shortcuts modal
   useEffect(() => {
-    console.log("[EstimatingPage] addLineHandler updated:", addLineHandler ? "Function received" : "null");
-  }, [addLineHandler]);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "?" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const target = e.target as HTMLElement;
+        const isInput = target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT";
+        if (!isInput || !target.isContentEditable) {
+          e.preventDefault();
+          setShowShortcuts((prev) => !prev);
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   // Load company settings
   useEffect(() => {
@@ -134,20 +148,15 @@ export default function EstimatingPage() {
       <button
         type="button"
         onClick={() => {
-          console.log("[FAB Button] Clicked! addLineHandler:", addLineHandler);
-          if (addLineHandler) {
-            addLineHandler();
-          } else {
-            console.error("[FAB Button] No handler available");
-          }
+          if (addLineHandler) addLineHandler();
         }}
-        disabled={!addLineHandler}
+        disabled={!addLineHandler || isAddingLine}
         aria-label="Add new line"
-        title={addLineHandler ? "Add a new estimate line" : "Loading…"}
+        title={isAddingLine ? "Adding…" : addLineHandler ? "Add a new estimate line" : "Loading…"}
         className="fixed bottom-8 right-8 z-[99999] flex items-center gap-2 px-5 py-3.5 rounded-full bg-blue-600 text-white font-semibold text-base shadow-xl ring-4 ring-blue-200/50 hover:bg-blue-700 hover:shadow-2xl hover:ring-blue-300/60 active:scale-95 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
       >
         <Plus className="w-5 h-5" />
-        Add Line
+        {isAddingLine ? "Adding…" : "Add Line"}
       </button>
 
       <div className="flex flex-col space-y-4 pb-20">
@@ -158,24 +167,31 @@ export default function EstimatingPage() {
         
         {/* Header - Compact */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 flex-shrink-0">
-        <div className="flex items-center gap-4 min-w-0 flex-shrink">
-          <div className="min-w-0">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 truncate">Structural Steel Estimate</h1>
-            <p className="text-sm text-gray-600 mt-1 truncate">
-              {projectNumber ? `${projectNumber} - ` : ""}{projectName || projectId || "N/A"}
-            </p>
+          <div className="flex items-center gap-4 min-w-0 flex-shrink">
+            <div className="min-w-0">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 truncate">Structural Steel Estimate</h1>
+              <p className="text-sm text-gray-600 mt-1 truncate">
+                {projectNumber ? `${projectNumber} - ` : ""}{projectName || projectId || "N/A"}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowShortcuts(true)}
+              className="shrink-0 p-2 rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+              title="Keyboard shortcuts (?)"
+              aria-label="Show keyboard shortcuts"
+            >
+              <Keyboard className="w-5 h-5" />
+            </button>
           </div>
         </div>
-      </div>
+
+        <KeyboardShortcutsModal isOpen={showShortcuts} onClose={() => setShowShortcuts(false)} />
 
 
       {/* KPI Summary - Sticky at top */}
       <div className="flex-shrink-0">
-        <KPISummary 
-          lines={lines} 
-          onAddLine={addLineHandler || undefined}
-          isManualMode={true}
-        />
+        <KPISummary lines={lines} />
       </div>
 
       {/* Estimating Grid - Expands to show full detail view */}
@@ -186,6 +202,8 @@ export default function EstimatingPage() {
           isManualMode={true}
           highlightLineId={lineIdFromUrl}
           onAddLineRef={setAddLineHandler}
+          onAddLineStateChange={setIsAddingLine}
+          onExpandedLineChange={setSelectedLineId}
         />
       </div>
 

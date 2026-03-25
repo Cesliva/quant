@@ -142,3 +142,12 @@
    - Mobile responsiveness improvements
    - Performance optimizations
 
+## Acquisition Readiness
+
+See **[ACQUISITION_RECOMMENDATIONS.md](./ACQUISITION_RECOMMENDATIONS.md)** for:
+- Prioritized roadmap (Quick Wins → High-Impact → Strategic)
+- Tekla integration path
+- UI/UX polish checklist
+- Estimating solution recommendations (CSV import, assembly library, benchmarking)
+- Technical debt items
+

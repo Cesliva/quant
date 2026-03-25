@@ -516,19 +516,26 @@ export default function DashboardPage() {
     return projects;
   }, [activeProjectsList, projectFilter, user?.uid]);
 
-  // Get projects to display - all projects when "all" is selected, all my projects when "mine" is selected
+  /** Dashboard list: sort by estimated value (size), largest first */
   const displayedProjects = useMemo(() => {
-    return [...filteredProjects]
-      .sort((a, b) => {
-        const aValue = typeof a.estimatedValue === "string" 
-          ? parseFloat(a.estimatedValue) || 0 
-          : a.estimatedValue || 0;
-        const bValue = typeof b.estimatedValue === "string" 
-          ? parseFloat(b.estimatedValue) || 0 
-          : b.estimatedValue || 0;
-        return bValue - aValue; // Sort descending (highest first)
-      });
+    const parseSize = (p: Project) => {
+      const raw = p.estimatedValue;
+      if (raw === undefined || raw === null) return 0;
+      if (typeof raw === "string") {
+        const cleaned = raw.replace(/[^0-9.-]/g, "");
+        return parseFloat(cleaned) || 0;
+      }
+      if (typeof raw === "number") return raw;
+      return 0;
+    };
+    return [...filteredProjects].sort((a, b) => parseSize(b) - parseSize(a));
   }, [filteredProjects]);
+
+  const TOP_ACTIVE_ON_DASHBOARD = 4;
+  const topProjectsBySize = useMemo(
+    () => displayedProjects.slice(0, TOP_ACTIVE_ON_DASHBOARD),
+    [displayedProjects]
+  );
 
   const pipelineDistribution = useMemo(() => {
     const now = new Date();
@@ -977,7 +984,7 @@ export default function DashboardPage() {
                     />
                     <span className="text-[10px] text-slate-600 font-medium">
                       {value > 0 
-                        ? `$${Math.round(value / 1000)}K`
+                        ? `$${(value / 1000000).toFixed(2)}M`
                         : "$0"
                       }
                     </span>
@@ -1095,17 +1102,16 @@ export default function DashboardPage() {
         </div>
       </div>
 
-        {/* Lower Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 md:gap-4 lg:gap-5 items-stretch">
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all duration-300 p-4 flex flex-col">
-          <div className="flex items-center justify-between mb-3">
-            <div>
+        {/* Lower Row: equal columns on large screens — Active Projects (top 4 by size) + calendar stack */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4 lg:gap-5 items-stretch">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all duration-300 p-4 sm:p-5 flex flex-col min-h-0 h-full">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3">
+            <div className="min-w-0">
               <p className="text-sm font-semibold text-slate-900">Active Projects</p>
               <p className="text-xs text-slate-500 mt-0.5">
-                {projectFilter === "all" 
-                  ? `${filteredProjects.length} total active projects`
-                  : `${displayedProjects.length} my projects`
-                }
+                {projectFilter === "all"
+                  ? `Top ${Math.min(TOP_ACTIVE_ON_DASHBOARD, filteredProjects.length)} by size · ${filteredProjects.length} active`
+                  : `Top ${Math.min(TOP_ACTIVE_ON_DASHBOARD, displayedProjects.length)} by size · ${displayedProjects.length} mine`}
               </p>
             </div>
             <div className="flex gap-2 items-center" onClick={(e) => e.stopPropagation()}>
@@ -1173,10 +1179,16 @@ export default function DashboardPage() {
               />
             </div>
             <p className="text-xs text-slate-400 mt-1">
-              Press Enter to search all projects • {filteredProjects.length > 3 && `Showing top 3 of ${filteredProjects.length} projects`}
+              Press Enter to search all projects
+              {filteredProjects.length > TOP_ACTIVE_ON_DASHBOARD && (
+                <span className="text-slate-500">
+                  {" "}
+                  · Showing largest {TOP_ACTIVE_ON_DASHBOARD} here
+                </span>
+              )}
             </p>
           </div>
-          <div className="text-sm">
+          <div className="text-sm flex-1 min-h-0 flex flex-col">
             {displayedProjects.length === 0 ? (
               <div className="py-8 text-center">
                 <p className="text-slate-500 font-medium mb-1">No projects found</p>
@@ -1195,8 +1207,8 @@ export default function DashboardPage() {
                 )}
               </div>
             ) : (
-              <div className="space-y-0">
-              {displayedProjects.map((project, index) => {
+              <div className="space-y-0 flex-1">
+              {topProjectsBySize.map((project, index) => {
                 const isArchived = project.archived === true;
                 const handleRestore = async (e: React.MouseEvent) => {
                   e.preventDefault();
@@ -1325,15 +1337,26 @@ export default function DashboardPage() {
                   </div>
                 );
               })}
+              {filteredProjects.length > TOP_ACTIVE_ON_DASHBOARD && (
+                <div className="pt-3 mt-1 border-t border-slate-100">
+                  <Link
+                    href="/projects"
+                    className="text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline flex items-center justify-center gap-1 py-1"
+                  >
+                    View all {filteredProjects.length} projects
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
+              )}
               </div>
             )}
           </div>
         </div>
-        <div className="flex flex-col gap-3 md:gap-4 h-full">
+        <div className="flex flex-col gap-3 md:gap-4 h-full min-h-0 lg:min-h-full">
           {/* Top Card - Bid & Production Calendar */}
           <Link
             href="/bid-schedule"
-            className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 p-4 text-left w-full flex-1 flex flex-col"
+            className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 p-4 sm:p-5 text-left w-full flex-1 flex flex-col min-h-[200px]"
           >
             <div className="flex items-center justify-between mb-1">
               <p className="text-sm font-semibold">Bid & Production Calendar</p>

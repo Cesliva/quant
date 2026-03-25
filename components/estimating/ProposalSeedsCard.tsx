@@ -135,7 +135,8 @@ export default function ProposalSeedsCard({
   };
 
   const handleSave = async () => {
-    const trimmedText = inputText.trim();
+    // Use input text, or default to first template for this type when empty (so Add works without typing)
+    const trimmedText = inputText.trim() || (QUICK_TEMPLATES[selectedType]?.[0] ?? "");
     if (!trimmedText || !user) return;
 
     // Check for duplicates
@@ -340,9 +341,10 @@ export default function ProposalSeedsCard({
               </button>
               <Button
                 onClick={handleSave}
-                disabled={!inputText.trim()}
+                disabled={!user}
                 size="sm"
                 className="text-xs"
+                title={!user ? "Sign in to add entries" : inputText.trim() ? "Add this entry" : `Add "${QUICK_TEMPLATES[selectedType]?.[0] ?? "entry"}"`}
               >
                 <Plus className="w-3 h-3 mr-1" />
                 Add
@@ -358,12 +360,18 @@ export default function ProposalSeedsCard({
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="text-gray-600">Line Item</label>
-                <Input
+                <select
                   value={context.lineItemId || ""}
                   onChange={(e) => setContext({ ...context, lineItemId: e.target.value || undefined })}
-                  placeholder="Auto-filled if row selected"
-                  className="text-xs py-1 h-7"
-                />
+                  className="w-full text-xs py-1.5 h-8 px-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                >
+                  <option value="">{selectedLine ? "Auto-filled from expanded row" : "Select line..."}</option>
+                  {lines.filter(l => l.status !== "Void").map((line) => (
+                    <option key={line.id} value={line.id}>
+                      {line.lineId} {line.itemDescription ? `– ${line.itemDescription.slice(0, 30)}${(line.itemDescription?.length || 0) > 30 ? "…" : ""}` : ""}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="text-gray-600">Drawing #</label>
@@ -433,10 +441,12 @@ export default function ProposalSeedsCard({
                   {isExpanded && (
                     <div className="p-3 space-y-2 bg-white">
                       {typeSeeds.map((seed) => {
+                        const linkedLine = seed.context.lineItemId ? lines.find(l => l.id === seed.context.lineItemId) : null;
                         const contextStr = [
-                          seed.context.lineItemId && `L${seed.context.lineItemId}`,
+                          linkedLine?.lineId || (seed.context.lineItemId && `#${String(seed.context.lineItemId).slice(-6)}`),
                           seed.context.drawing,
                           seed.context.detail,
+                          seed.context.category,
                         ].filter(Boolean).join(" / ");
 
                         return (

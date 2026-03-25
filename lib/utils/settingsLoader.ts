@@ -27,10 +27,13 @@ export interface Estimator {
   active?: boolean;
 }
 
+import type { LaborRateStored } from "@/lib/types/laborRates";
+import { getEffectiveShopRate } from "@/lib/types/laborRates";
+
 export interface CompanySettings {
   companyInfo?: CompanyInfo;
   materialGrades: Array<{ grade: string; costPerPound: number }>;
-  laborRates: Array<{ trade: string; rate: number }>;
+  laborRates: Array<LaborRateStored>;
   coatingTypes: Array<{ 
     type: string; 
     costPerSF?: number; 
@@ -122,13 +125,22 @@ export interface ConsumablesSettings {
   };
 }
 
+/** Future: Per-rate override audit for project-level labor rate changes */
+export interface LaborRateOverrideAuditFields {
+  originalCompanyRate?: number;
+  overriddenProjectRate?: number;
+  overrideReason?: string;
+  overriddenBy?: string;
+  overrideTimestamp?: string;
+}
+
 export interface ProjectSettings {
   materialRate?: number; // Override company default
   laborRate?: number; // Override company default
   coatingRate?: number; // Override company default
   overheadPercentage?: number; // Override company default
   profitPercentage?: number; // Override company default
-  laborRates?: Array<{ trade: string; rate: number }>; // Project-specific labor rates
+  laborRates?: Array<{ trade: string; rate: number } & LaborRateOverrideAuditFields>; // Project-specific labor rates; extend with override audit when logging is implemented
 }
 
 const DEFAULT_SETTINGS: CompanySettings = {
@@ -202,9 +214,10 @@ export async function loadCompanySettings(companyId: string): Promise<CompanySet
             : DEFAULT_SETTINGS.workingDays,
         holidays: company.settings.holidays ?? DEFAULT_SETTINGS.holidays,
         companyInfo: {
+          companyName: "",
           ...DEFAULT_SETTINGS.companyInfo,
           ...company.settings.companyInfo,
-        },
+        } as CompanyInfo,
         // Ensure arrays remain arrays (don't spread them as objects)
         materialGrades: Array.isArray(company.settings.materialGrades) && company.settings.materialGrades.length > 0
           ? company.settings.materialGrades
@@ -277,8 +290,8 @@ export function getMaterialRateForGrade(
  * Get labor rate (average of all trades or specific trade)
  */
 export function getLaborRate(
-  trade?: string,
-  companySettings: CompanySettings
+  companySettings: CompanySettings,
+  trade?: string
 ): number {
   // Ensure laborRates is an array
   if (!Array.isArray(companySettings.laborRates) || companySettings.laborRates.length === 0) {
@@ -289,12 +302,12 @@ export function getLaborRate(
     const laborRate = companySettings.laborRates.find(
       (r) => r.trade.toLowerCase() === trade.toLowerCase()
     );
-    if (laborRate) return laborRate.rate;
+    if (laborRate) return getEffectiveShopRate(laborRate);
   }
 
-  // Return average labor rate
+  // Return average labor rate (uses effective shop rate for manual/calculated)
   const avgRate = companySettings.laborRates.reduce(
-    (sum, r) => sum + r.rate,
+    (sum, r) => sum + getEffectiveShopRate(r),
     0
   ) / companySettings.laborRates.length;
   
@@ -365,6 +378,49 @@ export function calculateTotalCostWithMarkup(
   const withProfit = withOverhead * (1 + profitPercentage / 100);
 
   return withProfit;
+}
+
+/**
+ * Given a target final line total (with overhead + profit), solve for raw labor cost
+ * before waste, assuming material, coating, and hardware direct costs are fixed.
+ * Inverse of calculateTotalCostWithMarkup for labor only.
+ */
+export function solveLaborCostForTargetLineTotal(
+  targetTotal: number,
+  materialCost: number,
+  coatingCost: number,
+  hardwareCost: number,
+  companySettings: CompanySettings,
+  projectSettings?: ProjectSettings
+): number {
+  const materialWasteFactor =
+    projectSettings?.overheadPercentage !== undefined
+      ? projectSettings.overheadPercentage / 100
+      : companySettings.markupSettings.materialWasteFactor / 100;
+
+  const laborWasteFactor =
+    projectSettings?.overheadPercentage !== undefined
+      ? projectSettings.overheadPercentage / 100
+      : companySettings.markupSettings.laborWasteFactor / 100;
+
+  const overheadPercentage =
+    projectSettings?.overheadPercentage !== undefined
+      ? projectSettings.overheadPercentage
+      : companySettings.markupSettings.overheadPercentage;
+
+  const profitPercentage =
+    projectSettings?.profitPercentage !== undefined
+      ? projectSettings.profitPercentage
+      : companySettings.markupSettings.profitPercentage;
+
+  const withOverhead = targetTotal / (1 + profitPercentage / 100);
+  const subtotal = withOverhead / (1 + overheadPercentage / 100);
+
+  const materialWithWaste = materialCost * (1 + materialWasteFactor);
+  const laborWithWaste =
+    subtotal - materialWithWaste - coatingCost - hardwareCost;
+  const laborCost = laborWithWaste / (1 + laborWasteFactor);
+  return Math.max(0, laborCost);
 }
 
 /**

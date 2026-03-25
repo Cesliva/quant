@@ -48,7 +48,7 @@ export default function EstimatingGridTable({
   totals,
 }: EstimatingGridTableProps) {
   const categories = ["Columns", "Beams", "Misc Metals", "Plates", "Connections", "Other"];
-  const subCategories = ["Base Plate", "Gusset", "Stiffener", "Clip", "Brace", "Other"];
+  const subCategories = ["Base Plate", "Cap Plate", "Shear Tab", "Gusset", "Stiffener", "Clip", "Brace", "Other"];
   const coatingSystems = ["None", "Paint", "Powder", "Galv"];
 
   // Get available sizes for selected shape type

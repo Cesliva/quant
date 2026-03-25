@@ -7,6 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import {
   ArrowLeft,
+  ArrowRight,
   Edit,
   ClipboardList,
   FileCheck,
@@ -1125,55 +1126,44 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
   const daysUntilBid = getDaysUntilBid(project.bidDueDate);
   const isUrgent = daysUntilBid !== null && daysUntilBid <= 7 && daysUntilBid >= 0;
 
-  const quickActions = [
-    {
-      name: "Structural Steel Estimate",
-      href: `/projects/${projectId}/estimating`,
-      icon: ClipboardList,
-      description: "Build your estimate",
-      color: "bg-blue-500 hover:bg-blue-600",
-    },
-    // {
-    //   name: "Misc Metals AI",
-    //   href: `/misc-metals?projectId=${projectId}`,
-    //   icon: Package,
-    //   aiIcon: Sparkles,
-    //   description: "AI-powered misc metals estimation",
-    //   color: "bg-indigo-500 hover:bg-indigo-600",
-    // }, // Removed - will be in a later version
+  const primaryAction = {
+    name: "Structural Steel Estimate",
+    href: `/projects/${projectId}/estimating`,
+    icon: ClipboardList,
+    description: "Build your estimate — add members, connections, and labor",
+    color: "bg-blue-500",
+  };
+
+  const supportingActions = [
     {
       name: "Material Nesting & Cutting List",
       href: `/projects/${projectId}/material-nesting`,
       icon: Scissors,
-      description: "Optimize material into stock lengths",
-      color: "bg-teal-500 hover:bg-teal-600",
+      aiIcon: undefined as any,
+      color: "bg-teal-500",
     },
     {
       name: "Estimate Reports",
       href: `/projects/${projectId}/reports`,
       icon: FileText,
-      description: "Finalize estimate before proposal",
-      color: "bg-amber-500 hover:bg-amber-600",
+      aiIcon: undefined as any,
+      color: "bg-amber-500",
     },
     {
       name: "AI Spec Review",
       href: `/spec-review?projectId=${projectId}`,
       icon: FileCheck,
       aiIcon: Sparkles,
-      description: "AI compliance check",
-      color: "bg-purple-500 hover:bg-purple-600",
+      color: "bg-purple-500",
     },
     {
       name: "AI Generated Proposal",
       href: `/proposal?projectId=${projectId}`,
       icon: FileEdit,
       aiIcon: Sparkles,
-      description: "AI-generated proposal",
-      color: "bg-green-500 hover:bg-green-600",
+      color: "bg-green-500",
     },
   ];
-
-  const secondaryActions: any[] = [];
 
   return (
     <>
@@ -1827,24 +1817,46 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
         </div>
 
 
-        {/* Quick Actions - Minimalist */}
+        {/* Quick Actions — Structural Steel Estimate (primary) + Reports & tools (supporting) */}
         <div className="mb-6">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
-            <h2 className="text-xl font-bold text-gray-900 tracking-normal mb-4">Quick Actions</h2>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              {quickActions.map((action) => {
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-5">
+            {/* Primary: Structural Steel Estimate */}
+            <Link href={`/projects/${projectId}/estimating`}>
+              <div className="mb-5 p-5 md:p-6 rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 text-white border border-blue-500/30 shadow-lg hover:shadow-xl hover:from-blue-500 hover:to-blue-600 transition-all cursor-pointer group">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div className="flex items-start gap-4">
+                    <div className="w-14 h-14 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+                      <ClipboardList className="w-7 h-7" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-bold text-white tracking-tight mb-1">Structural Steel Estimate</h2>
+                      <p className="text-blue-100 text-sm">Build your estimate — add members, connections, labor. The core of Quant.</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 text-white font-semibold text-sm sm:text-base">
+                    Open estimate
+                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  </div>
+                </div>
+              </div>
+            </Link>
+
+            {/* Supporting: Reports & tools */}
+            <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Reports & tools</h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+              {supportingActions.map((action) => {
                 const Icon = action.icon;
                 const AiIcon = (action as any).aiIcon;
                 return (
                   <Link key={action.name} href={action.href}>
-                    <div className="p-3 rounded-xl border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-all cursor-pointer group">
-                      <div className={`w-10 h-10 ${action.color} rounded-lg flex items-center justify-center mb-2 group-hover:scale-105 transition-transform relative`}>
-                        <Icon className="w-5 h-5 text-white" />
+                    <div className="p-3 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-slate-100 hover:border-slate-300 transition-all cursor-pointer group">
+                      <div className={`w-9 h-9 ${action.color} rounded-lg flex items-center justify-center mb-2 group-hover:scale-105 transition-transform relative`}>
+                        <Icon className="w-4 h-4 text-white" />
                         {AiIcon && (
-                          <AiIcon className="w-3 h-3 text-yellow-300 absolute -top-0.5 -right-0.5 drop-shadow-lg" />
+                          <AiIcon className="w-2.5 h-2.5 text-yellow-300 absolute -top-0.5 -right-0.5 drop-shadow-lg" />
                         )}
                       </div>
-                      <h3 className="text-sm font-bold text-gray-900 tracking-normal line-clamp-2">
+                      <h3 className="text-sm font-semibold text-slate-700 tracking-normal line-clamp-2">
                         {action.name}
                       </h3>
                     </div>
@@ -1853,12 +1865,12 @@ export default function ProjectDashboardClient({ projectId }: ProjectDashboardCl
               })}
               <div
                 onClick={() => setShowProjectFiles(!showProjectFiles)}
-                className="p-3 rounded-xl border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-all cursor-pointer group"
+                className="p-3 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-slate-100 hover:border-slate-300 transition-all cursor-pointer group"
               >
-                <div className="w-10 h-10 bg-indigo-500 rounded-lg flex items-center justify-center mb-2 group-hover:scale-105 transition-transform relative">
-                  <Upload className="w-5 h-5 text-white" />
+                <div className="w-9 h-9 bg-indigo-500 rounded-lg flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
+                  <Upload className="w-4 h-4 text-white" />
                 </div>
-                <h3 className="text-sm font-bold text-gray-900 tracking-normal line-clamp-2">
+                <h3 className="text-sm font-semibold text-slate-700 tracking-normal line-clamp-2">
                   Project Files
                 </h3>
               </div>

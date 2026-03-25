@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import DemoModeBanner from "@/components/layout/DemoModeBanner";
 
 export const metadata: Metadata = {
   title: "Quant Estimating AI",
@@ -19,10 +18,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>
-        <DemoModeBanner />
-        {children}
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

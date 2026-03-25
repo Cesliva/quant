@@ -2,10 +2,11 @@
 
 import { useState, useRef, useEffect } from "react";
 import { EstimatingLine } from "./EstimatingGrid";
-import { SHAPE_TYPES, getShapesByType, getValidGrades } from "@/lib/utils/aiscShapes";
+import { SHAPE_TYPES, getShapesByType, getValidGrades, getDefaultGradeForShape } from "@/lib/utils/aiscShapes";
 import { 
   getAvailableThicknesses, 
   getValidPlateGrades,
+  getDefaultPlateGrade,
   convertThicknessInputToInches,
   getThicknessLabelFromInches
 } from "@/lib/utils/plateDatabase";
@@ -34,7 +35,19 @@ import {
 } from "@/lib/utils/assemblyTemplates";
 import { useCompanyId } from "@/lib/hooks/useCompanyId";
 import { useAuth } from "@/lib/hooks/useAuth";
-import { Save, Trash2, BookOpen, Plus } from "lucide-react";
+import { Save, Trash2, BookOpen, Plus, Check } from "lucide-react";
+import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
+import {
+  canSuggestLabor,
+  getSuggestedLaborWithExplanation,
+  CONNECTION_SUBCATEGORIES,
+} from "@/lib/utils/laborFingerprint";
+import {
+  WELD_TYPES,
+  WELD_SIZES,
+  WELD_SIDES,
+  WELD_CONDITIONS,
+} from "@/lib/types/weldConnection";
 
 interface EstimatingRowDetailProps {
   line: EstimatingLine;
@@ -51,7 +64,10 @@ interface EstimatingRowDetailProps {
   onSave: () => void;
   onCancel: () => void;
   onChange: (field: keyof EstimatingLine, value: any, line?: EstimatingLine) => void;
+  onAddLine?: () => void;
+  isAddLineDisabled?: boolean;
   onCollapse?: () => void; // Function to collapse the expanded row
+  saveStatus?: { isSaving: boolean; lastSavedAt: Date | null };
 }
 
 export default function EstimatingRowDetail({
@@ -69,7 +85,10 @@ export default function EstimatingRowDetail({
   onSave,
   onCancel,
   onChange,
+  onAddLine,
+  isAddLineDisabled = false,
   onCollapse,
+  saveStatus,
 }: EstimatingRowDetailProps) {
   const isEditing = editingId === line.id;
   // Merge editingLine with line to get complete data when editing
@@ -190,7 +209,40 @@ export default function EstimatingRowDetail({
     setSeededFields(new Map());
     setFieldClickCount(new Map());
   }, [line.id]);
-  
+
+  // Auto-seed grade when shape type (Material) or thickness (Plate) is selected - narrows choices for beginners
+  useEffect(() => {
+    if (materialType === "Material" && currentLine.shapeType) {
+      const validGrades = getValidGrades(currentLine.shapeType);
+      const defaultGrade = getDefaultGradeForShape(currentLine.shapeType);
+      const currentGrade = currentLine.grade;
+      if (defaultGrade && (!currentGrade || !validGrades.includes(currentGrade))) {
+        if (!isEditing) onEdit(line);
+        onChange("grade", defaultGrade, line);
+        setTimeout(() => { if (isEditing || editingId === line.id) onSave(); }, 100);
+      }
+    } else if (materialType === "Plate" && (currentLine.thickness !== undefined && currentLine.thickness !== null)) {
+      const validGrades = getValidPlateGrades(currentLine.thickness);
+      const defaultGrade = getDefaultPlateGrade();
+      const currentGrade = currentLine.plateGrade;
+      if (defaultGrade && (!currentGrade || !validGrades.includes(currentGrade))) {
+        if (!isEditing) onEdit(line);
+        onChange("plateGrade", defaultGrade, line);
+        setTimeout(() => { if (isEditing || editingId === line.id) onSave(); }, 100);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- onEdit/onChange/onSave are stable, omit to avoid effect loops
+  }, [
+    materialType,
+    currentLine.shapeType,
+    currentLine.thickness,
+    currentLine.grade,
+    currentLine.plateGrade,
+    line?.id,
+    isEditing,
+    editingId,
+  ]);
+
   // Determine if rates are overridden (different from default)
   const isMaterialRateOverridden = Math.abs((currentLine.materialRate || 0) - defaultMaterialRate) > 0.01;
   const isLaborRateOverridden = Math.abs((currentLine.laborRate || 0) - defaultLaborRate) > 0.01;
@@ -205,6 +257,12 @@ export default function EstimatingRowDetail({
   const [availableTemplates, setAvailableTemplates] = useState<AssemblyTemplate[]>([]);
   const [showTemplateMenu, setShowTemplateMenu] = useState<boolean>(false);
   const [savingTemplate, setSavingTemplate] = useState<boolean>(false);
+
+  // Labor instructions - dismissible, persisted
+  const [showLaborInstructions, setShowLaborInstructions] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    return localStorage.getItem("quant-hideLaborInstructions") !== "true";
+  });
   const companyId = useCompanyId();
   const { user } = useAuth();
   
@@ -260,7 +318,7 @@ export default function EstimatingRowDetail({
   }, [sizeDropdownOpen, showGradeInfo, showPlateGradeInfo]);
 
   const categories = ["Columns", "Beams", "Misc Metals", "Plates", "Connections", "Other"];
-  const subCategories = ["Base Plate", "Gusset", "Stiffener", "Clip", "Brace", "Other"];
+  const subCategories = ["Base Plate", "Cap Plate", "Shear Tab", "Gusset", "Stiffener", "Clip", "Brace", "Other"];
   const coatingSystems = [
     "None",
     "Standard Shop Primer",
@@ -499,10 +557,13 @@ export default function EstimatingRowDetail({
           value={value as string || ""}
           onChange={(e) => {
             onChange(field, e.target.value, line);
-            // Auto-save on change for select fields (debounced)
             if (isEditing) {
-              // Save immediately for selects since they're discrete choices
-              onSave();
+              // Defer save for category/subCategory so dropdown can close first (reduces screen jump)
+              if (field === "category" || field === "subCategory") {
+                setTimeout(() => onSave(), 80);
+              } else {
+                onSave();
+              }
             }
           }}
           className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
@@ -605,6 +666,10 @@ export default function EstimatingRowDetail({
             ? (e.target.value === "" ? undefined : parseFloat(e.target.value))
             : e.target.value;
           onChange(field, newValue !== undefined ? newValue : (type === "number" ? 0 : ""), line);
+          // Auto-save on change (debounced in parent)
+          if (isEditing && !isReadOnly) {
+            setTimeout(() => onSave(), 150);
+          }
         }}
         onBlur={() => {
           if (isEditing && !isReadOnly) {
@@ -632,7 +697,7 @@ export default function EstimatingRowDetail({
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-4 md:space-y-6 relative max-w-full overflow-x-hidden">
+    <div className="p-4 md:p-6 space-y-4 md:space-y-6 relative max-w-full overflow-x-hidden" style={{ overflowAnchor: "auto" }}>
       {/* Top Collapse Button */}
       {onCollapse && (
         <div className="sticky top-0 z-20 -mt-6 -mx-6 mb-4 pb-2 bg-gradient-to-b from-white via-white/95 to-transparent">
@@ -646,32 +711,113 @@ export default function EstimatingRowDetail({
           </button>
         </div>
       )}
-      {/* Edit Mode Controls */}
-      {isEditing && (
-        <div className="flex items-center justify-between pb-4 border-b border-gray-300">
-          <h3 className="text-lg font-bold text-gray-900 tracking-normal">Editing Line {line.lineId}</h3>
-          <div className="flex gap-2">
+      {/* Edit Mode Controls - Auto-save, Cancel to discard */}
+      <div className="sticky top-0 z-30 flex items-center justify-between pb-4 pt-2 -mt-2 border-b border-gray-300 min-h-[52px] bg-white/95 backdrop-blur-sm shadow-sm">
+        <h3 className="text-lg font-bold text-gray-900 tracking-normal">Editing Line {line.lineId}</h3>
+        <div className="flex flex-wrap items-center gap-2">
+          {onAddLine && (
             <button
-              onClick={onSave}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+              type="button"
+              onClick={onAddLine}
+              disabled={isAddLineDisabled}
+              className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-blue-600"
+              title={isAddLineDisabled ? "Adding…" : "Add another line"}
             >
-              Save Changes
+              <Plus className="w-4 h-4" />
+              {isAddLineDisabled ? "Adding…" : "Add another"}
             </button>
-            <button
-              onClick={onCancel}
-              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm font-medium"
-            >
-              Cancel
-            </button>
-          </div>
+          )}
+          <span className="text-sm text-gray-500 flex items-center gap-1.5">
+            {saveStatus?.isSaving ? (
+              <>
+                <span className="inline-block w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                Saving...
+              </>
+            ) : saveStatus?.lastSavedAt ? (
+              <>
+                <Check className="w-4 h-4 text-green-600" />
+                Saved
+              </>
+            ) : null}
+          </span>
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm font-medium"
+          >
+            Cancel
+          </button>
         </div>
-      )}
+      </div>
 
       <div className="space-y-6">
-        {/* Identification Section - Full Width */}
-        <div className="space-y-4">
-          <h4 className="font-bold text-gray-900 tracking-normal bg-gray-50/80 rounded-lg px-4 py-2.5 mb-4 shadow-sm border border-gray-200/60">Identification</h4>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {/* Identification Section - Collapsible */}
+        <CollapsibleSection title="Identification" defaultOpen={true}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" style={{ overflowAnchor: "auto" }}>
+            {/* 1. Main Member / 2. Parent Member - First in logical order */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                <span className="text-blue-600 font-bold">{getNumberFromField("isMainMember")}.</span> Main Member
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={currentLine.isMainMember || false}
+                  onChange={(e) => {
+                    if (!isEditing) {
+                      onEdit(line);
+                    }
+                    onChange("isMainMember", e.target.checked, line);
+                    if (!e.target.checked) {
+                      onChange("parentLineId", undefined, line);
+                    }
+                    setTimeout(() => {
+                      if (isEditing || editingId === line.id) {
+                        onSave();
+                      }
+                    }, 100);
+                  }}
+                  className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                />
+                <span className="text-xs text-gray-600">Main member (column, beam)</span>
+              </div>
+            </div>
+            {/* Always reserve space to prevent layout shift when toggling main member */}
+            <div className="sm:col-span-2 min-h-[72px]">
+              {!currentLine.isMainMember && (
+                <>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    <span className="text-blue-600 font-bold">{getNumberFromField("parentLineId")}.</span> Parent Main Member
+                  </label>
+                  <select
+                    value={currentLine.parentLineId || ""}
+                    onChange={(e) => {
+                      if (!isEditing) {
+                        onEdit(line);
+                      }
+                      onChange("parentLineId", e.target.value || undefined, line);
+                      setTimeout(() => {
+                        if (isEditing || editingId === line.id) {
+                          onSave();
+                        }
+                      }, 100);
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select main member...</option>
+                    {lines
+                      .filter(l => l.isMainMember && l.lineId !== line.lineId && l.status !== "Void")
+                      .map(mainMember => (
+                        <option key={mainMember.lineId} value={mainMember.lineId}>
+                          {mainMember.lineId} - {mainMember.itemDescription || "Untitled"}
+                        </option>
+                      ))}
+                  </select>
+                  <div className="text-[10px] text-gray-500 mt-1">
+                    Link this small part (e.g., base plate, shear tab) to a main member
+                  </div>
+                </>
+              )}
+            </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
                 <span className="text-blue-600 font-bold">{getNumberFromField("drawingNumber")}.</span> Drawing #
@@ -692,7 +838,7 @@ export default function EstimatingRowDetail({
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
-                <span className="text-blue-600 font-bold">Work Type</span>
+                Work Type
               </label>
               <select
                 value={(isEditing ? editingLine.workType : line.workType) || "STRUCTURAL"}
@@ -758,6 +904,7 @@ export default function EstimatingRowDetail({
               </select>
             </div>
           </div>
+        </CollapsibleSection>
 
           {/* Misc Metals Configuration - Shows when workType = MISC */}
           {(isEditing ? editingLine.workType : line.workType) === "MISC" && (
@@ -1012,17 +1159,16 @@ export default function EstimatingRowDetail({
           {materialType === "Material" && 
            ((isEditing ? editingLine.workType : line.workType) !== "MISC" ||
             (isEditing ? editingLine.miscMethod : line.miscMethod) === "DETAILED") && (
-
-            <div className="space-y-4">
-              <h4 className="font-bold text-gray-900 tracking-normal bg-gray-50/80 rounded-lg px-4 py-2.5 mb-4 shadow-sm border border-gray-200/60">
-                Material {((isEditing ? editingLine.workType : line.workType) === "MISC") && "(Detailed Mode)"}
-              </h4>
+            <CollapsibleSection 
+              title={`Material ${((isEditing ? editingLine.workType : line.workType) === "MISC") ? "(Detailed Mode)" : ""}`.trim()} 
+              defaultOpen={true}
+            >
             <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">
                       <span className="text-blue-600 font-bold">{getNumberFromField("shapeType")}.</span> Shape Type
                     </label>
-                    {renderField("Shape", "shapeType", "select", SHAPE_TYPES as string[])}
+                    {renderField("Shape", "shapeType", "select", [...SHAPE_TYPES])}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -1138,6 +1284,51 @@ export default function EstimatingRowDetail({
                       <div className="text-[10px] text-gray-500 mb-0.5">Total SA</div>
                       <div className="text-sm font-semibold text-gray-900">
                         {currentLine.totalSurfaceArea?.toLocaleString("en-US", { maximumFractionDigits: 0 }) || "-"}
+                      </div>
+                    </div>
+                    {/* Material Price per Pound - Company default + Override for actual quotes */}
+                    <div className="col-span-2 bg-blue-50/80 rounded-lg p-2.5 border border-blue-200/60">
+                      <div className="text-[10px] text-gray-600 mb-1.5 font-medium">Material Price/lb</div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs text-gray-600">
+                          Company Default: ${defaultMaterialRate.toFixed(2)}/lb
+                        </span>
+                        <span className="text-gray-300">|</span>
+                        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                          <label className="text-xs text-gray-600 shrink-0">Override ($/lb):</label>
+                          <input
+                            type="number"
+                            value={currentLine.materialPricePerPoundOverride ?? ""}
+                            onChange={(e) => {
+                              if (!isEditing) onEdit(line);
+                              const val = e.target.value === "" ? undefined : parseFloat(e.target.value);
+                              onChange("materialPricePerPoundOverride", val != null && !Number.isNaN(val) ? val : undefined, line);
+                              setTimeout(() => {
+                                if (isEditing || editingId === line.id) onSave();
+                              }, 100);
+                            }}
+                            placeholder="Actual quote"
+                            className="min-w-[7rem] w-32 flex-1 max-w-[10rem] px-3 py-1.5 text-sm border border-blue-300/80 rounded bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            min="0"
+                            step="0.01"
+                            title="Enter actual quote $/lb for competitive pricing"
+                          />
+                          {currentLine.materialPricePerPoundOverride != null && currentLine.materialPricePerPoundOverride > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!isEditing) onEdit(line);
+                                onChange("materialPricePerPoundOverride", undefined, line);
+                                onChange("materialRate", defaultMaterialRate, line);
+                                setTimeout(() => { if (isEditing || editingId === line.id) onSave(); }, 100);
+                              }}
+                              className="text-xs text-blue-700 hover:text-blue-900"
+                              title="Clear override and revert to company default"
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1331,7 +1522,7 @@ export default function EstimatingRowDetail({
                     </div>
                   )}
                 </div>
-            </div>
+            </CollapsibleSection>
           )}
 
           {/* Assembly Mode - Stairs */}
@@ -1482,8 +1673,7 @@ export default function EstimatingRowDetail({
 
         {/* Material Section - Plate */}
         {materialType === "Plate" && (
-          <div className="space-y-4">
-            <h4 className="font-semibold text-gray-700 bg-gray-50/80 rounded-lg px-4 py-2.5 mb-4 shadow-sm border border-gray-200/60">Plate Material</h4>
+          <CollapsibleSection title="Plate Material" defaultOpen={true}>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -1781,12 +1971,11 @@ export default function EstimatingRowDetail({
                 </div>
               )}
             </div>
-          </div>
+          </CollapsibleSection>
         )}
 
-        {/* Coating Section */}
-        <div className="space-y-4">
-          <h4 className="font-semibold text-gray-700 bg-gray-50/80 rounded-lg px-4 py-2.5 mb-4 shadow-sm border border-gray-200/60">Coating</h4>
+        {/* Coating Section - Collapsible */}
+        <CollapsibleSection title="Coating" defaultOpen={true}>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
               <span className="text-blue-600 font-bold">{getNumberFromField("sspcPrep")}.</span> SSPC Surface Prep
@@ -1799,26 +1988,128 @@ export default function EstimatingRowDetail({
             </label>
             {renderField("Coating", "coatingSystem", "select", coatingSystems)}
           </div>
-        </div>
+        </CollapsibleSection>
 
-        {/* Labor Section */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h4 className="font-semibold text-gray-700 bg-gray-50/80 rounded-lg px-4 py-2.5 mb-4 shadow-sm border border-gray-200/60 flex-1">Labor Breakdown</h4>
-          </div>
-          
-          {/* Instructions */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start gap-2">
-            <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
-            <div className="text-xs text-blue-800">
-              <p className="font-medium mb-1">How to Enter Labor Time:</p>
-              <ul className="list-disc list-inside space-y-0.5 text-blue-700">
-                <li>Enter hours and minutes separately (e.g., 2h 30m = 2.5 hours)</li>
-                <li>Or enter as decimal hours (e.g., 2.5 = 2 hours 30 minutes)</li>
-                <li>Total labor is automatically calculated from all fields</li>
-              </ul>
+        {/* Connection (Weld) - Only when child part with parent and connection subcategory */}
+        {!currentLine.isMainMember &&
+          currentLine.parentLineId &&
+          CONNECTION_SUBCATEGORIES.includes(currentLine.subCategory as (typeof CONNECTION_SUBCATEGORIES)[number]) && (
+          <CollapsibleSection title="Connection (Weld)" defaultOpen={true}>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Weld Type</label>
+                {renderField("Weld Type", "weldType", "select", WELD_TYPES)}
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Weld Size</label>
+                {renderField("Weld Size", "weldSize", "select", WELD_SIZES)}
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Weld Sides</label>
+                {renderField("Weld Sides", "weldSides", "select", WELD_SIDES)}
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Weld Condition</label>
+                {renderField("Weld Condition", "weldCondition", "select", WELD_CONDITIONS)}
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Custom Weld Length (ft)</label>
+                {renderField("Custom Weld Length", "customWeldLength", "number")}
+              </div>
             </div>
-          </div>
+          </CollapsibleSection>
+        )}
+
+        {/* Labor Section - Collapsible, collapsed by default */}
+        <CollapsibleSection title="Labor Breakdown" defaultOpen={false}>
+          {/* Suggested labor ready - Apply / Recalculate */}
+          {isManualMode && canSuggestLabor(currentLine) && (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 flex flex-col sm:flex-row sm:items-center gap-2 mb-3">
+              <div className="flex items-center gap-2 flex-1">
+                <Check className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                <span className="text-sm font-medium text-emerald-800">Suggested labor ready</span>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!isEditing) onEdit(line);
+                    const parentLine = lines.find((l) => l.lineId === currentLine.parentLineId) ?? null;
+                    const { labor } = getSuggestedLaborWithExplanation(currentLine, parentLine);
+                    const laborFields = [
+                      "laborHandleMove",
+                      "laborProcessPlate",
+                      "laborDrillPunch",
+                      "laborFit",
+                      "laborWeld",
+                      "laborPrepClean",
+                    ] as const;
+                    for (const field of laborFields) {
+                      const val = labor[field];
+                      if (val != null && val > 0) onChange(field, val, line);
+                    }
+                  }}
+                  className="px-3 py-1.5 text-sm font-medium text-emerald-800 bg-emerald-100 hover:bg-emerald-200 rounded-md transition-colors"
+                >
+                  Apply Suggestion
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!isEditing) onEdit(line);
+                    const parentLine = lines.find((l) => l.lineId === currentLine.parentLineId) ?? null;
+                    const { labor } = getSuggestedLaborWithExplanation(currentLine, parentLine, {
+                      overwriteNonZero: true,
+                    });
+                    const laborFields = [
+                      "laborHandleMove",
+                      "laborProcessPlate",
+                      "laborDrillPunch",
+                      "laborFit",
+                      "laborWeld",
+                      "laborPrepClean",
+                    ] as const;
+                    for (const field of laborFields) {
+                      const val = labor[field];
+                      if (val != null) onChange(field, val, line);
+                    }
+                  }}
+                  className="px-3 py-1.5 text-sm font-medium text-emerald-700 bg-white border border-emerald-300 hover:bg-emerald-50 rounded-md transition-colors"
+                >
+                  Recalculate
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Instructions - Dismissible, hides after first use */}
+          {showLaborInstructions && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start gap-2">
+              <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div className="text-xs text-blue-800 flex-1">
+                <p className="font-medium mb-1">How to Enter Labor Time:</p>
+                <ul className="list-disc list-inside space-y-0.5 text-blue-700">
+                  <li>Enter hours and minutes separately (e.g., 2h 30m = 2.5 hours)</li>
+                  <li>Or enter as decimal hours (e.g., 2.5 = 2 hours 30 minutes)</li>
+                  <li>Total labor is automatically calculated from all fields</li>
+                </ul>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLaborInstructions(false);
+                  if (typeof window !== "undefined") {
+                    localStorage.setItem("quant-hideLaborInstructions", "true");
+                  }
+                }}
+                className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded transition-colors"
+                title="Dismiss (stays hidden)"
+                aria-label="Dismiss"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
 
           <div className="grid grid-cols-3 gap-3">
             <div id={line.id ? `field-${line.id}-laborUnload` : undefined} data-field="laborUnload" data-line-id={line.id || ""}>
@@ -2121,12 +2412,10 @@ export default function EstimatingRowDetail({
               </div>
             </div>
           </div>
-        </div>
+        </CollapsibleSection>
 
-
-        {/* Cost Section */}
-        <div className="space-y-4">
-          <h4 className="font-semibold text-gray-700 bg-gray-50/80 rounded-lg px-4 py-2.5 mb-4 shadow-sm border border-gray-200/60">Cost Breakdown</h4>
+        {/* Cost Section - Collapsible, collapsed by default */}
+        <CollapsibleSection title="Cost Breakdown" defaultOpen={false}>
           <div className="grid grid-cols-2 gap-4">
             {/* Material Rate */}
             <div>
@@ -2376,12 +2665,10 @@ export default function EstimatingRowDetail({
               {renderField("Total Cost", "totalCost", "number", undefined, true)}
             </div>
           </div>
-        </div>
-        </div>
+        </CollapsibleSection>
 
-        {/* Admin Section */}
-        <div className="space-y-4">
-          <h4 className="font-semibold text-gray-700 bg-gray-50/80 rounded-lg px-4 py-2.5 mb-4 shadow-sm border border-gray-200/60">Admin & Notes</h4>
+        {/* Admin Section - Collapsible, collapsed by default */}
+        <CollapsibleSection title="Admin & Notes" defaultOpen={false}>
           <div className="space-y-4">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -2409,77 +2696,12 @@ export default function EstimatingRowDetail({
                 </span>
               </label>
             </div>
-            
-            {/* Main Member / Small Part Grouping */}
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                <span className="text-blue-600 font-bold">{getNumberFromField("isMainMember")}.</span> Main Member
-              </label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={currentLine.isMainMember || false}
-                  onChange={(e) => {
-                    if (!isEditing) {
-                      onEdit(line);
-                    }
-                    onChange("isMainMember", e.target.checked, line);
-                    // If unchecking main member, clear parentLineId if this was a parent
-                    if (!e.target.checked) {
-                      onChange("parentLineId", undefined, line);
-                    }
-                    setTimeout(() => {
-                      if (isEditing || editingId === line.id) {
-                        onSave();
-                      }
-                    }, 100);
-                  }}
-                  className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-                />
-                <span className="text-xs text-gray-600">Mark as main member (e.g., column, beam)</span>
-              </div>
-            </div>
-            
-            {!currentLine.isMainMember && (
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  <span className="text-blue-600 font-bold">{getNumberFromField("parentLineId")}.</span> Parent Main Member
-                </label>
-                <select
-                  value={currentLine.parentLineId || ""}
-                  onChange={(e) => {
-                    if (!isEditing) {
-                      onEdit(line);
-                    }
-                    onChange("parentLineId", e.target.value || undefined, line);
-                    setTimeout(() => {
-                      if (isEditing || editingId === line.id) {
-                        onSave();
-                      }
-                    }, 100);
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Select main member...</option>
-                  {lines
-                    .filter(l => l.isMainMember && l.lineId !== line.lineId && l.status !== "Void")
-                    .map(mainMember => (
-                      <option key={mainMember.lineId} value={mainMember.lineId}>
-                        {mainMember.lineId} - {mainMember.itemDescription || "Untitled"}
-                      </option>
-                    ))}
-                </select>
-                <div className="text-[10px] text-gray-500 mt-1">
-                  Link this small part (e.g., base plate, shear tab) to a main member
-                </div>
-              </div>
-            )}
           </div>
-        </div>
+        </CollapsibleSection>
       </div>
 
       {/* View Mode - Edit Button */}
-      {isManualMode && (
+      {isManualMode && !isEditing && (
         <div className="pt-4 border-t border-gray-300">
           <button
             onClick={() => onEdit(line)}
@@ -2490,9 +2712,32 @@ export default function EstimatingRowDetail({
         </div>
       )}
 
-      {/* Bottom Collapse Button */}
-      {onCollapse && (
-        <div className="sticky bottom-0 z-20 -mb-6 -mx-6 mt-4 pt-2 bg-gradient-to-t from-white via-white/95 to-transparent">
+      {/* Bottom bar - Auto-save indicator when editing, always Collapse */}
+      <div className="sticky bottom-0 z-20 -mb-6 -mx-6 mt-4 pt-4 pb-2 bg-gradient-to-t from-white via-white/98 to-transparent">
+        {isManualMode && isEditing && (
+          <div className="flex flex-wrap items-center justify-center gap-3 mb-3">
+            <span className="text-sm text-gray-500 flex items-center gap-1.5">
+              {saveStatus?.isSaving ? (
+                <>
+                  <span className="inline-block w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                  Saving...
+                </>
+              ) : saveStatus?.lastSavedAt ? (
+                <>
+                  <Check className="w-4 h-4 text-green-600" />
+                  Saved
+                </>
+              ) : null}
+            </span>
+            <button
+              onClick={onCancel}
+              className="px-5 py-2.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm font-medium"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+        {onCollapse && (
           <button
             onClick={onCollapse}
             className="w-full flex items-center justify-center gap-2 py-2.5 px-4 text-gray-600 hover:text-gray-800 bg-gray-50/80 hover:bg-gray-100/90 rounded-lg transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-md border border-gray-200/60"
@@ -2501,8 +2746,8 @@ export default function EstimatingRowDetail({
             <ChevronDown className="w-4 h-4" />
             <span>Collapse</span>
           </button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

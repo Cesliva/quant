@@ -289,8 +289,8 @@ export default function CostTrendAnalysis({
           </div>
         </div>
       }>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 lg:gap-5 items-stretch mt-4 md:mt-6 mb-4 md:mb-6">
-            <div className="lg:col-span-2 animate-fade-in-up">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4 lg:gap-5 items-stretch mt-4 md:mt-6 mb-4 md:mb-6">
+            <div className="min-w-0 flex flex-col animate-fade-in-up">
               <CostTrendBubbleChart
                 lines={flattenedLines as EstimatingLine[]}
                 companyId={companyId}
@@ -302,13 +302,12 @@ export default function CostTrendAnalysis({
                 }}
               />
             </div>
-            <div className="lg:col-span-1 flex flex-col gap-3 md:gap-4 w-full animate-fade-in-up" style={{ animationDelay: '150ms' }}>
-              <div className="flex-1">
-                <EstimateVsActualCard companyId={companyId} />
-              </div>
-              <div className="flex-1">
-                <BacklogAtAGlance companyId={companyId} />
-              </div>
+            <div
+              className="flex flex-col gap-2 md:gap-3 w-full min-w-0 shrink-0 animate-fade-in-up"
+              style={{ animationDelay: "150ms" }}
+            >
+              <EstimateVsActualCard companyId={companyId} />
+              <BacklogAtAGlance companyId={companyId} />
             </div>
           </div>
         </Suspense>

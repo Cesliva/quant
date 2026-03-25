@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, startTransition } from "react";
 import { Plus, Upload, Edit, Trash2, Copy, Check, X, Undo2, Redo2, Download, Layers, ChevronDown, ChevronUp } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -40,10 +40,14 @@ import {
   getLaborRate,
   getCoatingRate,
   calculateTotalCostWithMarkup,
+  solveLaborCostForTargetLineTotal,
   type CompanySettings,
   type ProjectSettings,
 } from "@/lib/utils/settingsLoader";
+import { computeEstimatingLineDirectCosts } from "@/lib/utils/estimateLineDirectCosts";
 import { detectConflicts, resolveConflicts, smartMerge } from "@/lib/utils/conflictResolution";
+import { getSuggestedLabor, hasLaborEntered, canSuggestLabor } from "@/lib/utils/laborFingerprint";
+import type { WeldType, WeldSize, WeldSides, WeldCondition } from "@/lib/types/weldConnection";
 
 // Expanded Estimating Line Interface
 export interface EstimatingLine {
@@ -135,9 +139,18 @@ export interface EstimatingLine {
   hardwareCostPerSet?: number; // Cost per bolt set (bolt + nut + washer)
   hardwareCost?: number; // Read-only: quantity × cost per set
   
+  // E2) Weld connection details (for Labor Fingerprint - backward compatible)
+  weldType?: WeldType;
+  weldSize?: WeldSize;
+  weldSides?: WeldSides;
+  weldCondition?: WeldCondition;
+  customWeldLength?: number; // ft - override when geometry calc not applicable
+  autoCalculatedWeldLength?: number; // ft - derived from geometry for reference
+  
   // F) Cost (applies to any line type)
   materialRate?: number; // $/lb (from Company Defaults, override allowed)
   materialCost?: number; // Read-only
+  materialPricePerPoundOverride?: number; // $/lb override when using actual quote (rolled material only)
   laborRate?: number; // $/hr (from Company Defaults, override allowed)
   laborCost?: number; // Read-only
   coatingRate?: number; // $/sf for Paint/Powder or $/lb for Galv
@@ -153,6 +166,9 @@ export interface EstimatingLine {
   // G) Member Grouping
   isMainMember?: boolean; // true = main member, false/undefined = small part or ungrouped
   parentLineId?: string; // Line ID of the main member this small part belongs to
+
+  /** When true, compact/manual total weight is preserved (skip AISC/plate geometry overwrite). */
+  useManualLineTotals?: boolean;
 }
 
 interface EstimatingGridProps {
@@ -161,9 +177,11 @@ interface EstimatingGridProps {
   isManualMode?: boolean;
   highlightLineId?: string | null;
   onAddLineRef?: (handler: (() => void) | null) => void;
+  onAddLineStateChange?: (isAdding: boolean) => void;
+  onExpandedLineChange?: (lineId: string | null) => void;
 }
 
-export default function EstimatingGrid({ companyId, projectId, isManualMode = false, highlightLineId, onAddLineRef }: EstimatingGridProps) {
+export default function EstimatingGrid({ companyId, projectId, isManualMode = false, highlightLineId, onAddLineRef, onAddLineStateChange, onExpandedLineChange }: EstimatingGridProps) {
   // Undo/Redo state management
   const {
     state: lines,
@@ -180,6 +198,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
   const [showAllLines, setShowAllLines] = useState<boolean>(false);
   const [sortBy, setSortBy] = useState<string>("lineId");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [expandedLineId, setExpandedLineId] = useState<string | null>(null);
   const highlightedLineRef = useRef<HTMLTableRowElement | null>(null);
   
   // Track if we should add to history (skip for Firestore updates)
@@ -187,32 +206,48 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
   
   // Guard to prevent multiple simultaneous line additions
   const isAddingLineRef = useRef(false);
+  const [isAddingLine, setIsAddingLine] = useState(false);
+
+  // Keep lines in ref so handleAddLine can read current length without depending on lines
+  const linesRef = useRef(lines);
+  linesRef.current = lines;
+
+  // Track last assigned line number so we never reuse when subscription overwrites optimistic add
+  const lastUsedLineNumberRef = useRef(0);
+
+  // Compute next line ID from max existing number; never go backward (handles stale subscription overwrites)
+  const getNextLineId = useCallback(() => {
+    const current = linesRef.current;
+    const maxFromData = current.reduce((max, l) => {
+      const n = parseInt(String(l.lineId || "").replace(/[^0-9]/g, ""), 10) || 0;
+      return Math.max(max, n);
+    }, 0);
+    const nextNum = Math.max(maxFromData, lastUsedLineNumberRef.current) + 1;
+    lastUsedLineNumberRef.current = nextNum;
+    return `L${nextNum}`;
+  }, []);
   
   // Handle highlighting and scrolling to line from URL parameter
+  // Only scroll once per highlightLineId - not on every lines update (prevents scroll-jump on dropdown select)
+  const hasScrolledToHighlightRef = useRef<string | null>(null);
   useEffect(() => {
-    if (highlightLineId && lines.length > 0) {
-      // Find the line
-      const line = lines.find(l => l.id === highlightLineId);
-      if (line) {
-        // Set editing state to make it editable
-        if (editingId !== line.id && line.id) {
-          setEditingId(line.id);
-          setEditingLine(line);
-        }
-        // Scroll to the line after a short delay to allow DOM to update
-        setTimeout(() => {
-          const element = document.getElementById(`line-${line.id}`);
-          if (element) {
-            element.scrollIntoView({ behavior: "smooth", block: "center" });
-            // Add highlight class temporarily
-            element.classList.add("bg-yellow-100");
-            setTimeout(() => {
-              element.classList.remove("bg-yellow-100");
-            }, 3000);
-          }
-        }, 300);
-      }
+    if (!highlightLineId || lines.length === 0) return;
+    const line = lines.find(l => l.id === highlightLineId);
+    if (!line) return;
+    if (editingId !== line.id && line.id) {
+      setEditingId(line.id);
+      setEditingLine(line);
     }
+    if (hasScrolledToHighlightRef.current === highlightLineId) return;
+    hasScrolledToHighlightRef.current = highlightLineId;
+    setTimeout(() => {
+      const element = document.getElementById(`line-${line.id}`);
+      if (element) {
+        element.scrollIntoView({ behavior: "smooth", block: "center" });
+        element.classList.add("bg-yellow-100");
+        setTimeout(() => element.classList.remove("bg-yellow-100"), 3000);
+      }
+    }, 300);
   }, [highlightLineId, lines, editingId]);
   
   // Group lines by main member
@@ -313,32 +348,54 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
   }
   
   // Rollup: Show last 5 entries by default, or all if expanded
+  // When a line is expanded or being edited, always include it so typing/dropdown changes don't make it disappear
   const displayLines = useMemo(() => {
     if (showAllLines || allDisplayLines.length <= 5) {
       return allDisplayLines;
     }
-    // Show last 5 entries
-    return allDisplayLines.slice(-5);
-  }, [allDisplayLines, showAllLines]);
-
-  // Auto-scroll to bottom when showing last 5 entries (default view)
-  const gridContainerRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!showAllLines && allDisplayLines.length > 5 && displayLines.length === 5) {
-      // Small delay to ensure DOM is updated with the last 5 entries
-      const timeoutId = setTimeout(() => {
-        if (gridContainerRef.current) {
-          // Find the scrollable container inside EstimatingGridCompact
-          const scrollableArea = gridContainerRef.current.querySelector('div[class*="overflow-y-auto"]') as HTMLElement;
-          if (scrollableArea) {
-            // Scroll to bottom to show the last 5 entries
-            scrollableArea.scrollTop = scrollableArea.scrollHeight;
-          }
-        }
-      }, 150);
-      return () => clearTimeout(timeoutId);
+    const slice = allDisplayLines.slice(-5);
+    const activeLineId = expandedLineId || editingId; // Keep expanded or actively-edited line in view
+    if (activeLineId && !slice.some((l) => l.id === activeLineId)) {
+      const activeLine = allDisplayLines.find((l) => l.id === activeLineId);
+      if (activeLine) {
+        const indexOf = (l: EstimatingLine) => allDisplayLines.findIndex((x) => x.id === l.id);
+        const withActive = [...slice.slice(0, 4), activeLine];
+        return withActive.sort((a, b) => indexOf(a) - indexOf(b));
+      }
     }
-  }, [showAllLines, allDisplayLines.length, displayLines.length]);
+    return slice;
+  }, [allDisplayLines, showAllLines, expandedLineId, editingId]);
+
+  // Clear expanded state when the expanded line is deleted or no longer in dataset
+  useEffect(() => {
+    if (expandedLineId && !lines.some((l) => l.id === expandedLineId)) {
+      setExpandedLineId(null);
+    }
+  }, [expandedLineId, lines]);
+
+  // Notify parent when expanded line changes (for ProposalSeedsCard "Link to" auto-fill)
+  useEffect(() => {
+    onExpandedLineChange?.(expandedLineId);
+  }, [expandedLineId, onExpandedLineChange]);
+
+  // Auto-scroll to bottom only when user toggles from "Show all" to "last 5" - never on data updates
+  const gridContainerRef = useRef<HTMLDivElement>(null);
+  const prevShowAllLinesRef = useRef<boolean>(true);
+  useEffect(() => {
+    const prev = prevShowAllLinesRef.current;
+    prevShowAllLinesRef.current = showAllLines;
+    const justToggledToRollup = prev === true && showAllLines === false;
+    if (!justToggledToRollup || allDisplayLines.length <= 5) return;
+    const timeoutId = setTimeout(() => {
+      if (gridContainerRef.current) {
+        const scrollableArea = gridContainerRef.current.querySelector('div[class*="overflow-y-auto"]') as HTMLElement;
+        if (scrollableArea) {
+          scrollableArea.scrollTop = scrollableArea.scrollHeight;
+        }
+      }
+    }, 150);
+    return () => clearTimeout(timeoutId);
+  }, [showAllLines, allDisplayLines.length]);
   
   // Handle sort change
   const handleSortChange = (field: string) => {
@@ -367,6 +424,12 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
     loadCompanySettings(companyId).then(setCompanySettings);
     loadProjectSettings(companyId, projectId).then(setProjectSettings);
   }, [companyId, projectId]);
+
+  // Refs for handleAddLine so it stays stable when settings load (prevents Add Line button from going grey)
+  const companySettingsRef = useRef(companySettings);
+  companySettingsRef.current = companySettings;
+  const projectSettingsRef = useRef(projectSettings);
+  projectSettingsRef.current = projectSettings;
 
   // Track number being entered for multi-digit field navigation (Ctrl+Alt+number)
   const numberBufferRef = useRef<string>("");
@@ -524,8 +587,19 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
     const unsubscribe = subscribeToCollection<EstimatingLine>(
       linesPath,
       (data) => {
+        // Keep lastUsedLineNumberRef in sync so getNextLineId never regresses
+        const maxInData = data.reduce((max, l) => {
+          const n = parseInt(String(l.lineId || "").replace(/[^0-9]/g, ""), 10) || 0;
+          return Math.max(max, n);
+        }, 0);
+        if (maxInData > lastUsedLineNumberRef.current) {
+          lastUsedLineNumberRef.current = maxInData;
+        }
         skipHistoryRef.current = true; // Don't add Firestore updates to history
-        setLines(data, false);
+        // Use startTransition to avoid interrupting typing/expanded state
+        startTransition(() => {
+          setLines(data, false);
+        });
       }
     );
 
@@ -565,6 +639,15 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
         plateLength: editingLine.plateLength,
         plateQty: editingLine.plateQty,
         oneSideCoat: editingLine.oneSideCoat,
+        subCategory: editingLine.subCategory,
+        parentLineId: editingLine.parentLineId,
+        hardwareQuantity: editingLine.hardwareQuantity,
+        useManualLineTotals: editingLine.useManualLineTotals,
+        totalWeight: editingLine.totalWeight,
+        plateTotalWeight: editingLine.plateTotalWeight,
+        materialRate: editingLine.materialRate,
+        laborRate: editingLine.laborRate,
+        coatingRate: editingLine.coatingRate,
         laborUnload: editingLine.laborUnload,
         laborCut: editingLine.laborCut,
         laborCope: editingLine.laborCope,
@@ -579,8 +662,8 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
         coatingSystem: editingLine.coatingSystem,
         grade: editingLine.grade,
         plateGrade: editingLine.plateGrade,
-        hardwareQuantity: editingLine.hardwareQuantity,
         hardwareCostPerSet: editingLine.hardwareCostPerSet,
+        materialPricePerPoundOverride: editingLine.materialPricePerPoundOverride,
       });
       
       // Skip if nothing that affects calculations has changed
@@ -595,7 +678,11 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
       
       // For Material members - Auto-calculate weight from AISC data
       // This runs whenever sizeDesignation, lengthFt, lengthIn, or qty changes
-      if (calculated.materialType === "Material" && calculated.sizeDesignation) {
+      if (
+        calculated.materialType === "Material" &&
+        calculated.sizeDesignation &&
+        !calculated.useManualLineTotals
+      ) {
         try {
         calculated.weightPerFoot = getWeightPerFoot(calculated.sizeDesignation);
         calculated.surfaceAreaPerFoot = getSurfaceAreaPerFoot(calculated.sizeDesignation);
@@ -630,7 +717,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
           console.warn("Error calculating weight for size:", calculated.sizeDesignation, error);
           // Keep existing values if calculation fails
         }
-      } else if (calculated.materialType === "Material") {
+      } else if (calculated.materialType === "Material" && !calculated.useManualLineTotals) {
         // If sizeDesignation is cleared, reset weight fields
         calculated.weightPerFoot = 0;
         calculated.totalWeight = 0;
@@ -662,7 +749,20 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
         calculated.plateArea = safeArea;
         calculated.edgePerimeter = safePerimeter;
         calculated.plateSurfaceArea = safeSurfaceArea;
-        calculated.plateTotalWeight = singlePlateWeight * safeQuantity;
+        if (!calculated.useManualLineTotals) {
+          calculated.plateTotalWeight = singlePlateWeight * safeQuantity;
+        }
+      }
+      
+      // Quant Labor Fingerprint: auto-fill labor for small parts (e.g., base plate on column)
+      if (editingId && !hasLaborEntered(calculated)) {
+        const currentLine = lines.find((l) => l.id === editingId);
+        const mergedLine = currentLine ? { ...currentLine, ...calculated } : calculated;
+        const parentLine = calculated.parentLineId
+          ? lines.find((l) => l.lineId === calculated.parentLineId)
+          : null;
+        const suggested = getSuggestedLabor(mergedLine, parentLine);
+        Object.assign(calculated, suggested);
       }
       
       // Calculate total labor
@@ -687,7 +787,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
       }
       
       if (!calculated.laborRate) {
-        calculated.laborRate = projectSettings?.laborRate || getLaborRate(undefined, companySettings);
+        calculated.laborRate = projectSettings?.laborRate || getLaborRate(companySettings);
       }
       
       if (!calculated.coatingRate) {
@@ -699,7 +799,13 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
         ? (calculated.totalWeight || 0)
         : (calculated.plateTotalWeight || 0);
       
-      calculated.materialCost = totalWeight * (calculated.materialRate || 0);
+      // Material cost: use $/lb override when set (e.g. actual quote for competitive advantage)
+      if (calculated.materialType === "Material" && calculated.materialPricePerPoundOverride != null && calculated.materialPricePerPoundOverride > 0) {
+        calculated.materialCost = totalWeight * calculated.materialPricePerPoundOverride;
+        calculated.materialRate = calculated.materialPricePerPoundOverride;
+      } else {
+        calculated.materialCost = totalWeight * (calculated.materialRate || 0);
+      }
       calculated.laborCost = (calculated.totalLabor || 0) * (calculated.laborRate || 0);
       
       // Hardware cost calculation
@@ -749,18 +855,16 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
       
       // Reset the calculating flag after state update
       calculatingRef.current = false;
-    }, 100); // Debounce by 100ms - only calculate after user stops typing
+    }, 200); // Debounce by 200ms - reduces glitch when typing; calculate after user pauses
     
     return () => {
       if (calculationTimeoutRef.current) {
         clearTimeout(calculationTimeoutRef.current);
       }
     };
-  }, [editingId, editingLine, companySettings, projectSettings]);
+  }, [editingId, editingLine, companySettings, projectSettings, lines]);
 
   const handleAddLine = useCallback(() => {
-    console.log("[handleAddLine] Called - isManualMode:", isManualMode);
-    
     if (!isManualMode) {
       alert("Please enable Manual Entry Mode to add line items manually");
       return;
@@ -768,15 +872,16 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
 
     // Prevent multiple simultaneous additions
     if (isAddingLineRef.current) {
-      console.warn("Already adding a line, please wait...");
       return;
     }
 
-    console.log("[handleAddLine] Creating new line...");
     isAddingLineRef.current = true;
+    setIsAddingLine(true);
+    onAddLineStateChange?.(true);
 
+    const nextLineId = getNextLineId();
     const newLine: Omit<EstimatingLine, "id"> = {
-      lineId: `L${lines.length + 1}`,
+      lineId: nextLineId,
       drawingNumber: "",
       detailNumber: "",
       itemDescription: "",
@@ -787,66 +892,64 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
       qty: 1,
       status: "Active",
       useStockRounding: true,
-      materialRate: companySettings ? getMaterialRateForGrade(undefined, companySettings) : 0.85,
-      laborRate: companySettings ? getLaborRate(undefined, companySettings) : 50,
-      coatingRate: companySettings ? getCoatingRate(undefined, companySettings) : 2.50,
+      materialRate: companySettingsRef.current ? getMaterialRateForGrade(undefined, companySettingsRef.current) : 0.85,
+      laborRate: companySettingsRef.current ? getLaborRate(companySettingsRef.current) : 50,
+      coatingRate: companySettingsRef.current ? getCoatingRate(undefined, companySettingsRef.current) : 2.50,
     };
 
     try {
       const linesPath = getProjectPath(companyId, projectId, "lines");
       createDocument(linesPath, newLine).then((newId) => {
-        console.log("[handleAddLine] Line created with ID:", newId);
-        // Add to local state for immediate UI update
+        // Do NOT optimistically add - wait for Firestore subscription to avoid duplicate entries
         const addedLine = { ...newLine, id: newId };
-        setLines([...lines, addedLine], true); // Add to history
-        
-        // Reset the guard after a short delay to allow Firestore subscription to process
+
+        // Reset the guard after delay to allow Firestore subscription and prevent rapid re-clicks
         setTimeout(() => {
           isAddingLineRef.current = false;
-        }, 1000);
-        
-        // In manual mode, automatically start editing the new line
+          setIsAddingLine(false);
+          onAddLineStateChange?.(false);
+        }, 1500);
+
+        // In manual mode, once subscription updates, scroll to and edit the new line
         if (isManualMode && newId) {
-          setTimeout(() => {
-            setEditingId(newId);
-            setEditingLine(addedLine);
-            
-            // Scroll to the new line and focus the first editable field
-            setTimeout(() => {
-              const lineElement = document.getElementById(`line-${newId}`);
-              if (lineElement) {
-                lineElement.scrollIntoView({ 
-                  behavior: "smooth", 
-                  block: "center",
-                  inline: "nearest"
-                });
-                setTimeout(() => {
-                  // Focus the drawing number input in the table row
-                  const drawingInput = lineElement.querySelector('input[placeholder="Drawing #"]') as HTMLInputElement;
-                  if (drawingInput) {
-                    drawingInput.focus();
-                    drawingInput.select();
-                  }
-                }, 300);
-              }
-            }, 100);
-          }, 50);
+          let attempts = 0;
+          const maxAttempts = 50; // ~2.5s
+          const waitForSubscription = () => {
+            if (attempts++ > maxAttempts) return;
+            const found = linesRef.current.some((l) => l.id === newId);
+            if (found) {
+              setEditingId(newId);
+              setEditingLine(addedLine);
+              setTimeout(() => {
+                const lineElement = document.getElementById(`line-${newId}`);
+                if (lineElement) {
+                  lineElement.scrollIntoView({ behavior: "smooth", block: "center" });
+                }
+              }, 50);
+              return;
+            }
+            setTimeout(waitForSubscription, 50);
+          };
+          setTimeout(waitForSubscription, 150);
         }
       }).catch((error: any) => {
         console.error("Failed to add line:", error);
         alert("Failed to add line: " + (error.message || "Unknown error"));
-        isAddingLineRef.current = false; // Reset guard on error
+        isAddingLineRef.current = false;
+        setIsAddingLine(false);
+        onAddLineStateChange?.(false);
       });
     } catch (error: any) {
       console.error("Failed to add line:", error);
       alert("Failed to add line: " + (error.message || "Unknown error"));
-      isAddingLineRef.current = false; // Reset guard on error
+      isAddingLineRef.current = false;
+      setIsAddingLine(false);
+      onAddLineStateChange?.(false);
     }
-  }, [isManualMode, lines, companySettings, projectSettings, companyId, projectId, setLines]);
+  }, [isManualMode, companyId, projectId, setLines, getNextLineId, onAddLineStateChange]);
 
   // Expose handleAddLine to parent via onAddLineRef
   useEffect(() => {
-    console.log("[EstimatingGrid] Exposing handleAddLine to parent, isManualMode:", isManualMode);
     if (onAddLineRef) {
       onAddLineRef(handleAddLine);
     }
@@ -870,6 +973,9 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
     }
   };
 
+  const [isSaving, setIsSaving] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+
   const handleSave = async (immediate = false) => {
     if (!editingId) return;
     
@@ -880,6 +986,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
     }
     
     const performSave = async () => {
+      setIsSaving(true);
       try {
         const linePath = getProjectPath(companyId, projectId, "lines");
         
@@ -968,6 +1075,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
             await createDocument(linePath, dataToSave);
           }
         }
+        setLastSavedAt(new Date());
         // Don't clear editing state in manual mode - keep it editable
         // The line will be updated via Firestore subscription
       } catch (error: any) {
@@ -977,6 +1085,8 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
         } else {
           alert("Firebase is not configured. Please set up Firebase credentials to save data.");
         }
+      } finally {
+        setIsSaving(false);
       }
     };
     
@@ -984,7 +1094,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
       await performSave();
     } else {
       // Debounce saves to avoid too frequent updates during typing
-      saveTimeoutRef.current = setTimeout(performSave, 500);
+      saveTimeoutRef.current = setTimeout(performSave, 300);
     }
   };
 
@@ -1025,7 +1135,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
   const handleDuplicate = (line: EstimatingLine) => {
     const duplicated = { ...line };
     delete duplicated.id;
-    duplicated.lineId = `L${lines.length + 1}`;
+    duplicated.lineId = getNextLineId();
     duplicated.itemDescription = `${line.itemDescription} (Copy)`;
     
     try {
@@ -1098,6 +1208,109 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
       }
     }
   };
+
+  /** Folded-row manual totals (qty / weight / hours / line total) — recalc via same effect as expanded edit */
+  const handleCompactTotalsChange = useCallback(
+    (
+      line: EstimatingLine,
+      cell: "qty" | "weight" | "hours" | "cost",
+      rawValue: number
+    ) => {
+      if (!isManualMode || !companySettings) return;
+      const base = lines.find((l) => l.id === line.id) ?? line;
+      const value = Number.isFinite(rawValue) ? rawValue : 0;
+      lastCalculatedRef.current = "";
+
+      const mergedForCost: Partial<EstimatingLine> = {
+        ...base,
+        ...(editingId === base.id ? editingLine : {}),
+      };
+
+      const apply = (partial: Partial<EstimatingLine>) => {
+        if (editingId !== base.id) {
+          setEditingId(base.id!);
+          setEditingLine({ ...base, ...partial });
+        } else {
+          setEditingLine((prev) => ({ ...base, ...prev, ...partial }));
+        }
+      };
+
+      const zeroLabor: Partial<EstimatingLine> = {
+        laborUnload: 0,
+        laborCut: 0,
+        laborCope: 0,
+        laborProcessPlate: 0,
+        laborDrillPunch: 0,
+        laborWeld: 0,
+        laborPrepClean: 0,
+        laborPaint: 0,
+        laborHandleMove: 0,
+        laborLoadShip: 0,
+      };
+
+      if (cell === "qty") {
+        apply({
+          useManualLineTotals: false,
+          ...(base.materialType === "Plate"
+            ? { plateQty: value, qty: value }
+            : { qty: value }),
+        });
+        return;
+      }
+
+      if (cell === "weight") {
+        apply({
+          useManualLineTotals: true,
+          ...(base.materialType === "Material"
+            ? { totalWeight: value }
+            : { plateTotalWeight: value }),
+        });
+        return;
+      }
+
+      if (cell === "hours") {
+        apply({
+          ...zeroLabor,
+          laborFit: value,
+        });
+        return;
+      }
+
+      if (cell === "cost") {
+        const { materialCost, coatingCost, hardwareCost } =
+          computeEstimatingLineDirectCosts(
+            mergedForCost,
+            companySettings,
+            projectSettings
+          );
+        const laborCost = solveLaborCostForTargetLineTotal(
+          value,
+          materialCost,
+          coatingCost,
+          hardwareCost,
+          companySettings,
+          projectSettings ?? undefined
+        );
+        const laborRate =
+          mergedForCost.laborRate ??
+          projectSettings?.laborRate ??
+          getLaborRate(companySettings);
+        const hours = laborRate > 0 ? laborCost / laborRate : 0;
+        apply({
+          ...zeroLabor,
+          laborFit: hours,
+        });
+      }
+    },
+    [
+      isManualMode,
+      companySettings,
+      projectSettings,
+      lines,
+      editingId,
+      editingLine,
+    ]
+  );
 
   // Get available sizes for selected shape type
   const availableSizes = useMemo(() => {
@@ -1219,7 +1432,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
             materialRate: lineData.materialRate || 
               (companySettings ? getMaterialRateForGrade(lineData.grade || lineData.plateGrade, companySettings) : 0.85),
             laborRate: lineData.laborRate || 
-              (companySettings ? getLaborRate(undefined, companySettings) : 50),
+              (companySettings ? getLaborRate(companySettings) : 50),
             coatingRate: lineData.coatingRate || 
               (companySettings ? getCoatingRate(lineData.coatingSystem, companySettings) : 2.50),
           };
@@ -1349,7 +1562,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
   };
 
   const categories = ["Columns", "Beams", "Misc Metals", "Plates", "Connections", "Other"];
-  const subCategories = ["Base Plate", "Gusset", "Stiffener", "Clip", "Brace", "Other"];
+  const subCategories = ["Base Plate", "Cap Plate", "Shear Tab", "Gusset", "Stiffener", "Clip", "Brace", "Other"];
       const coatingSystems = [
         "None",
         "Standard Shop Primer",
@@ -1426,6 +1639,17 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
         <div className="flex items-center gap-2">
           {isManualMode && (
             <button
+              onClick={handleAddLine}
+              disabled={isAddingLine}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 shadow-sm transition-all duration-200 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-blue-600"
+              title={isAddingLine ? "Adding…" : "Add a new estimate line"}
+            >
+              <Plus className="w-4 h-4" />
+              {isAddingLine ? "Adding…" : "Add Line"}
+            </button>
+          )}
+          {isManualMode && (
+            <button
               onClick={() => setGroupByMainMember(!groupByMainMember)}
               className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
                 groupByMainMember
@@ -1458,16 +1682,6 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
               )}
             </button>
           )}
-
-          {isManualMode && (
-            <button
-              onClick={handleAddLine}
-              className="px-5 py-2.5 rounded-xl text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 shadow-lg hover:shadow-xl transition-all duration-200 active:scale-95 flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              Add Line
-            </button>
-          )}
         </div>
       </div>
 
@@ -1477,6 +1691,10 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
           allLines={lines}
           editingId={editingId}
           editingLine={editingLine}
+          expandedLineId={expandedLineId}
+          onExpandedChange={setExpandedLineId}
+          onAddLine={isManualMode ? handleAddLine : undefined}
+          isAddLineDisabled={isAddingLine}
           isManualMode={isManualMode}
           defaultMaterialRate={
             projectSettings?.materialRate !== undefined
@@ -1489,7 +1707,7 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
             projectSettings?.laborRate !== undefined
               ? projectSettings.laborRate
               : companySettings
-              ? getLaborRate(undefined, companySettings)
+              ? getLaborRate(companySettings)
               : 50
           }
           defaultCoatingRate={
@@ -1501,12 +1719,14 @@ export default function EstimatingGrid({ companyId, projectId, isManualMode = fa
           }
           companySettings={companySettings}
           projectSettings={projectSettings}
+          saveStatus={{ isSaving, lastSavedAt }}
           onEdit={handleEdit}
           onSave={handleSave}
           onCancel={handleCancel}
           onDelete={handleDelete}
           onDuplicate={handleDuplicate}
           onChange={handleChange}
+          onCompactTotalsChange={handleCompactTotalsChange}
           totals={totals}
           sortBy={sortBy}
           sortDirection={sortDirection}
